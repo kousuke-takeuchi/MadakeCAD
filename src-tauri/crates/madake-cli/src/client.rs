@@ -326,7 +326,8 @@ pub trait LinkApi {
     /// `GET /api/v1/parts[?query=..&category=..]`
     fn parts(&self, query: Option<&str>, category: Option<&str>) -> Result<Value, CliError>;
     /// `POST /api/v1/simulate/op`
-    fn simulate_op(&self, sheet_id: Option<&str>, open_switches: &[String]) -> Result<Value, CliError>;
+    /// `options` は条件 (`open_switches` / `overrides` / `shorts`) のオブジェクト。
+    fn simulate_op(&self, sheet_id: Option<&str>, options: Value) -> Result<Value, CliError>;
     /// `POST /api/v1/commands` (Command配列 → Patch配列)
     fn exec(&self, commands: Value) -> Result<Value, CliError>;
     /// `POST /api/v1/undo`
@@ -432,15 +433,12 @@ impl LinkApi for HttpClient {
         self.get(verify_url(self.port, sheet_id))
     }
 
-    fn simulate_op(
-        &self,
-        sheet_id: Option<&str>,
-        open_switches: &[String],
-    ) -> Result<Value, CliError> {
-        self.post(
-            "/simulate/op",
-            json!({ "sheet_id": sheet_id, "open_switches": open_switches }),
-        )
+    fn simulate_op(&self, sheet_id: Option<&str>, options: Value) -> Result<Value, CliError> {
+        let mut body = options;
+        if let Some(obj) = body.as_object_mut() {
+            obj.insert("sheet_id".into(), json!(sheet_id));
+        }
+        self.post("/simulate/op", body)
     }
 
     fn parts(&self, query: Option<&str>, category: Option<&str>) -> Result<Value, CliError> {

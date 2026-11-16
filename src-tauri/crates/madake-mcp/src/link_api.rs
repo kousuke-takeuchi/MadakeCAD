@@ -684,8 +684,9 @@ async fn post_export_svg(
 #[derive(Deserialize)]
 struct SimulateBody {
     sheet_id: Option<Uuid>,
-    #[serde(default)]
-    open_switches: Vec<String>,
+    /// 条件 (開路・属性の置き換え・地絡)。全項目省略可。
+    #[serde(flatten)]
+    options: madake_core::sim::SimOptions,
 }
 
 async fn post_simulate_op(
@@ -698,9 +699,8 @@ async fn post_simulate_op(
         None => engine.project().sheets.first(),
     }
     .ok_or_else(|| bad_request("sheet not found"))?;
-    let result =
-        madake_core::sim::simulate_op(sheet, &sheet_symbol_defs(sheet), &body.open_switches)
-            .map_err(bad_request)?;
+    let result = madake_core::sim::simulate_op_opts(sheet, &sheet_symbol_defs(sheet), &body.options)
+        .map_err(bad_request)?;
     Ok(Json(serde_json::json!(result)))
 }
 

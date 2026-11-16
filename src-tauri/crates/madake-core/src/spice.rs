@@ -351,14 +351,17 @@ pub fn build_deck_with(
                 SimRole::None => {}
                 SimRole::Fuse | SimRole::Conductor => {
                     if !is_open {
-                        let numbers: Vec<&str> = if sim.pins.is_empty() {
-                            by_no.keys().copied().collect()
+                        // ピン指定が無ければ同梱と同じ極の規則 (1..2n の番号なら 1-2 / 3-4 …、それ以外は全ピン)
+                        let groups: Vec<Vec<&str>> = if sim.pins.is_empty() {
+                            crate::symbol::conducting_pin_groups(def)
                         } else {
-                            sim.pins.iter().map(String::as_str).collect()
+                            vec![sim.pins.iter().map(String::as_str).collect()]
                         };
-                        let pts: Vec<Point> = numbers.iter().filter_map(|n| first_of(n)).collect();
-                        for p in pts.iter().skip(1) {
-                            push(key(pts[0]), key(*p), BRIDGE_OHMS, ElementKind::Bridge, &mut used_keys);
+                        for numbers in groups {
+                            let pts: Vec<Point> = numbers.iter().filter_map(|n| first_of(n)).collect();
+                            for p in pts.iter().skip(1) {
+                                push(key(pts[0]), key(*p), BRIDGE_OHMS, ElementKind::Bridge, &mut used_keys);
+                            }
                         }
                     }
                 }
@@ -865,6 +868,28 @@ mod tests {
         ]);
         let deck = build_deck(&sheet, &sheet_symbol_defs(&sheet)).unwrap();
         assert!(!deck.deck.contains("rshunt"), "{}", deck.deck);
+    }
+
+    /// A two-pole breaker with the fuse role and pins numbered 1 to 4 conducts per pole (1-2 and 3-4), never between the poles, as built-in multi-pole devices do.
+    /// ヒューズの役割を付けたピン番号1〜4の2極ブレーカーは、同梱の多極機器と同じく極ごと (1-2 と 3-4) に導通し、極どうしはつながない。
+    #[test]
+    fn a_two_pole_protective_device_conducts_per_pole() {
+        let pins: Vec<serde_json::Value> = [("1", 0.0, 0.0), ("2", 10.0, 0.0), ("3", 0.0, 5.0), ("4", 10.0, 5.0)]
+            .iter()
+            .map(|(n, x, y)| serde_json::json!({"number": n, "at": {"x": x, "y": y}}))
+            .collect();
+        let breaker: SymbolDef = serde_json::from_value(serde_json::json!({
+            "id": "u_mcb", "name": "mcb", "name_ja": "mcb", "category": "user", "ref_prefix": "Q",
+            "primitives": [], "pins": pins, "free_pins": true, "sim": {"role": "fuse"}
+        }))
+        .unwrap();
+        let defs = vec![role_symbol("u_src", "source", &[("+", 0.0), ("-", 10.0)], &["+", "-"]), breaker];
+        let sheet = sheet_with(vec![symbol("u_src", "BT1", 0.0, 100.0, "24"), symbol("u_mcb", "Q1", 40.0, 100.0, "")]);
+        let deck = build_deck(&sheet, &defs).unwrap();
+        let bridges: Vec<&SpiceElement> =
+            deck.component_elements.iter().filter(|e| e.kind == ElementKind::Bridge).collect();
+        assert_eq!(bridges.len(), 2, "{bridges:?}");
+        assert_ne!(bridges[0].node_a, bridges[1].node_a, "極どうしはつながない");
     }
 
     /// A symbol with the "none" role takes no part in the circuit: it neither bridges its pins nor acts as a load.

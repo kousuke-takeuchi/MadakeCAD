@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::client::{
     base_url, looks_like_uuid, CliError, ExportKind, LinkApi, RenumberMode, ReportFormat,
@@ -59,6 +59,12 @@ pub enum Commands {
         /// 開路にするスイッチ/接点の参照記号 (カンマ区切り。例: SW1,K1)
         #[arg(long, value_delimiter = ',')]
         open: Vec<String>,
+        /// 部品の属性をこの1回だけ置き換える (繰り返し可。例: --set M1.current_a=40)
+        #[arg(long = "set", value_name = "REF.ATTR=VALUE")]
+        set: Vec<String>,
+        /// 接地へ短絡させるネット名 (カンマ区切り・繰り返し可。例: --short P24)
+        #[arg(long, value_delimiter = ',')]
+        short: Vec<String>,
     },
     /// 図面検証 (ERC+電気検証)
     Verify {
@@ -221,8 +227,9 @@ pub fn run(cli: &Cli, api: &dyn LinkApi) -> Result<String, CliError> {
             }
             Ok(format::parts(&parts))
         }
-        Commands::Sim { sheet, open } => {
-            let result = api.simulate_op(sheet.as_deref(), open)?;
+        Commands::Sim { sheet, open, set, short } => {
+            let options = sim_options(open, set, short)?;
+            let result = api.simulate_op(sheet.as_deref(), options)?;
             if cli.json {
                 return Ok(pretty(&result));
             }
@@ -386,6 +393,30 @@ pub fn run(cli: &Cli, api: &dyn LinkApi) -> Result<String, CliError> {
     }
 }
 
+/// `madake sim` の条件 (Link API の本文): 開路・`--set REF.ATTR=VALUE`・`--short NET`。
+pub fn sim_options(open: &[String], set: &[String], short: &[String]) -> Result<Value, CliError> {
+    let mut overrides = serde_json::Map::new();
+    for item in set {
+        let parsed = item.split_once('=').and_then(|(lhs, value)| {
+            let (reference, attr) = lhs.split_once('.')?;
+            let (reference, attr) = (reference.trim(), attr.trim());
+            (!reference.is_empty() && !attr.is_empty()).then(|| (reference.to_string(), attr.to_string(), value.trim().to_string()))
+        });
+        let Some((reference, attr, value)) = parsed else {
+            return Err(CliError::Usage(format!(
+                "--set は 参照記号.属性=値 の形で書いてください (例: --set M1.current_a=40): {item}"
+            )));
+        };
+        overrides
+            .entry(reference)
+            .or_insert_with(|| json!({}))
+            .as_object_mut()
+            .expect("object")
+            .insert(attr, json!(value));
+    }
+    Ok(json!({ "open_switches": open, "overrides": overrides, "shorts": short }))
+}
+
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
@@ -430,12 +461,8 @@ mod tests {
             self.record(format!("parts({query:?}, {category:?})"));
             Ok(json!([]))
         }
-        fn simulate_op(
-            &self,
-            sheet_id: Option<&str>,
-            open_switches: &[String],
-        ) -> Result<Value, CliError> {
-            self.record(format!("simulate_op({sheet_id:?}, {open_switches:?})"));
+        fn simulate_op(&self, sheet_id: Option<&str>, options: Value) -> Result<Value, CliError> {
+            self.record(format!("simulate_op({sheet_id:?}, {options})"));
             Ok(json!({"voltage": 24.0, "nets": [], "components": [], "warnings": []}))
         }
         fn netlist(&self, sheet_id: Option<&str>) -> Result<Value, CliError> {
@@ -913,6 +940,39 @@ mod tests {
         };
         run(&parse(&["madake", "netlist", "--sheet", "abc"]), &api).unwrap();
         assert_eq!(api.calls(), vec![r#"netlist(Some("abc"))"#]);
+    }
+
+    /// madake sim sends the open switches, every --set REF.ATTR=VALUE as an attribute override and every --short as a net to short, in one request.
+    /// madake sim は、開路のスイッチ、--set 参照記号.属性=値 の置き換え、--short の短絡ネットを1回の依頼にまとめて送る。
+    #[test]
+    fn sim_forwards_overrides_and_shorts() {
+        let api = FakeApi::default();
+        run(
+            &parse(&[
+                "madake", "sim", "--open", "SW1", "--set", "M1.current_a=40", "--set", "M1.v_min=20",
+                "--set", "BT1.r_int_ohm=0.02", "--short", "P24,P12",
+            ]),
+            &api,
+        )
+        .unwrap();
+        let call = &api.calls()[0];
+        let body: Value = serde_json::from_str(call.trim_start_matches("simulate_op(None, ").trim_end_matches(')')).unwrap();
+        assert_eq!(body["open_switches"], json!(["SW1"]));
+        assert_eq!(body["overrides"]["M1"], json!({"current_a": "40", "v_min": "20"}));
+        assert_eq!(body["overrides"]["BT1"]["r_int_ohm"], "0.02");
+        assert_eq!(body["shorts"], json!(["P24", "P12"]));
+    }
+
+    /// A --set without the REF.ATTR=VALUE shape is refused with an example of the right form, before anything is sent.
+    /// 参照記号.属性=値 の形でない --set は、正しい形の例を添えて断られ、何も送られない。
+    #[test]
+    fn sim_refuses_a_malformed_set() {
+        let api = FakeApi::default();
+        for bad in ["M1=40", ".current_a=40", "M1.current_a"] {
+            let err = run(&parse(&["madake", "sim", "--set", bad]), &api).unwrap_err();
+            assert!(matches!(&err, CliError::Usage(m) if m.contains("--set M1.current_a=40")), "{bad}: {err:?}");
+        }
+        assert!(api.calls().is_empty());
     }
 
     /// madake export forwards kind, output path and optional sheet to the API.

@@ -43,9 +43,9 @@ pub enum SimRole {
     Source,
     /// 負荷 (pins = [+, −])。属性 current_a (定電流) / v_min。
     Load,
-    /// ヒューズ (pins = 導通するピン、空なら全ピン)。属性 rating_a (無ければ値の文字)。
+    /// ヒューズ (pins = 導通するピン。空なら同梱と同じ極の規則: 1..2n の番号は 1-2 / 3-4 …、それ以外は全ピン)。属性 rating_a (無ければ値の文字)。
     Fuse,
-    /// 導通 (スイッチ・接点・ジャンパ。pins = 導通するピン、空なら全ピン)。
+    /// 導通 (スイッチ・接点・ジャンパ。pins の扱いはヒューズと同じ)。
     Conductor,
     /// DC/DC 変換器 (pins = [入力+, 入力−, 出力+, 出力−])。属性 v_out / eta / i_out_a。
     Converter,

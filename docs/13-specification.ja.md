@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3353仕様項目**。
+全6領域・**3376仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -968,6 +968,19 @@
 - DC動作点はネットごとの電圧(この例では0〜24V)と部品ごとの電流・電力を報告する(2Aランプは約2A/約48W)。 <sub>`op_reports_net_voltages_and_component_currents`</sub>
 - what-ifでスイッチを開路指定すると負荷電流はゼロになり、結果にどのスイッチを開いたかが明記される。 <sub>`open_switch_cuts_the_current`</sub>
 - 2つのポートを結ぶ配線は、電圧の一覧で1ネットになる (SPICE はポートを知らないので、接点ごとに同じ電圧を写したネットにはしない)。 <sub>`a_port_wire_is_one_net_in_the_voltages`</sub>
+- 電源の役割を付けたユーザーシンボルが、負荷の役割を付けたユーザーシンボルに電流を流す: 負荷は属性 current_a どおり 2A を流し、電源とヒューズも同じ電流になる。 <sub>`a_user_source_feeds_a_user_load_at_its_current`</sub>
+- current_a の無い負荷は、これまでどおり存在を示すだけ (ごく小さい電流) になる。 <sub>`a_user_load_without_current_draws_almost_nothing`</sub>
+- ヒューズの属性 rating_a を超える電流は、測った電流と定格を添えたヒューズの指摘になる。 <sub>`a_current_above_the_fuse_rating_is_a_finding`</sub>
+- rating_a の無いヒューズは、値の文字 (例 "5A") を定格として使う。 <sub>`a_fuse_without_rating_uses_its_value_text`</sub>
+- 置き換えは部品の属性をその1回だけ差し替える (ここでは拘束で 9A 流れる負荷)。結果に置き換えが書かれ、ヒューズの指摘は新しい電流で出る。 <sub>`an_override_changes_a_load_for_one_run`</sub>
+- 図面に無い参照記号への置き換えは、黙って無視せず注意として知らせる。 <sub>`an_override_for_an_unknown_reference_is_a_warning`</sub>
+- 負荷の電源側のネットを接地へ短絡させると、電流は電源の内部抵抗で決まり、ヒューズは事故電流を見る。図面に無いネット名は注意になる。 <sub>`a_short_to_ground_shows_the_fault_current`</sub>
+- 電源の属性 i_max_a を超える電流は、電源の過負荷として指摘される。 <sub>`a_source_above_its_maximum_current_is_a_finding`</sub>
+- 長く細い電線のせいで端子電圧が属性 v_min を下回る負荷は、実際に受ける電圧を添えて指摘される。 <sub>`a_load_below_its_minimum_voltage_is_a_finding`</sub>
+- 変換器は2つ目の電源電圧を作る: 出力は負荷に対して v_out を保ち、入力は「出力電力 ÷ (効率 × 入力電圧)」の電流を引く。 <sub>`a_converter_feeds_a_second_voltage_and_loads_its_input`</sub>
+- 役割「なし」のコネクタでも同じ番号のピンは電流を通し、属性 pin_rating_a を超えるピン電流はピン番号付きで指摘される。 <sub>`a_connector_pin_above_its_rating_is_a_finding`</sub>
+- 太さの許容電流を超えて流れる電線はエラーになる。許容電流の表より太い電線は判定せず、電流が表の最大を超えたときだけ情報で知らせる。 <sub>`wire_currents_are_checked_against_their_size`</sub>
+- シミュレーションの条件はどの項目も省略して送れる。空のオブジェクトは「図面のまま」を意味する。 <sub>`simulation_options_default_to_the_drawing_as_it_is`</sub>
 
 ### SPICEネットリスト生成
 
@@ -976,6 +989,10 @@
 - 離れた場所の同名ネットラベルはmΩ抵抗で橋渡しされ、論理接続が保たれる。 <sub>`same_name_labels_are_bridged`</sub>
 - 間に配線の無い2つの接地の印 (ネット名を持つシンボル) を通る帰り道は、デッキでも1つにつながったノードになる。 <sub>`a_return_path_through_two_ground_marks_is_one_node`</sub>
 - 電源の無い図面は変換できない(明示的なNoSourceエラー)。 <sub>`no_battery_is_an_error`</sub>
+- 電源が「電源の役割を付けたユーザーシンボル」だけの図面も変換できる: 電源の負極が接地になり、負荷は定電流源になり、浮いた部分も解けるよう全ノードに大きな漏れ抵抗が入る。 <sub>`a_user_source_and_load_become_spice_sources`</sub>
+- 同梱シンボルだけの図面は、これまでと同じデッキになる (漏れ抵抗の指定は足さない)。 <sub>`a_built_in_only_drawing_gets_no_shunt_option`</sub>
+- ヒューズの役割を付けたピン番号1〜4の2極ブレーカーは、同梱の多極機器と同じく極ごと (1-2 と 3-4) に導通し、極どうしはつながない。 <sub>`a_two_pole_protective_device_conducts_per_pole`</sub>
+- 役割「なし」のシンボルは回路に加わらない: ピンどうしをつながず、負荷にもならない。 <sub>`a_symbol_with_no_role_adds_no_element`</sub>
 - デッキ出力は毎回同一(決定的)で、GNDノード0はbatteryの負極ピンになる。 <sub>`node_names_are_deterministic_and_ground_is_battery_minus`</sub>
 
 ### stroke_font
@@ -1242,6 +1259,8 @@
 - free_pins のシンボルでも座標は数でなければならない: 有限の数でない接続点は断る。 <sub>`a_free_pin_symbol_still_needs_finite_coordinates`</sub>
 - free_pins を使わないシンボルは、その指定を書き出さない。これまでのシンボルファイルは変わらない。 <sub>`free_pins_is_written_only_when_set`</sub>
 - シンボルのネット名は保存して読み直しても残る。ネット名の無いシンボルは、その項目を書き出さない。 <sub>`a_net_name_is_kept_and_written_only_when_set`</sub>
+- シンボルのシミュレーションの役割 (例: 「ピン1と2の負荷」) は保存して読み直しても残る。役割の無いシンボルは、その項目を書き出さない。 <sub>`a_simulation_role_is_kept_and_written_only_when_set`</sub>
+- シミュレーションの役割は、ピンの数が合わない (負荷は2つ、変換器は4つ) か、シンボルに無いピンを指すと断られる。 <sub>`a_simulation_role_with_wrong_pins_is_refused`</sub>
 
 ### 開始テンプレート
 
@@ -1457,6 +1476,7 @@
 - 健全な直列回路(電源・ヒューズ・スイッチ・ランプ)では電気検証の指摘は出ない。 <sub>`healthy_series_circuit_has_no_elec_findings`</sub>
 - 電源から切り離された負荷(断線・開路)は「到達不能」として報告される。 <sub>`load_cut_off_from_source_is_unreachable`</sub>
 - 負荷電流がワイヤの許容電流を超えるとエラー、ヒューズ定格を超えると警告になる。 <sub>`overloaded_wire_and_fuse_are_flagged`</sub>
+- ngspice があれば、ヒューズの役割を付けたユーザーシンボルも同梱のヒューズと同じに確かめる: シミュレーションの電流が属性 rating_a を超えると警告になる。 <sub>`a_user_fuse_is_checked_in_the_simulation`</sub>
 - 長い配線で電源電圧の3%を超える電圧降下は指摘され、短い配線では出ない。 <sub>`excessive_voltage_drop_is_flagged`</sub>
 - current_a属性が無い負荷は電流計算から除外され、Infoとして通知される。 <sub>`load_without_current_attr_gets_info_and_no_current_checks`</sub>
 - ngspiceがあれば電気検証はソルバの実測値で報告され、近似モードの通知は出ない。 <sub>`simulation_mode_reports_measured_values_when_ngspice_installed`</sub>
@@ -1644,7 +1664,7 @@
 - RESTの部品エンドポイントは検索(サンプル含む)・登録更新・カテゴリ絞り込み・削除・電線品番一覧に対応する。 <sub>`parts_endpoints_search_upsert_delete`</sub>
 - GET /api/v1/verify は図面の診断(空参照・未接続ピンなど)をJSONで返す。 <sub>`verify_returns_diagnostics`</sub>
 - POST /api/v1/import/kicad は開いているプロジェクトを変換結果で置き換え、patchとインポートレポートを返す。 <sub>`import_kicad_replaces_project_and_reports`</sub>
-- POST /api/v1/simulate/op はDC動作点を解き、ネット電圧と部品電流を返す(ngspice必須。未導入時はスキップ)。 <sub>`simulate_op_returns_result`</sub>
+- POST /api/v1/simulate/op はDC動作点を解き、ネット電圧・部品電流・定格超過を返す。本文の属性の置き換えと短絡はその1回だけに効く(ngspice必須。未導入時はスキップ)。 <sub>`simulate_op_returns_result`</sub>
 - POST /api/v1/export/pdf は指定パスへ正しいPDFファイルを書き出す。 <sub>`export_pdf_writes_pdf_file`</sub>
 - POST /api/v1/export/dxf と /export/kicad はシートをDXFと.kicad_schへ書き出し、POST /api/v1/import/dxf はそのDXFをインポートレポート付きでプロジェクトへ読み戻す。 <sub>`export_dxf_kicad_and_import_dxf_round_trip`</sub>
 - POST /api/v1/variants/start はシートを案の数だけ複製し(undo1回)、案ごとのid対応表を返す。/variants/finish は選んだ案を元idのまま元シートへ写し戻して複製を消し、nullなら複製を消すだけ。1〜4以外の数は拒否される。 <sub>`variants_start_and_finish_round_trip`</sub>
@@ -2164,6 +2184,8 @@
 - madake statusはヘルスチェックとプロジェクト概要を取得する。 <sub>`status_queries_health_and_project`</sub>
 - --jsonはjq等へ渡せる整形JSONをそのまま出力する。 <sub>`json_flag_emits_raw_json`</sub>
 - madake netlistは--sheetオプションをAPIへ引き渡す。 <sub>`netlist_forwards_sheet_option`</sub>
+- madake sim は、開路のスイッチ、--set 参照記号.属性=値 の置き換え、--short の短絡ネットを1回の依頼にまとめて送る。 <sub>`sim_forwards_overrides_and_shorts`</sub>
+- 参照記号.属性=値 の形でない --set は、正しい形の例を添えて断られ、何も送られない。 <sub>`sim_refuses_a_malformed_set`</sub>
 - madake exportは種別・出力パス・シート指定をAPIへ引き渡す。 <sub>`export_forwards_kind_path_and_sheet`</sub>
 - madake export dxf / kicadはDXF・KiCadのエンドポイントでシート1枚を書き出し(シート指定可)、書き出した種別の件数と出せなかったものを表示する。 <sub>`export_dxf_and_kicad_forward_to_their_endpoints`</sub>
 - madake openに.dxfを渡すと/import/dxfで読み込み(--wire-layerを引き渡す)、変換結果の要約を表示する。拡張子の大文字小文字はKiCadでも区別しない。他のファイルで--wire-layerを付けるとエラー。 <sub>`open_dxf_imports_with_wire_layers`</sub>
@@ -2212,6 +2234,7 @@
 - 端子台が無い場合は空の表ではなく分かりやすいメッセージを出す。 <sub>`terminals_handles_empty`</sub>
 - openのメッセージには読み込んだパスと結果のrevisionが含まれる。 <sub>`opened_reports_path_and_revision`</sub>
 - madake netlist はポートのピンを接点付き (39:U3/VBUS) で書く。 <sub>`netlist_shows_port_contacts`</sub>
+- シミュレーションの要約は、電圧と電流の後に定格超過を並べ、エラー・警告・情報を別の印で示す。 <sub>`sim_summary_lists_findings`</sub>
 
 
 ## フロントエンド (エディタUI)

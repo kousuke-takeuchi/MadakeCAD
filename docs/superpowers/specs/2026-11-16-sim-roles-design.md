@@ -16,7 +16,8 @@ global voltage, so a drawing with two supply voltages (for example 24 V and a 12
    Roles: `source`, `load`, `fuse`, `conductor`, `converter`, `none`.
    - `source`, `load`: `pins = [plus, minus]`.
    - `converter`: `pins = [in_plus, in_minus, out_plus, out_minus]`.
-   - `fuse`, `conductor`: `pins` = the pins that conduct to each other (all pins when empty).
+   - `fuse`, `conductor`: `pins` = the pins that conduct to each other; when empty, the built-in pole rule
+     applies (pins numbered 1..2n conduct per pole: 1-2, 3-4, ...; otherwise all pins).
    - `none`: the symbol takes no part (no bridge, no load) except same-number feed-through pins.
    Without `sim` the current category rules apply unchanged.
 2. **Values are instance attributes** (`attrs`, set with the existing attribute command):

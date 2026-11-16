@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3353 specification clauses** across 6 areas.
+**3376 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -968,6 +968,19 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The DC operating point reports per-net voltages (0-24 V here) and per-component current and power (a 2 A lamp shows ~2 A / ~48 W). <sub>`op_reports_net_voltages_and_component_currents`</sub>
 - Declaring a switch open in the what-if analysis drops the load current to zero, and the result notes which switches were opened. <sub>`open_switch_cuts_the_current`</sub>
 - A wire between two ports is one net in the voltage list, not one per contact with the same copied voltage, because SPICE does not know ports. <sub>`a_port_wire_is_one_net_in_the_voltages`</sub>
+- A user symbol marked as a source drives a user symbol marked as a load: the load draws exactly its current_a (2 A) and the source and fuse carry the same current. <sub>`a_user_source_feeds_a_user_load_at_its_current`</sub>
+- A load without current_a only marks its presence (a tiny placeholder current), as before. <sub>`a_user_load_without_current_draws_almost_nothing`</sub>
+- A current above the fuse's rating_a is reported as a fuse finding with the measured current and the rating. <sub>`a_current_above_the_fuse_rating_is_a_finding`</sub>
+- A fuse without rating_a takes its rating from the value text (for example "5A"). <sub>`a_fuse_without_rating_uses_its_value_text`</sub>
+- An override replaces a part's attribute for one run only (here a stalled load drawing 9 A), the result names the override, and the fuse finding follows the new current. <sub>`an_override_changes_a_load_for_one_run`</sub>
+- An override for a reference that is not on the sheet is reported as a warning instead of being silently ignored. <sub>`an_override_for_an_unknown_reference_is_a_warning`</sub>
+- Shorting the load's supply net to ground makes the source's internal resistance limit the current, so the fuse sees the fault current; an unknown net name is a warning. <sub>`a_short_to_ground_shows_the_fault_current`</sub>
+- A source carrying more than its i_max_a is reported as a source overload. <sub>`a_source_above_its_maximum_current_is_a_finding`</sub>
+- A load whose terminal voltage falls below its v_min because of long thin wires is reported with the voltage it actually gets. <sub>`a_load_below_its_minimum_voltage_is_a_finding`</sub>
+- A converter makes a second supply voltage: its output holds v_out for the load, and its input draws output power divided by efficiency and input voltage. <sub>`a_converter_feeds_a_second_voltage_and_loads_its_input`</sub>
+- A connector symbol with no role still passes current through its same-numbered pins, and a pin current above pin_rating_a is reported with the pin number. <sub>`a_connector_pin_above_its_rating_is_a_finding`</sub>
+- A wire carrying more than the ampacity of its size is an error; a wire thicker than the ampacity table is not judged and is only noted when its current exceeds the table. <sub>`wire_currents_are_checked_against_their_size`</sub>
+- Simulation options can be sent with any field left out; an empty object means "the drawing as it is". <sub>`simulation_options_default_to_the_drawing_as_it_is`</sub>
 
 ### SPICE netlist generation
 
@@ -976,6 +989,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Same-named net labels in different places are bridged with a milliohm resistor, preserving their logical connection. <sub>`same_name_labels_are_bridged`</sub>
 - A return path through two ground marks (symbols with a net name) with no wire between them is one connected node in the deck. <sub>`a_return_path_through_two_ground_marks_is_one_node`</sub>
 - A drawing without a power source cannot be converted (explicit NoSource error). <sub>`no_battery_is_an_error`</sub>
+- A drawing whose only source is a user symbol with the source role can be converted: the source's minus pin is ground, the load becomes a constant current source, and every node gets a high-value shunt so isolated parts still solve. <sub>`a_user_source_and_load_become_spice_sources`</sub>
+- A drawing with only built-in symbols gets the same deck as before (no shunt option is added). <sub>`a_built_in_only_drawing_gets_no_shunt_option`</sub>
+- A two-pole breaker with the fuse role and pins numbered 1 to 4 conducts per pole (1-2 and 3-4), never between the poles, as built-in multi-pole devices do. <sub>`a_two_pole_protective_device_conducts_per_pole`</sub>
+- A symbol with the "none" role takes no part in the circuit: it neither bridges its pins nor acts as a load. <sub>`a_symbol_with_no_role_adds_no_element`</sub>
 - Deck output is deterministic across runs, and the ground node 0 is the battery's minus pin. <sub>`node_names_are_deterministic_and_ground_is_battery_minus`</sub>
 
 ### stroke_font
@@ -1242,6 +1259,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A free-pin symbol still needs real coordinates: a connection point that is not a finite number is refused. <sub>`a_free_pin_symbol_still_needs_finite_coordinates`</sub>
 - A symbol that does not use free_pins is saved without the mark, so existing symbol files stay as they are. <sub>`free_pins_is_written_only_when_set`</sub>
 - A symbol's net name is kept through save and load, and a symbol without one is written without the field. <sub>`a_net_name_is_kept_and_written_only_when_set`</sub>
+- A symbol's simulation role (for example "load on pins 1 and 2") is kept through save and load, and a symbol without one is written without the field. <sub>`a_simulation_role_is_kept_and_written_only_when_set`</sub>
+- A simulation role is refused when it names the wrong number of pins (a load needs two, a converter four) or a pin the symbol does not have. <sub>`a_simulation_role_with_wrong_pins_is_refused`</sub>
 
 ### Start templates
 
@@ -1457,6 +1476,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A healthy series circuit (source, fuse, switch, lamp) raises no electrical findings. <sub>`healthy_series_circuit_has_no_elec_findings`</sub>
 - A load cut off from the power source (broken wire or open path) is reported as unreachable. <sub>`load_cut_off_from_source_is_unreachable`</sub>
 - A load current exceeding the wire's ampacity is an error, and exceeding the fuse rating is a warning. <sub>`overloaded_wire_and_fuse_are_flagged`</sub>
+- With ngspice, a user symbol with the fuse role is checked like the built-in fuse: a simulated current above its rating_a is a fuse warning. <sub>`a_user_fuse_is_checked_in_the_simulation`</sub>
 - Voltage drop above 3 % of the supply voltage on a long wire is flagged; a short wire passes. <sub>`excessive_voltage_drop_is_flagged`</sub>
 - A load without a current_a attribute is excluded from current checks and reported as an Info note. <sub>`load_without_current_attr_gets_info_and_no_current_checks`</sub>
 - With ngspice installed, electrical findings carry solver-measured values and no approximate-mode note appears. <sub>`simulation_mode_reports_measured_values_when_ngspice_installed`</sub>
@@ -1644,7 +1664,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The REST parts endpoints support searching (sample data included), upserting, category filtering, deleting, and listing wire parts. <sub>`parts_endpoints_search_upsert_delete`</sub>
 - GET /api/v1/verify returns the drawing's diagnostics as JSON (e.g. empty reference and unconnected pins). <sub>`verify_returns_diagnostics`</sub>
 - POST /api/v1/import/kicad replaces the open project with the converted schematic and returns a patch plus an import report. <sub>`import_kicad_replaces_project_and_reports`</sub>
-- POST /api/v1/simulate/op solves the DC operating point and returns net voltages and component currents (requires ngspice; skipped otherwise). <sub>`simulate_op_returns_result`</sub>
+- POST /api/v1/simulate/op solves the DC operating point and returns net voltages, component currents and rating findings; attribute overrides and shorts in the body change only that run (requires ngspice; skipped otherwise). <sub>`simulate_op_returns_result`</sub>
 - POST /api/v1/export/pdf writes a valid PDF file to the requested path. <sub>`export_pdf_writes_pdf_file`</sub>
 - POST /api/v1/export/dxf and /export/kicad write the sheet as DXF and .kicad_sch, and POST /api/v1/import/dxf reads the DXF back into a project with an import report. <sub>`export_dxf_kicad_and_import_dxf_round_trip`</sub>
 - POST /api/v1/variants/start copies the sheet once per variant (one undo step) and returns each copy's id map; /variants/finish with a chosen sheet writes it back under the original ids and removes the copies, with null it only removes them; a count outside 1..=4 is rejected. <sub>`variants_start_and_finish_round_trip`</sub>
@@ -2164,6 +2184,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - madake status calls the health endpoint and the project snapshot. <sub>`status_queries_health_and_project`</sub>
 - --json prints raw pretty-printed JSON for piping into jq and similar tools. <sub>`json_flag_emits_raw_json`</sub>
 - madake netlist forwards the --sheet option to the API. <sub>`netlist_forwards_sheet_option`</sub>
+- madake sim sends the open switches, every --set REF.ATTR=VALUE as an attribute override and every --short as a net to short, in one request. <sub>`sim_forwards_overrides_and_shorts`</sub>
+- A --set without the REF.ATTR=VALUE shape is refused with an example of the right form, before anything is sent. <sub>`sim_refuses_a_malformed_set`</sub>
 - madake export forwards kind, output path and optional sheet to the API. <sub>`export_forwards_kind_path_and_sheet`</sub>
 - madake export dxf / kicad write one sheet through the DXF and KiCad endpoints (sheet selectable) and print the export breakdown: how many of each kind was written and what could not be written. <sub>`export_dxf_and_kicad_forward_to_their_endpoints`</sub>
 - madake open with a .dxf file imports it through /import/dxf, passing --wire-layer, and prints the import summary; the extension is matched case-insensitively for KiCad too; --wire-layer is rejected for other files. <sub>`open_dxf_imports_with_wire_layers`</sub>
@@ -2212,6 +2234,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - An empty terminal list prints a friendly message instead of an empty table. <sub>`terminals_handles_empty`</sub>
 - Open messages include the loaded path and resulting revision. <sub>`opened_reports_path_and_revision`</sub>
 - madake netlist writes a port pin with its contact (39:U3/VBUS). <sub>`netlist_shows_port_contacts`</sub>
+- The simulation summary lists rating findings after the voltages and currents, marking errors, warnings and notes differently. <sub>`sim_summary_lists_findings`</sub>
 
 
 ## Frontend (editor UI)

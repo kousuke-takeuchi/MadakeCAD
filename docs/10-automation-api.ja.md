@@ -23,7 +23,7 @@ Claude Codeはリポジトリの`.mcp.json`で自動接続。
 ### Link API(REST+SSE、外部ツール向け)
 `127.0.0.1:9310/api/v1` — CLI・ブラウザでのUI検証・(将来)FreeCADアドオンが使う素のJSON REST:
 - 読み: `/project`・`/symbols`(+`/symbols/user`)・`/frame-templates`・`/stroke-fonts/{id}`(同梱ストロークフォントの字形。例`kst32b`。知らないidは404)・`/panel/unplaced`・`/netlist`・`/verify`・`/search`・`/devices`・`/parts`・`/wire-parts`・`/terminals`・`/terminals/chart`・`/terminals/check`・`/plc/modules`
-- 書き: `/commands`(Command配列。`?batch=true`で配列全体を**1回の編集**=undo1回にする。途中で拒否されたら1件も適用しない)・`/undo`・`/redo`・`/save`・`/load`・`/import/kicad`・`/import/dxf`・`/simulate/op`・`/symbols/user/{save,delete}`・`/symbols/duplicate`・`/macros/{build,save,apply,apply-inline}`・`/templates/apply`・`/variants/{start,finish}`・`/export/{svg,pdf,dxf,kicad,pdf-book,report,bom,wire-list}`・部品CRUD
+- 書き: `/commands`(Command配列。`?batch=true`で配列全体を**1回の編集**=undo1回にする。途中で拒否されたら1件も適用しない)・`/undo`・`/redo`・`/save`・`/load`・`/import/kicad`・`/import/dxf`・`/simulate/op`(本文: `open_switches`・`overrides` = 参照記号 → {属性: 値} をその1回だけ置き換え・`shorts` = 接地へ短絡させるネット名。結果に定格超過 `findings` を重い順に足す)・`/symbols/user/{save,delete}`・`/symbols/duplicate`・`/macros/{build,save,apply,apply-inline}`・`/templates/apply`・`/variants/{start,finish}`・`/export/{svg,pdf,dxf,kicad,pdf-book,report,bom,wire-list}`・部品CRUD
 - ライブ更新: `GET /events`(SSEパッチストリーム)
 - ローカルオリジンガード(外部Webオリジンからのアクセスを拒否)
 

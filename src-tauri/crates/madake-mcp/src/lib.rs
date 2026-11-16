@@ -784,6 +784,12 @@ pub struct SimulateOpParams {
     /// 開路として扱うスイッチ/接点の参照記号 (what-if)。
     #[serde(default)]
     pub open_switches: Vec<String>,
+    /// 部品の属性の置き換え (参照記号 → {属性: 値})。例: {"M1": {"current_a": "40"}} でモーターの拘束電流。
+    #[serde(default)]
+    pub overrides: std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>,
+    /// 接地へ短絡させるネットの名前 (地絡・出力短絡の事故電流を見る)。
+    #[serde(default)]
+    pub shorts: Vec<String>,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -1843,7 +1849,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "DC動作点シミュレーション(ngspice)を実行し、各ネットの電圧(min/max)・各部品の電流/電力を返す。open_switchesでスイッチ/接点を開路にしたwhat-if解析ができる。負荷電流はシンボル属性current_a、電源はbattery"
+        description = "DC動作点シミュレーション(ngspice)を実行し、各ネットの電圧(min/max)・各部品の電流/電力を返す。open_switchesでスイッチ/接点を開路にしたwhat-if解析ができる。overridesで部品の属性をその1回だけ置き換え (例: 拘束電流)、shortsでネットを接地へ短絡させる。電源は同梱のbatteryか、シンボル定義のsim.roleがsourceの部品 (属性voltage/r_int_ohm/i_max_a)。負荷は属性current_a (sim.role loadは定電流、v_min)、ヒューズはrating_a、変換器はv_out/eta/i_out_a、コネクタのピン定格はpin_rating_a。findingsに定格超過 (sim.fuse_rating/pin_rating/source_overload/converter_overload/load_voltage/wire_ampacity) を重い順に返す"
     )]
     fn simulate_op(
         &self,
@@ -1855,9 +1861,13 @@ impl MadakeMcp {
             .project()
             .sheet(sheet_id)
             .ok_or_else(|| ErrorData::invalid_params("sheet not found", None))?;
-        let result =
-            madake_core::sim::simulate_op(sheet, &sheet_symbol_defs(sheet), &p.open_switches)
-                .map_err(internal)?;
+        let opts = madake_core::sim::SimOptions {
+            open_switches: p.open_switches,
+            overrides: p.overrides,
+            shorts: p.shorts,
+        };
+        let result = madake_core::sim::simulate_op_opts(sheet, &sheet_symbol_defs(sheet), &opts)
+            .map_err(internal)?;
         json_ok(&result)
     }
 

@@ -285,6 +285,18 @@ pub fn sim_op(result: &Value) -> String {
     for w in result["warnings"].as_array().cloned().unwrap_or_default() {
         out.push_str(&format!("⚠ {}\n", w.as_str().unwrap_or("")));
     }
+    let findings = result["findings"].as_array().cloned().unwrap_or_default();
+    if !findings.is_empty() {
+        out.push_str("\n定格超過:\n");
+        for f in &findings {
+            let mark = match f["severity"].as_str().unwrap_or("") {
+                "error" => "✗",
+                "warning" => "⚠",
+                _ => "i",
+            };
+            out.push_str(&format!("  {mark} [{}] {}\n", text(f, "code"), text(f, "message")));
+        }
+    }
     out.trim_end().to_string()
 }
 
@@ -819,5 +831,21 @@ mod tests {
         let nets = json!([{ "name": "N001.VBUS", "pins": [{ "reference": "39", "pin": "U3", "contact": "VBUS" }, { "reference": "R1", "pin": "1" }], "wire_ids": ["w1"] }]);
         let out = netlist(&nets);
         assert!(out.contains("39:U3/VBUS") && out.contains("R1:1"), "{out}");
+    }
+
+    /// The simulation summary lists rating findings after the voltages and currents, marking errors, warnings and notes differently.
+    /// シミュレーションの要約は、電圧と電流の後に定格超過を並べ、エラー・警告・情報を別の印で示す。
+    #[test]
+    fn sim_summary_lists_findings() {
+        let out = sim_op(&json!({
+            "voltage": 24.0, "nets": [], "components": [], "warnings": [],
+            "findings": [
+                {"code": "sim.wire_ampacity", "severity": "error", "message": "ワイヤ 2sq の許容電流 22A を電流 40.00A が超えています"},
+                {"code": "sim.fuse_rating", "severity": "warning", "message": "F1: 電流 8.00A がヒューズ定格 5A を超えています"}
+            ]
+        }));
+        assert!(out.contains("定格超過:"), "{out}");
+        assert!(out.contains("✗ [sim.wire_ampacity]"), "{out}");
+        assert!(out.contains("⚠ [sim.fuse_rating] F1"), "{out}");
     }
 }

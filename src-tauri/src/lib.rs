@@ -416,6 +416,8 @@ fn simulate_op(
     state: State<AppState>,
     sheet_id: Option<madake_core::SheetId>,
     open_switches: Vec<String>,
+    overrides: Option<std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>>,
+    shorts: Option<Vec<String>>,
 ) -> Result<madake_core::sim::SimOpResult, String> {
     let engine = state.doc.engine.lock().unwrap();
     let project = engine.project();
@@ -424,8 +426,12 @@ fn simulate_op(
         None => project.sheets.first(),
     }
     .ok_or("sheet not found")?;
-    madake_core::sim::simulate_op(sheet, &sheet_symbol_defs(sheet), &open_switches)
-        .map_err(|e| e.to_string())
+    let opts = madake_core::sim::SimOptions {
+        open_switches,
+        overrides: overrides.unwrap_or_default(),
+        shorts: shorts.unwrap_or_default(),
+    };
+    madake_core::sim::simulate_op_opts(sheet, &sheet_symbol_defs(sheet), &opts).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

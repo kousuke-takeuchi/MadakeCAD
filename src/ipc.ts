@@ -678,6 +678,14 @@ export interface SymbolDef {
   free_pins?: boolean;
   /** このシンボルが載るネットの名前 (接地の印など)。置いたシンボルのピンが、その名前のネットラベルと同じ働きをする。 */
   net?: string;
+  /** シミュレーションでの役割と、役割が使うピン番号。値は置いた部品の属性 (voltage / current_a / rating_a / v_out / eta など)。 */
+  sim?: SymbolSimSpec;
+}
+
+/** シンボルのシミュレーションの役割。source / load は [+, −]、converter は [入力+, 入力−, 出力+, 出力−]、fuse / conductor は導通するピン (省略時は極の規則: 1..2n の番号は 1-2・3-4…、それ以外は全ピン)。 */
+export interface SymbolSimSpec {
+  role: "source" | "load" | "fuse" | "conductor" | "converter" | "none";
+  pins?: string[];
 }
 
 /** ユーザーシンボルの分類 (部品挿入ダイアログの「ユーザー」グループ)。 */
@@ -770,6 +778,25 @@ export interface SimOpResult {
   nets: { name: string; volts_min: number; volts_max: number; wire_ids: string[] }[];
   components: { reference: string; entity_id: string; amps: number; watts: number }[];
   warnings: string[];
+  /** 定格超過 (重い順)。code は sim.fuse_rating / sim.pin_rating / sim.source_overload / sim.converter_overload / sim.load_voltage / sim.wire_ampacity / sim.wire_unchecked。 */
+  findings?: SimFinding[];
+}
+
+/** シミュレーションの定格超過1件。value は測った値、limit は比べた限度 (A または V)。 */
+export interface SimFinding {
+  code: string;
+  severity: "error" | "warning" | "info";
+  reference: string;
+  entity_ids: string[];
+  value: number;
+  limit: number;
+  message: string;
+}
+
+/** シミュレーションの条件 (開路以外)。overrides は 参照記号 → {属性: 値}、shorts は接地へ短絡させるネット名。 */
+export interface SimExtraOptions {
+  overrides?: Record<string, Record<string, string>>;
+  shorts?: string[];
 }
 
 export interface Diagnostic {
@@ -1310,7 +1337,7 @@ interface Ipc {
   /** 部品DB検索 (query: 部分一致、category: 完全一致)。 */
   searchParts(query: string, category?: string): Promise<Part[]>;
   /** DC動作点シミュレーション。openSwitchesの参照記号は開路扱い。 */
-  simulateOp(sheetId: string | null, openSwitches: string[]): Promise<SimOpResult>;
+  simulateOp(sheetId: string | null, openSwitches: string[], options?: SimExtraOptions): Promise<SimOpResult>;
   exportSvg(sheetId: string, path: string): Promise<void>;
   exportPdf(sheetId: string, path: string): Promise<void>;
   /** シートをDXF (AutoCAD 2000形式) で書き出す。戻り値=書き出した種別の内訳。 */
@@ -1421,8 +1448,8 @@ const tauriIpc: Ipc = {
   verify: (sheetId: string | null) => invoke<Diagnostic[]>("run_verification", { sheetId }),
   searchParts: (query: string, category?: string) =>
     invoke<Part[]>("search_parts", { query, category }),
-  simulateOp: (sheetId: string | null, openSwitches: string[]) =>
-    invoke<SimOpResult>("simulate_op", { sheetId, openSwitches }),
+  simulateOp: (sheetId: string | null, openSwitches: string[], options?: SimExtraOptions) =>
+    invoke<SimOpResult>("simulate_op", { sheetId, openSwitches, overrides: options?.overrides, shorts: options?.shorts }),
   exportSvg: (sheetId: string, path: string) => invoke<void>("export_svg", { sheetId, path }),
   exportPdf: (sheetId: string, path: string) => invoke<void>("export_pdf", { sheetId, path }),
   exportDxf: (sheetId: string, path: string) =>
@@ -1593,10 +1620,10 @@ const httpIpc: Ipc = {
   openMacrosFolder: () => Promise.reject(new Error("browser mode: not supported")),
   getNetlist: (sheetId) => http<Net[]>(`/netlist?sheet_id=${sheetId}`),
   verify: (sheetId) => http<Diagnostic[]>(sheetId ? `/verify?sheet_id=${sheetId}` : "/verify"),
-  simulateOp: (sheetId, openSwitches) =>
+  simulateOp: (sheetId, openSwitches, options) =>
     http<SimOpResult>("/simulate/op", {
       method: "POST",
-      body: JSON.stringify({ sheet_id: sheetId, open_switches: openSwitches }),
+      body: JSON.stringify({ sheet_id: sheetId, open_switches: openSwitches, ...options }),
     }),
   searchParts: (query, category) => {
     const params = new URLSearchParams();

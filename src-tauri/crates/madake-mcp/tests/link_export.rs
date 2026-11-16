@@ -188,8 +188,8 @@ async fn import_kicad_replaces_project_and_reports() {
     std::fs::remove_file(&sch).ok();
 }
 
-/// POST /api/v1/simulate/op solves the DC operating point and returns net voltages and component currents (requires ngspice; skipped otherwise).
-/// POST /api/v1/simulate/op はDC動作点を解き、ネット電圧と部品電流を返す(ngspice必須。未導入時はスキップ)。
+/// POST /api/v1/simulate/op solves the DC operating point and returns net voltages, component currents and rating findings; attribute overrides and shorts in the body change only that run (requires ngspice; skipped otherwise).
+/// POST /api/v1/simulate/op はDC動作点を解き、ネット電圧・部品電流・定格超過を返す。本文の属性の置き換えと短絡はその1回だけに効く(ngspice必須。未導入時はスキップ)。
 #[tokio::test]
 async fn simulate_op_returns_result() {
     if madake_core::ngspice::find_ngspice().is_none() {
@@ -270,20 +270,42 @@ async fn simulate_op_returns_result() {
         .header("content-type", "application/json")
         .body(Body::from(json!({ "open_switches": [] }).to_string()))
         .unwrap();
-    let response = router.oneshot(request).await.unwrap();
+    let response = router.clone().oneshot(request).await.unwrap();
     let status = response.status();
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
     assert_eq!(status, StatusCode::OK, "{body:?}");
     assert_eq!(body["voltage"], 24.0);
-    let l1 = body["components"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|c| c["reference"] == "L1")
-        .expect("L1");
-    let amps = l1["amps"].as_f64().unwrap();
+    let l1_amps = |body: &Value| {
+        body["components"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["reference"] == "L1")
+            .expect("L1")["amps"]
+            .as_f64()
+            .unwrap()
+    };
+    let amps = l1_amps(&body);
     assert!((amps - 2.0).abs() < 0.05, "{amps}");
+    assert!(body["findings"].as_array().is_some(), "{body:?}");
+
+    // 条件付き: L1 の電流を 4A に置き換え、図面に無いネットの短絡は注意になる
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/v1/simulate/op")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({ "overrides": { "L1": { "current_a": "4" } }, "shorts": ["NOPE"] }).to_string(),
+        ))
+        .unwrap();
+    let response = router.oneshot(request).await.unwrap();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    let amps = l1_amps(&body);
+    assert!((amps - 4.0).abs() < 0.1, "{amps}");
+    let warnings = body["warnings"].to_string();
+    assert!(warnings.contains("NOPE"), "{warnings}");
 }
 
 /// POST /api/v1/export/pdf writes a valid PDF file to the requested path.
