@@ -78,7 +78,7 @@ pub fn port_label_diagnostics(project: &Project) -> Vec<Diagnostic> {
             if net.contact.is_some() || !net.contact_labels.is_empty() {
                 continue;
             }
-            let (label_ids, names) = crate::xref::labels_on_net(sheet, &net);
+            let (label_ids, names) = crate::xref::labels_on_net(sheet, &defs, &net);
             for name in names {
                 let Some(on) = port_sheets.get(&name) else { continue };
                 if on.iter().all(|s| *s == sheet.id) {

@@ -1576,6 +1576,24 @@ pub fn sheet_symbol_defs(sheet: &crate::model::Sheet) -> Vec<SymbolDef> {
     defs
 }
 
+/// テスト用: ピン1本 (ローカル原点) で、指定のネット名を持つ印のシンボル定義。
+#[cfg(test)]
+pub(crate) fn test_net_mark(id: &str, net: &str) -> SymbolDef {
+    SymbolDef {
+        id: id.into(),
+        name: "Net mark".into(),
+        name_ja: "ネットの印".into(),
+        category: "user".into(),
+        ref_prefix: "GND".into(),
+        keywords: vec![],
+        primitives: vec![Primitive::Line { pts: vec![p(-2.5, 0.0), p(2.5, 0.0)] }],
+        pins: vec![PinDef { number: "1".into(), name: String::new(), at: p(0.0, 0.0), dir: PinDir::Up, contacts: vec![] }],
+        text_slots: vec![],
+        free_pins: false,
+        net: Some(net.into()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

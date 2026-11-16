@@ -1476,6 +1476,8 @@ original does not show.
 every placed instance then acts like a net label of that name: instances with the same name
 are one net, together with plain labels of that name, and the net takes that name. Nothing
 is drawn for it. A missing or blank name is an ordinary symbol; bundled symbols carry none.
+The name also works across sheets, in the label-conflict check, in simulation and in KiCad
+export; when a net carries more than one name, the existing label-conflict warning reports it.
 
 ## Summary by impact
 

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3337仕様項目**。
+全6領域・**3346仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -452,6 +452,7 @@
 - 文字列内のエスケープ(引用符・改行)と日本語などのマルチバイト文字を正しく解釈する。 <sub>`parses_escaped_strings_and_multibyte`</sub>
 - children(name)は指定した先頭シンボルを持つ子リストをすべて列挙する。 <sub>`children_iterates_all_matches`</sub>
 - 括弧の不整合や閉じていない文字列は、位置付きの構文エラーとして報告される。 <sub>`syntax_errors_are_reported`</sub>
+- KiCad書き出しは、接地の印それぞれのピンの位置にシンボルのネット名のラベルを書くので、KiCadでも印どうしのつながりが残る。 <sub>`the_kicad_export_writes_a_label_at_each_ground_mark_pin`</sub>
 - KiCad書き出しの内訳は、書いた電気要素の件数と、まったく書かない種別(図形・電線品番凡例・盤レイアウト)を挙げるので、黙って落ちるものが無い。 <sub>`the_kicad_export_report_names_the_kinds_it_cannot_write`</sub>
 - シートを.kicad_schへ書き出して読み戻すと、用紙・表題欄・シンボル(種類・参照記号・型番・回転・ミラー)・配線・ジャンクション・ラベル・注記が保たれる。 <sub>`export_then_import_round_trips_the_sheet`</sub>
 - 折れ線で描いた配線は、セグメントごとに2点のKiCad wireとして書き出される。 <sub>`polyline_wires_are_split_into_segments`</sub>
@@ -600,6 +601,8 @@
 - 定義がネット名を持つシンボル (接地の印) は、間に配線が無くても、そのピンどうしをその名前の1つのネットにまとめる。 <sub>`symbols_with_a_net_name_join_into_one_net`</sub>
 - ネット名が無ければ、同じ印でもつながらない: 配線ごとに別のネットになる。 <sub>`symbols_without_a_net_name_stay_separate`</sub>
 - シンボルのネット名は、離れた場所に置いた同じ名前のネットラベルともつながる。 <sub>`a_symbol_net_name_joins_a_label_of_the_same_name`</sub>
+- 回転して置いた2ピンのネット名付きシンボルは、回転後の位置にあるどちらのピンもその名前のネットにつながる。 <sub>`a_rotated_two_pin_net_symbol_joins_both_pins`</sub>
+- どの配線にも触れていないネット名付きシンボルは、ほかの部品のピンをネットへ引き込まない。 <sub>`a_lone_net_symbol_joins_no_other_part`</sub>
 
 ### ngspiceランナー
 
@@ -967,6 +970,7 @@
 - 直列回路はSPICEデッキに変換される: 電圧源1つ・battery負極がGND・ワイヤごとの抵抗(ρL/A)・部品の橋・負荷の等価抵抗。 <sub>`series_circuit_builds_deck_with_source_ground_and_resistors`</sub>
 - ワイヤ途中のジャンクションは、その位置の幾何学的長さ比でワイヤ抵抗を分割する。 <sub>`junction_splits_wire_resistance_proportionally`</sub>
 - 離れた場所の同名ネットラベルはmΩ抵抗で橋渡しされ、論理接続が保たれる。 <sub>`same_name_labels_are_bridged`</sub>
+- 間に配線の無い2つの接地の印 (ネット名を持つシンボル) を通る帰り道は、デッキでも1つにつながったノードになる。 <sub>`a_return_path_through_two_ground_marks_is_one_node`</sub>
 - 電源の無い図面は変換できない(明示的なNoSourceエラー)。 <sub>`no_battery_is_an_error`</sub>
 - デッキ出力は毎回同一(決定的)で、GNDノード0はbatteryの負極ピンになる。 <sub>`node_names_are_deterministic_and_ground_is_battery_minus`</sub>
 
@@ -1454,6 +1458,9 @@
 - ngspiceがあれば電気検証はソルバの実測値で報告され、近似モードの通知は出ない。 <sub>`simulation_mode_reports_measured_values_when_ngspice_installed`</sub>
 - ソルバ結果が無い場合はグラフ近似にフォールバックし、その旨をInfoで明示する。 <sub>`fallback_mode_emits_approximate_info`</sub>
 - 1つのネットに異なるネットラベルが混在する状態(異電位の短絡)はエラーになる。 <sub>`conflicting_net_labels_on_one_net_are_an_error`</sub>
+- 接地の印 (ネット名 GND) と別の名前のネットラベルを配線でつなぐと、ラベルの衝突として指摘される。 <sub>`a_ground_mark_and_a_different_label_on_one_net_conflict`</sub>
+- ネット名の違う2つの印 (GND と PE) を配線でつなぐと、ラベルの衝突として指摘される。 <sub>`two_marks_with_different_net_names_on_one_net_conflict`</sub>
+- 接地の印と同じ名前のネットラベルが1つのネットにあっても、衝突にはならない。 <sub>`a_ground_mark_and_a_same_named_label_do_not_conflict`</sub>
 - 配線の頂点上・配線の途中・シンボルのピン上にあるネットラベルはきちんと載っているので、指摘されない。 <sub>`a_net_label_on_a_wire_or_a_pin_is_not_reported`</sub>
 - 配線から0.5mmでもずれたネットラベルは、黙ってネットから外れてしまうので、ラベル名を挙げた警告として報告される。 <sub>`a_net_label_that_floats_off_the_wire_is_reported`</sub>
 - 接続の許容誤差 (0.01mm) の内側にあるネットラベルは載っている扱いなので、ふつうの丸め誤差で警告が出ることはない。 <sub>`a_net_label_within_the_connection_tolerance_is_still_attached`</sub>
@@ -1534,6 +1541,8 @@
 - 図枠の外にある点は、無効なアドレスにはならず最も近いゾーンに丸められる。 <sub>`zone_address_clamps_points_outside_the_frame`</sub>
 - 別々のシートに置かれた同名のネットラベルは、プロジェクト全体では1つのネットに統合される。 <sub>`same_named_labels_merge_into_one_project_net`</sub>
 - ラベル名が違うネットは、シートを跨いでも統合されず別のネットのままになる。 <sub>`differently_named_labels_stay_separate_nets`</sub>
+- 別々のシートにある接地の印 (ネット名を持つシンボル) は、プロジェクト全体でその名前の1つのネットになる。 <sub>`ground_marks_on_two_sheets_merge_into_one_project_net`</sub>
+- あるシートの接地の印は、別のシートにある同じ名前の普通のネットラベルとつながる。 <sub>`a_ground_mark_joins_a_same_named_label_on_another_sheet`</sub>
 - ラベルの相手先は、他のシートにある同名ラベルの住所「/シート.ゾーン」になる。 <sub>`cross_reference_address_uses_slash_sheet_dot_zone`</sub>
 - 相手側のシートのラベルからも元のシートが見えるので、双方に相手先が表示される。 <sub>`cross_reference_is_shown_on_both_sides`</sub>
 - 同じネットが複数のシートに続くときは、相手先の住所が全て列挙される。 <sub>`multiple_counterparts_are_all_listed`</sub>

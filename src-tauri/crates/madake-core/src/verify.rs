@@ -716,19 +716,26 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
                 _ => None,
             })
             .collect();
-        let mut names = BTreeSet::new();
+        let mut names: BTreeSet<String> = BTreeSet::new();
         let mut label_ids = Vec::new();
         for e in sheet.entities.values() {
             if let Entity::NetLabel(l) = e {
                 if net_wires.iter().any(|w| on_wire(w, &l.at)) {
-                    names.insert(l.name.as_str());
+                    names.insert(l.name.clone());
                     label_ids.push(l.id);
                 }
             }
         }
+        // ネット名を持つシンボル (接地の印など) のピンも、その名前のラベルとして数える
+        for (id, name) in crate::netlist::symbol_net_names(sheet, symbols, net) {
+            names.insert(name);
+            if !label_ids.contains(&id) {
+                label_ids.push(id);
+            }
+        }
         // ポートの接点のネットは、シートを跨ぐときと同じ名前 (「L.接点」) で比べる
         if !net.contact_labels.is_empty() {
-            names = net.contact_labels.iter().map(String::as_str).collect();
+            names = net.contact_labels.iter().cloned().collect();
         }
         if names.len() >= 2 {
             diags.push(diag(
@@ -1330,6 +1337,54 @@ mod tests {
         assert_eq!(conflicts.len(), 1, "{conflicts:?}");
         assert_eq!(conflicts[0].severity, Severity::Error);
         assert!(conflicts[0].message.contains("N-P1") && conflicts[0].message.contains("0V"));
+    }
+
+    /// 1本の配線 (0,10)-(20,10) の両端に `a` と `b` を置き、接地の印 (GND) と保護接地の印 (PE) の定義を足して検証した、ラベル衝突の指摘。
+    fn mark_conflicts(a: Entity, b: Entity) -> Vec<Diagnostic> {
+        let sheet = sheet_with(vec![wire(&[(0.0, 10.0), (20.0, 10.0)]), a, b]);
+        let mut symbols = sheet_symbol_defs(&sheet);
+        symbols.push(crate::symbol::test_net_mark("test_gnd_mark", "GND"));
+        symbols.push(crate::symbol::test_net_mark("test_pe_mark", "PE"));
+        verify_sheet(&sheet, &symbols).into_iter().filter(|d| d.code == LABEL_CONFLICT).collect()
+    }
+
+    fn mark(symbol_id: &str, x: f64, y: f64) -> Entity {
+        Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: symbol_id.into(),
+            at: Point::new(x, y),
+            rotation: 0,
+            mirror: false,
+            reference: String::new(),
+            value: String::new(),
+            attrs: Default::default(),
+        })
+    }
+
+    /// A wire joining a ground mark (net name GND) to a net label with a different name is reported as a label conflict.
+    /// 接地の印 (ネット名 GND) と別の名前のネットラベルを配線でつなぐと、ラベルの衝突として指摘される。
+    #[test]
+    fn a_ground_mark_and_a_different_label_on_one_net_conflict() {
+        let conflicts = mark_conflicts(mark("test_gnd_mark", 0.0, 10.0), net_label("0V", 20.0, 10.0));
+        assert_eq!(conflicts.len(), 1, "{conflicts:?}");
+        assert!(conflicts[0].message.contains("GND") && conflicts[0].message.contains("0V"), "{conflicts:?}");
+    }
+
+    /// A wire joining two marks with different net names (GND and PE) is reported as a label conflict.
+    /// ネット名の違う2つの印 (GND と PE) を配線でつなぐと、ラベルの衝突として指摘される。
+    #[test]
+    fn two_marks_with_different_net_names_on_one_net_conflict() {
+        let conflicts = mark_conflicts(mark("test_gnd_mark", 0.0, 10.0), mark("test_pe_mark", 20.0, 10.0));
+        assert_eq!(conflicts.len(), 1, "{conflicts:?}");
+        assert!(conflicts[0].message.contains("GND") && conflicts[0].message.contains("PE"), "{conflicts:?}");
+    }
+
+    /// A ground mark and a net label of the same name on one net are not a conflict.
+    /// 接地の印と同じ名前のネットラベルが1つのネットにあっても、衝突にはならない。
+    #[test]
+    fn a_ground_mark_and_a_same_named_label_do_not_conflict() {
+        let conflicts = mark_conflicts(mark("test_gnd_mark", 0.0, 10.0), net_label("GND", 20.0, 10.0));
+        assert!(conflicts.is_empty(), "{conflicts:?}");
     }
 
     fn net_label(name: &str, x: f64, y: f64) -> Entity {

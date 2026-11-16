@@ -804,6 +804,21 @@ pub fn export_kicad_sch(
             report.count("net_label");
         }
     }
+    // ネット名を持つシンボル (接地の印など) のピン → その名前のラベル (KiCadでも接続が残る)
+    for e in sheet.entities.values() {
+        let Entity::Symbol(inst) = e else { continue };
+        let Some(def) = index.get(inst) else { continue };
+        let Some(name) = def.net_name() else { continue };
+        for (no, at) in crate::netlist::pin_positions(inst, &def) {
+            out.push_str(&format!(
+                "  (label {} (at {} {} 0) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid {}))\n",
+                esc(name),
+                num(at.x),
+                num(at.y),
+                esc(&format!("{}-net-{}", inst.id, no))
+            ));
+        }
+    }
     // 線番 → ラベル (ラベルの無いネットのみ。最長セグメントの中点)
     for net in crate::netlist::extract_wire_nets(sheet, symbols) {
         if net.label.is_some() {
@@ -1155,6 +1170,34 @@ mod tests {
 
     fn defs(sheet: &Sheet) -> Vec<SymbolDef> {
         crate::symbol::sheet_symbol_defs(sheet)
+    }
+
+    /// The KiCad export writes a label with the symbol's net name at the pin of every ground mark, so the marks stay connected in KiCad.
+    /// KiCad書き出しは、接地の印それぞれのピンの位置にシンボルのネット名のラベルを書くので、KiCadでも印どうしのつながりが残る。
+    #[test]
+    fn the_kicad_export_writes_a_label_at_each_ground_mark_pin() {
+        use crate::geometry::Point;
+        use uuid::Uuid;
+        let mut sheet = Sheet::new("Sheet1", PaperSize::A4, Orientation::Landscape);
+        for (x, y) in [(20.0, 30.0), (80.0, 60.0)] {
+            let e = Entity::Symbol(SymbolInstance {
+                id: Uuid::new_v4(),
+                symbol_id: "test_ground_mark".into(),
+                at: Point::new(x, y),
+                rotation: 0,
+                mirror: false,
+                reference: String::new(),
+                value: String::new(),
+                attrs: Default::default(),
+            });
+            sheet.entities.insert(e.id(), e);
+        }
+        let mut symbols = crate::symbol::builtin_symbols();
+        symbols.push(crate::symbol::test_net_mark("test_ground_mark", "GND"));
+        let (text, _) = export_kicad_sch(&sheet, &symbols);
+        assert_eq!(text.matches("(label \"GND\"").count(), 2, "{text}");
+        assert!(text.contains("(label \"GND\" (at 20 30 0)"), "{text}");
+        assert!(text.contains("(label \"GND\" (at 80 60 0)"), "{text}");
     }
 
     /// The KiCad export report counts the electrical kinds it wrote and names the kinds it does not write at all (shapes, the wire part legend and the panel layout entities), so nothing is dropped without a word.

@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::geometry::Point;
 use crate::model::{Entity, EntityId, NetLabel, Project, Sheet, SheetId};
 use crate::netlist::{extract_netlist, on_wire, Net};
+use crate::symbol::SymbolDef;
 
 /// XRefテキストの文字高さ (mm)。ネットラベル本文より一回り小さい。
 pub const XREF_FONT: f64 = 2.0;
@@ -71,7 +72,7 @@ pub struct NetMember {
     pub sheet_id: SheetId,
     pub sheet_no: usize,
     pub net: Net,
-    /// このシート内でネットに載っているネットラベルのentity id。
+    /// このシート内でネットに載っているネットラベルのentity id (ネット名を持つシンボルのidも含む)。
     pub label_ids: Vec<EntityId>,
 }
 
@@ -374,13 +375,21 @@ pub fn xref_text_at(label: &NetLabel, font: f64) -> Point {
 /// 共有するネット同士をシートを跨いで1つに統合する。統合されたネットは帳票・検証で
 /// 1ネットとして数える。
 pub fn extract_netlist_project(project: &Project) -> ProjectNetlist {
+    extract_netlist_project_with(project, crate::symbol::sheet_symbol_defs)
+}
+
+/// [`extract_netlist_project`] の本体。シートごとのシンボル定義を `defs_for` で引く (テストで定義を足すため)。
+pub(crate) fn extract_netlist_project_with(
+    project: &Project,
+    defs_for: impl Fn(&Sheet) -> Vec<SymbolDef>,
+) -> ProjectNetlist {
     // シート単位ネットを平坦に並べ、載っているラベルを添える
     let mut members: Vec<NetMember> = Vec::new();
     let mut member_names: Vec<BTreeSet<String>> = Vec::new();
     for (i, sheet) in project.sheets.iter().enumerate() {
-        let defs = crate::symbol::sheet_symbol_defs(sheet);
+        let defs = defs_for(sheet);
         for net in extract_netlist(sheet, &defs) {
-            let (label_ids, names) = labels_on_net(sheet, &net);
+            let (label_ids, names) = labels_on_net(sheet, &defs, &net);
             // ポートから分けたネットは「L.接点」の名前で統合する (配線を共有するので、位置で探すと全接点が1つになる)
             let names = if net.contact_labels.is_empty() { names } else { net.contact_labels.iter().cloned().collect() };
             members.push(NetMember {
@@ -522,7 +531,8 @@ pub fn xref_table_csv(project: &Project) -> String {
 }
 
 /// シート内でそのネットの配線に載っているネットラベル (entity id, 名前)。
-pub(crate) fn labels_on_net(sheet: &Sheet, net: &Net) -> (Vec<EntityId>, BTreeSet<String>) {
+/// ネット名を持つシンボル (接地の印など) のピンがネットにあれば、そのシンボルのidとネット名も含める。
+pub(crate) fn labels_on_net(sheet: &Sheet, symbols: &[SymbolDef], net: &Net) -> (Vec<EntityId>, BTreeSet<String>) {
     let wires: Vec<&crate::model::Wire> = net
         .wire_ids
         .iter()
@@ -543,6 +553,12 @@ pub(crate) fn labels_on_net(sheet: &Sheet, net: &Net) -> (Vec<EntityId>, BTreeSe
             ids.push(l.id);
             names.insert(name.to_string());
         }
+    }
+    for (id, name) in crate::netlist::symbol_net_names(sheet, symbols, net) {
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+        names.insert(name);
     }
     ids.sort();
     (ids, names)
@@ -661,6 +677,60 @@ mod tests {
         }
         let netlist = extract_netlist_project(&project);
         assert_eq!(netlist.nets.len(), 2, "{netlist:?}");
+    }
+
+    /// 2枚のシートそれぞれで、抵抗のピン2から配線を下ろす。シート1の先は接地の印、
+    /// シート2の先は `mark_on_sheet2` なら接地の印、そうでなければ名前 GND のネットラベル。
+    fn ground_mark_project(mark_on_sheet2: bool) -> Project {
+        let mut project = Project::new("t");
+        project.sheets.push(Sheet::new("Sheet2", PaperSize::A3, Orientation::Landscape));
+        let (s1, s2) = (project.sheets[0].id, project.sheets[1].id);
+        for e in [
+            symbol("resistor", "R1", 100.0, 50.0),
+            wire(&[(107.5, 50.0), (120.0, 50.0), (120.0, 60.0)]),
+            symbol("test_ground_mark", "", 120.0, 60.0),
+        ] {
+            project.sheet_mut(s1).unwrap().entities.insert(e.id(), e);
+        }
+        let end = if mark_on_sheet2 { symbol("test_ground_mark", "", 120.0, 60.0) } else { label("GND", 120.0, 60.0) };
+        for e in [symbol("resistor", "R2", 100.0, 50.0), wire(&[(107.5, 50.0), (120.0, 50.0), (120.0, 60.0)]), end] {
+            project.sheet_mut(s2).unwrap().entities.insert(e.id(), e);
+        }
+        project
+    }
+
+    fn with_ground_mark(_sheet: &Sheet) -> Vec<SymbolDef> {
+        let mut defs = crate::symbol::builtin_symbols();
+        defs.push(crate::symbol::test_net_mark("test_ground_mark", "GND"));
+        defs
+    }
+
+    fn project_net_with_pin<'a>(netlist: &'a ProjectNetlist, reference: &str) -> &'a ProjectNet {
+        netlist
+            .nets
+            .iter()
+            .find(|n| n.members.iter().any(|m| m.net.pins.iter().any(|p| p.reference == reference && p.pin == "2")))
+            .expect("project net with the pin")
+    }
+
+    /// Ground marks (symbols carrying a net name) on two different sheets join into one project-wide net of that name.
+    /// 別々のシートにある接地の印 (ネット名を持つシンボル) は、プロジェクト全体でその名前の1つのネットになる。
+    #[test]
+    fn ground_marks_on_two_sheets_merge_into_one_project_net() {
+        let netlist = extract_netlist_project_with(&ground_mark_project(true), with_ground_mark);
+        let net = project_net_with_pin(&netlist, "R1");
+        assert_eq!(net.name, "GND", "{net:?}");
+        assert!(net.members.iter().any(|m| m.net.pins.iter().any(|p| p.reference == "R2")), "{net:?}");
+    }
+
+    /// A ground mark on one sheet joins a plain net label of the same name on another sheet.
+    /// あるシートの接地の印は、別のシートにある同じ名前の普通のネットラベルとつながる。
+    #[test]
+    fn a_ground_mark_joins_a_same_named_label_on_another_sheet() {
+        let netlist = extract_netlist_project_with(&ground_mark_project(false), with_ground_mark);
+        let net = project_net_with_pin(&netlist, "R1");
+        assert_eq!(net.label_names, vec!["GND".to_string()], "{net:?}");
+        assert!(net.members.iter().any(|m| m.net.pins.iter().any(|p| p.reference == "R2")), "{net:?}");
     }
 
     /// The cross-reference of a label is the address "/sheet.zone" of the same-named label on another sheet.

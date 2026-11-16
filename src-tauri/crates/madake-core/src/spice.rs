@@ -82,11 +82,15 @@ pub fn build_deck_with(
     for e in sheet.entities.values() {
         match e {
             Entity::Symbol(s) => {
-                if let Some(def) = defs.get(s.symbol_id.as_str()) {
+                if let Some(&def) = defs.get(s.symbol_id.as_str()) {
                     let pins = pin_positions(s, def);
                     attachments.extend(pins.iter().map(|(_, p)| *p));
+                    // ネット名を持つシンボル (接地の印など) のピンは、その名前のネットラベルとして橋を張る
+                    if let Some(name) = def.net_name() {
+                        labels.entry(name).or_default().extend(pins.iter().map(|(_, p)| (s.id, *p)));
+                    }
                     if def.id == "battery" {
-                        batteries.push((s, *def, pins));
+                        batteries.push((s, def, pins));
                     }
                 }
             }
@@ -475,6 +479,43 @@ mod tests {
             "{:?}",
             deck.component_elements
         );
+    }
+
+    /// A return path through two ground marks (symbols with a net name) with no wire between them is one connected node in the deck.
+    /// 間に配線の無い2つの接地の印 (ネット名を持つシンボル) を通る帰り道は、デッキでも1つにつながったノードになる。
+    #[test]
+    fn a_return_path_through_two_ground_marks_is_one_node() {
+        let far = wire(&[(100.0, 50.0), (120.0, 50.0)], 0.75, None);
+        let far_id = far.id();
+        let sheet = sheet_with(vec![
+            symbol("battery", "BT1", -10.0, 0.0, "24"),
+            // battery負極 (-2.5,0) から1つ目の印へ
+            wire(&[(-2.5, 0.0), (20.0, 0.0)], 0.75, None),
+            symbol("test_ground_mark", "", 20.0, 0.0, ""),
+            // 離れた2つ目の印から先の配線
+            far,
+            symbol("test_ground_mark", "", 100.0, 50.0, ""),
+        ]);
+        let mut symbols = crate::symbol::builtin_symbols();
+        symbols.push(crate::symbol::test_net_mark("test_ground_mark", "GND"));
+        let deck = build_deck(&sheet, &symbols).expect("deck");
+        // 素子の両端を結んで、GND (0) と同じかたまりに入るノードを集める
+        let elements: Vec<&SpiceElement> = deck.wire_elements.iter().chain(&deck.component_elements).collect();
+        let mut joined: std::collections::BTreeSet<&str> = ["0"].into();
+        loop {
+            let before = joined.len();
+            for e in &elements {
+                if joined.contains(e.node_a.as_str()) || joined.contains(e.node_b.as_str()) {
+                    joined.insert(&e.node_a);
+                    joined.insert(&e.node_b);
+                }
+            }
+            if joined.len() == before {
+                break;
+            }
+        }
+        let far_el = deck.wire_elements.iter().find(|e| e.entity_id == far_id).expect("far wire element");
+        assert!(joined.contains(far_el.node_a.as_str()) && joined.contains(far_el.node_b.as_str()), "{}", deck.deck);
     }
 
     /// A drawing without a power source cannot be converted (explicit NoSource error).

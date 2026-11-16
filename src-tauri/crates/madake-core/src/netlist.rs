@@ -55,6 +55,22 @@ pub fn pin_positions(inst: &SymbolInstance, def: &SymbolDef) -> Vec<(String, Poi
         .collect()
 }
 
+/// ネットのピンのうち、定義がネット名を持つシンボル (接地の印など) のもの。
+/// (インスタンスのentity id, ネット名) を、ネットのピン順に重複なく返す。
+pub(crate) fn symbol_net_names(sheet: &Sheet, symbols: &[SymbolDef], net: &Net) -> Vec<(EntityId, String)> {
+    let defs = crate::symbol::DefIndex::new(symbols);
+    let mut out: Vec<(EntityId, String)> = Vec::new();
+    for pin in &net.pins {
+        let Some(Entity::Symbol(s)) = sheet.entities.get(&pin.entity_id) else { continue };
+        let Some(def) = defs.get(s) else { continue };
+        let Some(name) = def.net_name() else { continue };
+        if !out.iter().any(|(id, n)| *id == s.id && n == name) {
+            out.push((s.id, name.to_string()));
+        }
+    }
+    out
+}
+
 /// ネットに属するシンボルピン。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct NetPin {
@@ -1820,5 +1836,62 @@ mod tests {
         let nets = extract_netlist(&net_symbol_sheet(true), &symbols);
         let net = net_of(&nets, "R3:2");
         assert!(net.pins.iter().any(|p| p.reference == "R1") && net.pins.iter().any(|p| p.reference == "R2"), "{net:?}");
+        assert_eq!(net.name, "GND");
+    }
+
+    /// Every pin of a rotated two-pin symbol with a net name joins that net at its rotated position.
+    /// 回転して置いた2ピンのネット名付きシンボルは、回転後の位置にあるどちらのピンもその名前のネットにつながる。
+    #[test]
+    fn a_rotated_two_pin_net_symbol_joins_both_pins() {
+        use crate::symbol::{PinDef, PinDir};
+        let mut def = net_symbol_def(Some("GND"));
+        def.pins = vec![
+            PinDef { number: "1".into(), name: String::new(), at: Point::new(-5.0, 0.0), dir: PinDir::Left, contacts: vec![] },
+            PinDef { number: "2".into(), name: String::new(), at: Point::new(5.0, 0.0), dir: PinDir::Right, contacts: vec![] },
+        ];
+        let mut symbols = builtin_symbols();
+        symbols.push(def);
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        // 90度回転で、ピンは (130,45) と (130,55) に来る (回転しなければ (125,50) と (135,50))
+        let mut mark = symbol("user_ground_mark", "", 130.0, 50.0);
+        if let Entity::Symbol(s) = &mut mark {
+            s.rotation = 90;
+        }
+        for e in [
+            symbol("resistor", "R1", 100.0, 50.0),
+            symbol("resistor", "R2", 100.0, 100.0),
+            mark,
+            wire(&[(107.5, 50.0), (120.0, 50.0), (120.0, 45.0), (130.0, 45.0)]),
+            wire(&[(107.5, 100.0), (130.0, 100.0), (130.0, 55.0)]),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let nets = extract_netlist(&sheet, &symbols);
+        let net = net_of(&nets, "R1:2");
+        assert_eq!(net.name, "GND", "{net:?}");
+        assert!(net.pins.iter().any(|p| p.reference == "R2" && p.pin == "2"), "{net:?}");
+        assert!(net.pins.iter().filter(|p| p.reference.is_empty()).count() == 2, "{net:?}");
+    }
+
+    /// A net-name symbol that touches no wire does not pull any other part's pin into a net.
+    /// どの配線にも触れていないネット名付きシンボルは、ほかの部品のピンをネットへ引き込まない。
+    #[test]
+    fn a_lone_net_symbol_joins_no_other_part() {
+        let mut symbols = builtin_symbols();
+        symbols.push(net_symbol_def(Some("GND")));
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let mark = symbol("user_ground_mark", "", 200.0, 150.0);
+        let mark_id = mark.id();
+        for e in [symbol("resistor", "R1", 100.0, 50.0), wire(&[(107.5, 50.0), (120.0, 50.0)]), mark] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let nets = extract_netlist(&sheet, &symbols);
+        for net in &nets {
+            if net.pins.iter().any(|p| p.entity_id == mark_id) {
+                assert!(net.pins.iter().all(|p| p.entity_id == mark_id), "{net:?}");
+            } else {
+                assert_ne!(net.label.as_deref(), Some("GND"), "{net:?}");
+            }
+        }
     }
 }

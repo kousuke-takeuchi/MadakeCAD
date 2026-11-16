@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3337 specification clauses** across 6 areas.
+**3346 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -452,6 +452,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Escaped quotes/newlines and multibyte (Japanese) text inside strings parse correctly. <sub>`parses_escaped_strings_and_multibyte`</sub>
 - children(name) iterates every child list with the given head symbol. <sub>`children_iterates_all_matches`</sub>
 - Unbalanced parentheses and unterminated strings are reported as syntax errors with a position. <sub>`syntax_errors_are_reported`</sub>
+- The KiCad export writes a label with the symbol's net name at the pin of every ground mark, so the marks stay connected in KiCad. <sub>`the_kicad_export_writes_a_label_at_each_ground_mark_pin`</sub>
 - The KiCad export report counts the electrical kinds it wrote and names the kinds it does not write at all (shapes, the wire part legend and the panel layout entities), so nothing is dropped without a word. <sub>`the_kicad_export_report_names_the_kinds_it_cannot_write`</sub>
 - Exporting a sheet to .kicad_sch and importing it back keeps paper, title block, symbols (id, reference, value, rotation, mirror), wires, junctions, labels and text. <sub>`export_then_import_round_trips_the_sheet`</sub>
 - A wire drawn as a polyline is exported as one two-point KiCad wire per segment. <sub>`polyline_wires_are_split_into_segments`</sub>
@@ -600,6 +601,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Symbols whose definition carries a net name (a ground mark) join their pins into one net of that name even with no wire between them. <sub>`symbols_with_a_net_name_join_into_one_net`</sub>
 - Without a net name the same marks stay separate: each wire is its own net. <sub>`symbols_without_a_net_name_stay_separate`</sub>
 - A symbol's net name also joins a plain net label of the same name placed elsewhere. <sub>`a_symbol_net_name_joins_a_label_of_the_same_name`</sub>
+- Every pin of a rotated two-pin symbol with a net name joins that net at its rotated position. <sub>`a_rotated_two_pin_net_symbol_joins_both_pins`</sub>
+- A net-name symbol that touches no wire does not pull any other part's pin into a net. <sub>`a_lone_net_symbol_joins_no_other_part`</sub>
 
 ### ngspice runner
 
@@ -967,6 +970,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A series circuit converts to a SPICE deck: one voltage source, ground at the battery minus pin, one resistor per wire (rho*L/A) plus component bridges and the load's equivalent resistance. <sub>`series_circuit_builds_deck_with_source_ground_and_resistors`</sub>
 - A junction resting mid-wire splits that wire's resistance proportionally to the geometric length on each side. <sub>`junction_splits_wire_resistance_proportionally`</sub>
 - Same-named net labels in different places are bridged with a milliohm resistor, preserving their logical connection. <sub>`same_name_labels_are_bridged`</sub>
+- A return path through two ground marks (symbols with a net name) with no wire between them is one connected node in the deck. <sub>`a_return_path_through_two_ground_marks_is_one_node`</sub>
 - A drawing without a power source cannot be converted (explicit NoSource error). <sub>`no_battery_is_an_error`</sub>
 - Deck output is deterministic across runs, and the ground node 0 is the battery's minus pin. <sub>`node_names_are_deterministic_and_ground_is_battery_minus`</sub>
 
@@ -1454,6 +1458,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - With ngspice installed, electrical findings carry solver-measured values and no approximate-mode note appears. <sub>`simulation_mode_reports_measured_values_when_ngspice_installed`</sub>
 - Without a solver result, checks fall back to a graph approximation and say so with an Info note. <sub>`fallback_mode_emits_approximate_info`</sub>
 - Two different net labels on one net (a short between potentials) is an error. <sub>`conflicting_net_labels_on_one_net_are_an_error`</sub>
+- A wire joining a ground mark (net name GND) to a net label with a different name is reported as a label conflict. <sub>`a_ground_mark_and_a_different_label_on_one_net_conflict`</sub>
+- A wire joining two marks with different net names (GND and PE) is reported as a label conflict. <sub>`two_marks_with_different_net_names_on_one_net_conflict`</sub>
+- A ground mark and a net label of the same name on one net are not a conflict. <sub>`a_ground_mark_and_a_same_named_label_do_not_conflict`</sub>
 - A net label that sits on a wire vertex, in the middle of a wire, or on a symbol pin is properly attached and is not reported. <sub>`a_net_label_on_a_wire_or_a_pin_is_not_reported`</sub>
 - A net label placed even half a millimetre off a wire is reported as a warning naming the label, because it silently fails to join the net. <sub>`a_net_label_that_floats_off_the_wire_is_reported`</sub>
 - A net label within the 0.01 mm connection tolerance still counts as attached, so ordinary rounding never triggers the warning. <sub>`a_net_label_within_the_connection_tolerance_is_still_attached`</sub>
@@ -1534,6 +1541,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Points outside the drawing frame are rounded to the nearest zone instead of producing an invalid address. <sub>`zone_address_clamps_points_outside_the_frame`</sub>
 - Net labels with the same name on different sheets are merged into a single project-wide net. <sub>`same_named_labels_merge_into_one_project_net`</sub>
 - Nets with different label names stay separate across sheets. <sub>`differently_named_labels_stay_separate_nets`</sub>
+- Ground marks (symbols carrying a net name) on two different sheets join into one project-wide net of that name. <sub>`ground_marks_on_two_sheets_merge_into_one_project_net`</sub>
+- A ground mark on one sheet joins a plain net label of the same name on another sheet. <sub>`a_ground_mark_joins_a_same_named_label_on_another_sheet`</sub>
 - The cross-reference of a label is the address "/sheet.zone" of the same-named label on another sheet. <sub>`cross_reference_address_uses_slash_sheet_dot_zone`</sub>
 - A label on the destination sheet points back to the source sheet, so both sides show the counterpart. <sub>`cross_reference_is_shown_on_both_sides`</sub>
 - When the same net continues onto several sheets, every counterpart address is listed. <sub>`multiple_counterparts_are_all_listed`</sub>
