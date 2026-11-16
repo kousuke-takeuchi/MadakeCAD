@@ -1556,6 +1556,7 @@ mod tests {
             text_slots: vec![],
             free_pins: false,
             net: None,
+            sim: None,
         }
     }
 
