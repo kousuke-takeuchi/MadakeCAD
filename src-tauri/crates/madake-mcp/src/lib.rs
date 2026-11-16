@@ -2129,6 +2129,7 @@ impl MadakeMcp {
             open_switches: p.open_switches,
             overrides: p.overrides,
             shorts: p.shorts,
+            faults: Vec::new(),
         };
         let result = madake_core::sim::simulate_op_opts(sheet, &sheet_symbol_defs(sheet), &opts)
             .map_err(internal)?;

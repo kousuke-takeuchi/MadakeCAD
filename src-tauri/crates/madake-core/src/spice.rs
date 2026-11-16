@@ -108,6 +108,8 @@ pub struct DeckOptions {
     pub overrides: BTreeMap<String, BTreeMap<String, String>>,
     /// 接地へ短絡させるネットの名前 (1mΩ)。
     pub shorts: Vec<String>,
+    /// 故障 (電線・ピンで指定した短絡、電線の断線)。
+    pub faults: Vec<crate::model::SimFault>,
 }
 
 impl DeckOptions {
@@ -283,10 +285,23 @@ pub fn build_deck_with(
         format!("{prefix}{internal_seq}")
     };
 
+    // 断線を指定した電線 (抵抗を作らない)。無い電線は注意して飛ばす
+    let mut opened: BTreeSet<EntityId> = BTreeSet::new();
+    for f in &opts.faults {
+        if let crate::model::SimFault::Open { wire_id } = f {
+            if matches!(sheet.entities.get(wire_id), Some(Entity::Wire(_))) {
+                opened.insert(*wire_id);
+                warnings.push("断線指定: 電線".to_string());
+            } else {
+                warnings.push(format!("断線の電線 {wire_id} が見つかりません"));
+            }
+        }
+    }
+
     // ワイヤ → 分割点で区切った抵抗列
     for e in sheet.entities.values() {
         let Entity::Wire(w) = e else { continue };
-        if w.points.len() < 2 {
+        if w.points.len() < 2 || opened.contains(&w.id) {
             continue;
         }
         // ポリラインの弧長パラメータ
@@ -645,6 +660,46 @@ pub fn build_deck_with(
             });
             warnings.push(format!("短絡指定: {name}"));
         }
+    }
+
+    // 故障の短絡: 電線なら始点、ピンならそのピンの点を接地へ 1mΩ
+    for f in &opts.faults {
+        let crate::model::SimFault::Short { target } = f else { continue };
+        let found: Option<(EntityId, Point, String)> = match target {
+            crate::model::FaultTarget::Wire { wire_id } => match sheet.entities.get(wire_id) {
+                Some(Entity::Wire(w)) => w.points.first().map(|p| (w.id, *p, "電線".to_string())),
+                _ => None,
+            },
+            crate::model::FaultTarget::Pin { entity_id, pin } => match sheet.entities.get(entity_id) {
+                Some(Entity::Symbol(s)) => defs.get(s.symbol_id.as_str()).and_then(|d| {
+                    pin_positions(s, d)
+                        .into_iter()
+                        .find(|(n, _)| n.trim() == pin.trim())
+                        .map(|(_, p)| (s.id, p, format!("{} ピン{}", s.reference, pin.trim())))
+                }),
+                _ => None,
+            },
+        };
+        let Some((entity_id, point, label)) = found else {
+            let what = match target {
+                crate::model::FaultTarget::Wire { wire_id } => format!("電線 {wire_id}"),
+                crate::model::FaultTarget::Pin { entity_id, pin } => format!("部品 {entity_id} のピン{pin}"),
+            };
+            warnings.push(format!("短絡の対象 ({what}) が見つかりません"));
+            continue;
+        };
+        let k = node_key(point);
+        used_keys.insert(k);
+        used_keys.insert(gnd_key);
+        component_elements.push(SpiceElement {
+            entity_id,
+            name: next_name(&mut seq),
+            node_a: format!("{k:?}"),
+            node_b: format!("{gnd_key:?}"),
+            ohms: BRIDGE_OHMS,
+            kind: ElementKind::Short(label.clone()),
+        });
+        warnings.push(format!("短絡指定: {label}"));
     }
 
     // ノード命名: GND=0、その他はキー昇順にn1..

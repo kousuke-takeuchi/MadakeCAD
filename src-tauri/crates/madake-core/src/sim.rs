@@ -41,6 +41,28 @@ pub struct SimOptions {
     /// 接地へ短絡させるネットの名前。
     #[serde(default)]
     pub shorts: Vec<String>,
+    /// 故障 (電線・ピンで指定した短絡、電線の断線)。
+    #[serde(default)]
+    pub faults: Vec<crate::model::SimFault>,
+}
+
+impl SimOptions {
+    /// 計算ケースの条件を足す (直接指定した置き換えはケースより優先)。
+    pub fn with_case(mut self, case: &crate::model::SimCase) -> Self {
+        for s in &case.open_switches {
+            if !self.open_switches.contains(s) {
+                self.open_switches.push(s.clone());
+            }
+        }
+        for (r, attrs) in &case.overrides {
+            let slot = self.overrides.entry(r.clone()).or_default();
+            for (k, v) in attrs {
+                slot.entry(k.clone()).or_insert_with(|| v.clone());
+            }
+        }
+        self.faults.extend(case.faults.iter().cloned());
+        self
+    }
 }
 
 /// ネット1つの電圧。配線抵抗でノードが分かれるため範囲(min/max)で報告する。
@@ -164,6 +186,7 @@ pub fn simulate_op_opts_with(
         open_switches: opts.open_switches.clone(),
         overrides: opts.overrides.clone(),
         shorts: opts.shorts.clone(),
+        faults: opts.faults.clone(),
     };
     let deck = crate::spice::build_deck_with(sheet, symbols, &deck_opts)?;
     let volts = crate::ngspice::run_op(exe, &deck.deck)?;
@@ -1202,5 +1225,87 @@ mod tests {
         found.sort();
         found.dedup();
         assert_eq!(over, found);
+    }
+
+    use crate::model::{FaultTarget, SimCase, SimFault};
+
+    fn first_wire_into(sheet: &Sheet, reference: &str, pin: &str) -> EntityId {
+        let nets = crate::netlist::extract_netlist(sheet, &role_defs());
+        let net = nets.iter().find(|n| n.pins.iter().any(|p| p.reference == reference && p.pin == pin)).unwrap();
+        net.wire_ids[0]
+    }
+
+    /// A short chosen on a wire joins that wire to ground, so the fuse in front of it carries the fault current.
+    /// 電線で指定した短絡はその電線を接地へつなぎ、手前のヒューズに事故電流が流れる。
+    #[test]
+    fn a_short_on_a_wire_gives_the_fault_current() {
+        let sheet = role_series(&[("voltage", "24"), ("r_int_ohm", "0.1")], &[("rating_a", "30")], &[("current_a", "2")]);
+        let w = first_wire_into(&sheet, "LD1", "+");
+        let opts = SimOptions { faults: vec![SimFault::Short { target: FaultTarget::Wire { wire_id: w } }], ..Default::default() };
+        let Some(r) = run(&sheet, &opts) else { return };
+        assert!(amps(&r, "F1") > 200.0, "{:?}", r.components);
+    }
+
+    /// A short chosen on a part's pin joins that pin to ground the same way.
+    /// 部品のピンで指定した短絡も、同じようにそのピンを接地へつなぐ。
+    #[test]
+    fn a_short_on_a_pin_gives_the_fault_current() {
+        let sheet = role_series(&[("voltage", "24"), ("r_int_ohm", "0.1")], &[("rating_a", "30")], &[("current_a", "2")]);
+        let target = FaultTarget::Pin { entity_id: id_of(&sheet, "F1"), pin: "2".into() };
+        let opts = SimOptions { faults: vec![SimFault::Short { target }], ..Default::default() };
+        let Some(r) = run(&sheet, &opts) else { return };
+        assert!(amps(&r, "F1") > 200.0, "{:?}", r.components);
+    }
+
+    /// A break chosen on a wire removes it from the circuit, so the load behind it gets no current.
+    /// 電線で指定した断線はその電線を回路から外し、その先の負荷には電流が流れない。
+    #[test]
+    fn an_open_wire_stops_the_current() {
+        let sheet = role_series(&[("voltage", "24")], &[("rating_a", "30")], &[("current_a", "2")]);
+        let w = first_wire_into(&sheet, "LD1", "+");
+        let opts = SimOptions { faults: vec![SimFault::Open { wire_id: w }], ..Default::default() };
+        let Some(r) = run(&sheet, &opts) else { return };
+        assert!(amps(&r, "BT1") < 1e-3, "{:?}", r.components);
+    }
+
+    /// A fault whose wire, part or pin no longer exists is skipped with a warning and the run still succeeds.
+    /// 電線・部品・ピンが無くなった故障は、注意を出して飛ばし、計算はそのまま成功する。
+    #[test]
+    fn faults_on_missing_targets_are_skipped_with_warnings() {
+        let sheet = role_series(&[("voltage", "24")], &[], &[("current_a", "2")]);
+        let gone = Uuid::new_v4();
+        let opts = SimOptions {
+            faults: vec![
+                SimFault::Short { target: FaultTarget::Wire { wire_id: gone } },
+                SimFault::Short { target: FaultTarget::Pin { entity_id: id_of(&sheet, "F1"), pin: "9".into() } },
+                SimFault::Open { wire_id: gone },
+            ],
+            ..Default::default()
+        };
+        let Some(r) = run(&sheet, &opts) else { return };
+        assert!((amps(&r, "LD1") - 2.0).abs() < 0.01);
+        assert_eq!(r.warnings.iter().filter(|w| w.contains("見つかりません")).count(), 3, "{:?}", r.warnings);
+    }
+
+    /// Applying a study case adds its switches, overrides and faults; values given explicitly in the same request win over the case.
+    /// 計算ケースを当てると、その開路・置き換え・故障が足される。同じ依頼で直接指定した値はケースより優先する。
+    #[test]
+    fn a_study_case_is_applied_on_top_of_explicit_options() {
+        let case = SimCase {
+            id: Uuid::new_v4(),
+            name: "c".into(),
+            open_switches: vec!["SW1".into()],
+            overrides: [("M1".to_string(), [("current_a".to_string(), "40".to_string()), ("v_min".to_string(), "20".to_string())].into_iter().collect())].into_iter().collect(),
+            faults: vec![SimFault::Open { wire_id: Uuid::nil() }],
+        };
+        let explicit = SimOptions {
+            overrides: [("M1".to_string(), [("current_a".to_string(), "31".to_string())].into_iter().collect())].into_iter().collect(),
+            ..Default::default()
+        };
+        let o = explicit.with_case(&case);
+        assert_eq!(o.open_switches, vec!["SW1".to_string()]);
+        assert_eq!(o.overrides["M1"]["current_a"], "31");
+        assert_eq!(o.overrides["M1"]["v_min"], "20");
+        assert_eq!(o.faults.len(), 1);
     }
 }

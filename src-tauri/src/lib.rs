@@ -430,6 +430,7 @@ fn simulate_op(
         open_switches,
         overrides: overrides.unwrap_or_default(),
         shorts: shorts.unwrap_or_default(),
+        faults: Vec::new(),
     };
     madake_core::sim::simulate_op_opts(sheet, &sheet_symbol_defs(sheet), &opts).map_err(|e| e.to_string())
 }

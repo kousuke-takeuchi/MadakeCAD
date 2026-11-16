@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3544仕様項目**。
+全6領域・**3549仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1104,6 +1104,11 @@
 - 電源は許容電流を、変換器は定格の出力電流を限度として出す。 <sub>`source_and_converter_loads_use_their_ratings`</sub>
 - 限度を複数持つ部品 (ピン定格もあるヒューズ) は、一番超えそうな限度を出す。 <sub>`the_highest_ratio_limit_wins`</sub>
 - 負荷率が 1 を超えた部品と、ヒューズ・ピン・電源・変換器の指摘が出る部品は一致する。 <sub>`loads_over_one_match_the_findings`</sub>
+- 電線で指定した短絡はその電線を接地へつなぎ、手前のヒューズに事故電流が流れる。 <sub>`a_short_on_a_wire_gives_the_fault_current`</sub>
+- 部品のピンで指定した短絡も、同じようにそのピンを接地へつなぐ。 <sub>`a_short_on_a_pin_gives_the_fault_current`</sub>
+- 電線で指定した断線はその電線を回路から外し、その先の負荷には電流が流れない。 <sub>`an_open_wire_stops_the_current`</sub>
+- 電線・部品・ピンが無くなった故障は、注意を出して飛ばし、計算はそのまま成功する。 <sub>`faults_on_missing_targets_are_skipped_with_warnings`</sub>
+- 計算ケースを当てると、その開路・置き換え・故障が足される。同じ依頼で直接指定した値はケースより優先する。 <sub>`a_study_case_is_applied_on_top_of_explicit_options`</sub>
 
 ### SPICEネットリスト生成
 

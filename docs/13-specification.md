@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3544 specification clauses** across 6 areas.
+**3549 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1104,6 +1104,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A source reports its maximum current as the limit and a converter its rated output current. <sub>`source_and_converter_loads_use_their_ratings`</sub>
 - A part with several limits (a fuse that also has a pin rating) reports the one it is closest to exceeding. <sub>`the_highest_ratio_limit_wins`</sub>
 - Exactly the parts whose ratio exceeds 1 have a fuse, pin, source or converter finding. <sub>`loads_over_one_match_the_findings`</sub>
+- A short chosen on a wire joins that wire to ground, so the fuse in front of it carries the fault current. <sub>`a_short_on_a_wire_gives_the_fault_current`</sub>
+- A short chosen on a part's pin joins that pin to ground the same way. <sub>`a_short_on_a_pin_gives_the_fault_current`</sub>
+- A break chosen on a wire removes it from the circuit, so the load behind it gets no current. <sub>`an_open_wire_stops_the_current`</sub>
+- A fault whose wire, part or pin no longer exists is skipped with a warning and the run still succeeds. <sub>`faults_on_missing_targets_are_skipped_with_warnings`</sub>
+- Applying a study case adds its switches, overrides and faults; values given explicitly in the same request win over the case. <sub>`a_study_case_is_applied_on_top_of_explicit_options`</sub>
 
 ### SPICE netlist generation
 
