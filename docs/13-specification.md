@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3425 specification clauses** across 6 areas.
+**3435 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -943,6 +943,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Running the planner twice on the same sheet gives the same wires, in the same order. <sub>`the_result_is_deterministic`</sub>
 - A net named in the request is rerouted and the others are reported as not selected; an unknown name is reported too. <sub>`only_the_named_nets_are_rerouted`</sub>
 - New wires carry the colour, cross-section, part number, wire number, dash, weight and length of the old wires. <sub>`new_wires_keep_the_attributes_of_the_old_wires`</sub>
+- When a net is rebuilt as several wires, only the longest new wire keeps the old length, so totals do not count it twice. <sub>`only_the_longest_new_wire_keeps_the_old_length`</sub>
 - A net with a wire end that touches nothing is left as it is, because the new route could not know what that end is for. <sub>`a_net_with_a_free_wire_end_is_left_unchanged`</sub>
 - Several plain nets keep exactly the same pin groups after the reroute. <sub>`plain_nets_keep_the_same_pin_groups`</sub>
 - Nets joined only by net labels keep their pins, and each label stays on its wire. <sub>`nets_joined_by_net_labels_keep_their_pins_and_labels`</sub>
@@ -1756,6 +1757,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Choosing the Anthropic API through the settings endpoint is reflected in the provider status. <sub>`choosing_the_anthropic_api_is_reflected_in_the_provider_status`</sub>
 - If the OS keychain does not answer, the settings screen still opens and says why. <sub>`a_keychain_that_never_answers_does_not_freeze_the_settings_screen`</sub>
 
+### reroute_api
+
+- The reroute tool says in Japanese that connections stay, that it is one undo step, and what it returns. <sub>`the_reroute_tool_is_advertised_with_its_promises`</sub>
+- The reroute tool applies its change as one edit, and one undo brings back exactly the original entities with their ids. <sub>`the_tool_applies_one_batch_and_one_undo_restores_the_original`</sub>
+- Asking for a net that does not exist changes nothing, adds no undo step, and the reply says so. <sub>`naming_an_unknown_net_changes_nothing`</sub>
+- A sheet with no wires gives an empty reply and no edit, not an empty batch. <sub>`a_sheet_without_wires_gives_an_empty_reply_and_no_edit`</sub>
+- POST /api/v1/route/reroute gives the same reply shape as the tool, applies one batch, and one undo restores the original entities. <sub>`the_endpoint_applies_one_batch_and_one_undo_restores_the_original`</sub>
+- The endpoint answers 400 for a sheet id that does not exist. <sub>`the_endpoint_rejects_an_unknown_sheet`</sub>
+
 ### search_api
 
 - GET /search finds every kind of target across the project and returns each hit with the sheet and zone to jump to. <sub>`searching_over_the_link_api_returns_located_hits`</sub>
@@ -2234,6 +2244,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - madake renumber numbers every sheet from 1 in top-up mode unless told otherwise. <sub>`renumber_defaults_to_whole_project_append_from_one`</sub>
 - madake renumber passes the target sheet, the numbering mode and the start number through. <sub>`renumber_forwards_sheet_mode_and_start`</sub>
 - madake renumber says so when every net already had a wire number. <sub>`renumber_reports_when_nothing_changed`</sub>
+- madake reroute sends no sheet and no net names unless told, so the app reroutes the first sheet's nets. <sub>`reroute_defaults_to_no_sheet_and_no_nets`</sub>
+- madake reroute passes the sheet and every repeated --net through, in order. <sub>`reroute_forwards_the_sheet_and_repeated_nets`</sub>
+- madake reroute --json prints the reply as it came, and the human output lists the nets left unchanged with their reasons. <sub>`reroute_prints_json_or_a_human_summary`</sub>
 - madake undo tells the user when there is nothing to undo. <sub>`undo_reports_empty_history`</sub>
 - madake redo reports the new document revision on success. <sub>`redo_reports_revision`</sub>
 - madake save/open report the file path they acted on. <sub>`save_and_open_report_path`</sub>

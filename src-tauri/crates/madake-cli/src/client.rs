@@ -328,6 +328,8 @@ pub trait LinkApi {
     /// `POST /api/v1/simulate/op`
     /// `options` は条件 (`open_switches` / `overrides` / `shorts`) のオブジェクト。
     fn simulate_op(&self, sheet_id: Option<&str>, options: Value) -> Result<Value, CliError>;
+    /// `POST /api/v1/route/reroute` (`{"sheet_id": ..., "nets": [...]}`)
+    fn reroute(&self, sheet_id: Option<&str>, nets: &[String]) -> Result<Value, CliError>;
     /// `POST /api/v1/commands` (Command配列 → Patch配列)
     fn exec(&self, commands: Value) -> Result<Value, CliError>;
     /// `POST /api/v1/undo`
@@ -439,6 +441,10 @@ impl LinkApi for HttpClient {
             obj.insert("sheet_id".into(), json!(sheet_id));
         }
         self.post("/simulate/op", body)
+    }
+
+    fn reroute(&self, sheet_id: Option<&str>, nets: &[String]) -> Result<Value, CliError> {
+        self.post("/route/reroute", json!({ "sheet_id": sheet_id, "nets": nets }))
     }
 
     fn parts(&self, query: Option<&str>, category: Option<&str>) -> Result<Value, CliError> {

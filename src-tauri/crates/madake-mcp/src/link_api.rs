@@ -704,6 +704,42 @@ async fn post_simulate_op(
     Ok(Json(serde_json::json!(result)))
 }
 
+#[derive(Deserialize)]
+struct RerouteBody {
+    sheet_id: Option<Uuid>,
+    #[serde(default)]
+    nets: Vec<String>,
+    options: Option<madake_core::route::RouteOptions>,
+}
+
+/// 配線の自動の引き直し (MCPツール `reroute_wires` と同じ本体・同じ返り値)。1回の編集でundo一発。
+async fn post_route_reroute(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<RerouteBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let sheet_id = match body.sheet_id {
+        Some(id) => id,
+        None => doc
+            .engine
+            .lock()
+            .unwrap()
+            .project()
+            .sheets
+            .first()
+            .map(|s| s.id)
+            .ok_or_else(|| bad_request("sheet not found"))?,
+    };
+    let mut options = madake_core::route::RerouteOptions::default();
+    options.nets = body.nets;
+    if let Some(route) = body.options {
+        options.route = route;
+    }
+    let reply = doc
+        .reroute_wires(sheet_id, &options, madake_core::EditOrigin::Mcp)
+        .map_err(bad_request)?;
+    Ok(Json(reply))
+}
+
 async fn get_verify(
     State(doc): State<SharedDoc>,
     Query(q): Query<NetlistQuery>,
@@ -1359,6 +1395,7 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/plc/assignments/import", post(post_plc_import))
         .route("/api/v1/plc/generate", post(post_plc_generate))
         .route("/api/v1/simulate/op", post(post_simulate_op))
+        .route("/api/v1/route/reroute", post(post_route_reroute))
         .route("/api/v1/templates", get(get_templates))
         .route("/api/v1/templates/apply", post(post_apply_template))
         .route("/api/v1/frame-templates", get(get_frame_templates))

@@ -919,6 +919,25 @@ fn emit(unit: &Unit, route: &UnitRoute) -> Vec<Entity> {
             }
         }
     }
+    // 長さ (length_m と length_source) は最も長い新しい配線だけに持たせる。全部に写すと部品表・電線リストで何度も数えられる
+    let len = |w: &Wire| -> f64 { w.points.windows(2).map(|s| (s[1].x - s[0].x).hypot(s[1].y - s[0].y)).sum() };
+    let mut longest: Option<(usize, f64)> = None;
+    for (i, e) in out.iter().enumerate() {
+        if let Entity::Wire(w) = e {
+            let l = len(w);
+            if longest.map_or(true, |(_, best)| l > best) {
+                longest = Some((i, l));
+            }
+        }
+    }
+    for (i, e) in out.iter_mut().enumerate() {
+        if let Entity::Wire(w) = e {
+            if Some(i) != longest.map(|(j, _)| j) {
+                w.length_m = None;
+                w.length_source = Default::default();
+            }
+        }
+    }
     for v in keys.values().copied().collect::<Vec<_>>() {
         if adj[v].len() >= 3 {
             out.push(Entity::Junction(crate::model::Junction { id: uuid::Uuid::new_v4(), at: pts[v] }));
@@ -1932,10 +1951,33 @@ mod tests {
         assert!(!wires.is_empty());
         for w in wires {
             assert_eq!(
-                (w.color.as_str(), w.sq, w.part_no.as_deref(), w.net.as_deref(), w.dashed, w.weight_mm, w.length_m),
-                ("red", 1.5, Some("WIRE-15"), Some("W7"), true, Some(0.5), Some(2.5))
+                (w.color.as_str(), w.sq, w.part_no.as_deref(), w.net.as_deref(), w.dashed, w.weight_mm),
+                ("red", 1.5, Some("WIRE-15"), Some("W7"), true, Some(0.5))
             );
         }
+        assert_eq!(wires.iter().filter_map(|w| w.length_m).collect::<Vec<_>>(), vec![2.5]);
+    }
+
+    /// When a net is rebuilt as several wires, only the longest new wire keeps the old length, so totals do not count it twice.
+    /// 1つのネットが何本かの配線に引き直されたとき、元の長さは一番長い新しい配線だけが持ち、合計で二重に数えられない。
+    #[test]
+    fn only_the_longest_new_wire_keeps_the_old_length() {
+        let mut sheet = new_sheet();
+        place(&mut sheet, "box2", (50.0, 50.0), "R1");
+        place(&mut sheet, "box2", (100.0, 70.0), "R2");
+        place(&mut sheet, "box2", (100.0, 30.0), "R3");
+        let a = old_wire(&mut sheet, &[(60.0, 50.0), (75.0, 50.0), (75.0, 70.0), (90.0, 70.0)]);
+        old_wire(&mut sheet, &[(75.0, 50.0), (75.0, 30.0), (90.0, 30.0)]);
+        if let Some(Entity::Wire(w)) = sheet.entities.get_mut(&a) {
+            w.length_m = Some(3.0);
+        }
+        let plan = run(&sheet);
+        let wires = added_wires(&plan);
+        assert!(wires.len() >= 2, "{plan:?}");
+        let with_len: Vec<&&Wire> = wires.iter().filter(|w| w.length_m.is_some()).collect();
+        assert_eq!(with_len.len(), 1, "{plan:?}");
+        let len = |w: &Wire| -> f64 { w.points.windows(2).map(|s| (s[1].x - s[0].x).hypot(s[1].y - s[0].y)).sum() };
+        assert!(wires.iter().all(|w| len(w) <= len(with_len[0]) + 1e-9));
     }
 
     /// A net with a wire end that touches nothing is left as it is, because the new route could not know what that end is for.

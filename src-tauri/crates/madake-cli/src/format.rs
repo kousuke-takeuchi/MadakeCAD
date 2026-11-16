@@ -427,6 +427,47 @@ pub fn renumbered(patches: &Value) -> String {
     }
 }
 
+/// `madake reroute` (Link APIの返り値)
+pub fn reroute(result: &Value) -> String {
+    let rerouted = result["rerouted"].as_array().cloned().unwrap_or_default();
+    let names: Vec<String> = rerouted.iter().filter_map(|n| n.as_str().map(String::from)).collect();
+    let mut out = if names.is_empty() {
+        "引き直したネットはありません\n".to_string()
+    } else {
+        format!("{} ネットを引き直しました: {}\n", names.len(), names.join(", "))
+    };
+    let metric = |side: &str, key: &str| result[side][key].as_u64().unwrap_or(0);
+    if result["before"].is_object() && result["after"].is_object() {
+        out.push_str(&format!(
+            "整い具合 (前 → 後): 交差 {} → {} / 文字の重なり {} → {} / シンボルの重なり {} → {} / グリッド外 {} → {}\n",
+            metric("before", "crossings"),
+            metric("after", "crossings"),
+            metric("before", "label_overlaps"),
+            metric("after", "label_overlaps"),
+            metric("before", "symbol_overlaps"),
+            metric("after", "symbol_overlaps"),
+            metric("before", "off_grid"),
+            metric("after", "off_grid"),
+        ));
+    }
+    let len = &result["wire_length_mm"];
+    if len.is_object() {
+        out.push_str(&format!(
+            "配線長の合計 (前 → 後): {} mm → {} mm\n",
+            len["before"].as_f64().unwrap_or(0.0),
+            len["after"].as_f64().unwrap_or(0.0)
+        ));
+    }
+    let unchanged = result["unchanged"].as_array().cloned().unwrap_or_default();
+    if !unchanged.is_empty() {
+        out.push_str("そのままのネット:\n");
+        for u in &unchanged {
+            out.push_str(&format!("  {}  {}\n", text(u, "net"), text(u, "reason")));
+        }
+    }
+    out.trim_end().to_string()
+}
+
 /// `madake undo` / `madake redo` (Patch or null)
 pub fn history_result(patch: &Value, done: &str, empty: &str) -> String {
     if patch.is_null() {

@@ -66,6 +66,15 @@ pub enum Commands {
         #[arg(long, value_delimiter = ',')]
         short: Vec<String>,
     },
+    /// 配線を自動で引き直す (接続は変えない。1回の編集でundo可)
+    Reroute {
+        /// シートID (省略時は先頭シート)
+        #[arg(long, value_name = "ID")]
+        sheet: Option<String>,
+        /// 引き直すネット名 (繰り返し指定可。省略時は全ネット)
+        #[arg(long = "net", value_name = "NAME")]
+        net: Vec<String>,
+    },
     /// 図面検証 (ERC+電気検証)
     Verify {
         /// シートID (省略時は全シート)
@@ -234,6 +243,13 @@ pub fn run(cli: &Cli, api: &dyn LinkApi) -> Result<String, CliError> {
                 return Ok(pretty(&result));
             }
             Ok(format::sim_op(&result))
+        }
+        Commands::Reroute { sheet, net } => {
+            let result = api.reroute(sheet.as_deref(), net)?;
+            if cli.json {
+                return Ok(pretty(&result));
+            }
+            Ok(format::reroute(&result))
         }
         Commands::Verify { sheet } => {
             let diags = api.verify(sheet.as_deref())?;
@@ -464,6 +480,10 @@ mod tests {
         fn simulate_op(&self, sheet_id: Option<&str>, options: Value) -> Result<Value, CliError> {
             self.record(format!("simulate_op({sheet_id:?}, {options})"));
             Ok(json!({"voltage": 24.0, "nets": [], "components": [], "warnings": []}))
+        }
+        fn reroute(&self, sheet_id: Option<&str>, nets: &[String]) -> Result<Value, CliError> {
+            self.record(format!("reroute({sheet_id:?}, {nets:?})"));
+            Ok(self.result.clone())
         }
         fn netlist(&self, sheet_id: Option<&str>) -> Result<Value, CliError> {
             self.record(format!("netlist({sheet_id:?})"));
@@ -1158,6 +1178,41 @@ mod tests {
         };
         let out = run(&parse(&["madake", "renumber"]), &api).unwrap();
         assert!(out.contains("線番の変更はありません"), "{out}");
+    }
+
+    /// madake reroute sends no sheet and no net names unless told, so the app reroutes the first sheet's nets.
+    /// madake rerouteは指定が無ければシートもネット名も送らず、アプリが先頭シートの全ネットを引き直す。
+    #[test]
+    fn reroute_defaults_to_no_sheet_and_no_nets() {
+        let api = FakeApi {
+            result: json!({"rerouted": ["N1"], "unchanged": [], "before": {"crossings": 2, "label_overlaps": 0, "symbol_overlaps": 0, "off_grid": 0},
+                "after": {"crossings": 0, "label_overlaps": 0, "symbol_overlaps": 0, "off_grid": 0}, "wire_length_mm": {"before": 120.0, "after": 80.0}}),
+            ..Default::default()
+        };
+        let out = run(&parse(&["madake", "reroute"]), &api).unwrap();
+        assert_eq!(api.calls(), vec!["reroute(None, [])".to_string()]);
+        assert!(out.contains("N1") && out.contains("120") && out.contains("80"), "{out}");
+    }
+
+    /// madake reroute passes the sheet and every repeated --net through, in order.
+    /// madake rerouteは--sheetと、繰り返し指定した--netを順番どおりに送る。
+    #[test]
+    fn reroute_forwards_the_sheet_and_repeated_nets() {
+        let api = FakeApi { result: json!({"rerouted": [], "unchanged": []}), ..Default::default() };
+        run(&parse(&["madake", "reroute", "--sheet", "s1", "--net", "N1", "--net", "GND"]), &api).unwrap();
+        assert_eq!(api.calls(), vec![r#"reroute(Some("s1"), ["N1", "GND"])"#.to_string()]);
+    }
+
+    /// madake reroute --json prints the reply as it came, and the human output lists the nets left unchanged with their reasons.
+    /// madake reroute --json は返事をそのまま出し、通常の出力は引き直さなかったネットを理由つきで並べる。
+    #[test]
+    fn reroute_prints_json_or_a_human_summary() {
+        let reply = json!({"rerouted": [], "unchanged": [{"net": "GND", "reason": "no route found; the old wires are kept"}]});
+        let api = FakeApi { result: reply.clone(), ..Default::default() };
+        let raw = run(&parse(&["madake", "reroute", "--json"]), &api).unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&raw).unwrap(), reply);
+        let out = run(&parse(&["madake", "reroute"]), &api).unwrap();
+        assert!(out.contains("GND") && out.contains("no route found"), "{out}");
     }
 
     /// madake undo tells the user when there is nothing to undo.

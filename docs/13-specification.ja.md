@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3425仕様項目**。
+全6領域・**3435仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -943,6 +943,7 @@
 - 同じ図面に2回かけても、同じ配線が同じ順序で得られる。 <sub>`the_result_is_deterministic`</sub>
 - 名前を指定したネットだけを引き直し、ほかのネットは「選ばれていない」と知らせる。存在しない名前もそう知らせる。 <sub>`only_the_named_nets_are_rerouted`</sub>
 - 新しい配線には、古い配線の色・線径・品番・線番・破線・太さ・長さがそのまま引き継がれる。 <sub>`new_wires_keep_the_attributes_of_the_old_wires`</sub>
+- 1つのネットが何本かの配線に引き直されたとき、元の長さは一番長い新しい配線だけが持ち、合計で二重に数えられない。 <sub>`only_the_longest_new_wire_keeps_the_old_length`</sub>
 - 何にもつながっていない配線の端があるネットは、その端が何のためか分からないので、そのまま残す。 <sub>`a_net_with_a_free_wire_end_is_left_unchanged`</sub>
 - ふつうのネットが何本あっても、引き直した後のピンのまとまりは元とまったく同じになる。 <sub>`plain_nets_keep_the_same_pin_groups`</sub>
 - ネットラベルだけでつながったネットも、ピンのまとまりは変わらず、ラベルは配線の上に残る。 <sub>`nets_joined_by_net_labels_keep_their_pins_and_labels`</sub>
@@ -1756,6 +1757,15 @@
 - 設定エンドポイントでAnthropic APIを選ぶと、プロバイダの状態にも反映される。 <sub>`choosing_the_anthropic_api_is_reflected_in_the_provider_status`</sub>
 - OSキーチェーンが返事をしないときも設定画面は開き、理由を表示する(固まらない)。 <sub>`a_keychain_that_never_answers_does_not_freeze_the_settings_screen`</sub>
 
+### reroute_api
+
+- 引き直しのツール説明には、接続が変わらないこと・undo一発で戻ること・返り値の項目が書かれている。 <sub>`the_reroute_tool_is_advertised_with_its_promises`</sub>
+- 引き直しのツールは変更を1回の編集として適用し、undo一発で元のエンティティがidまで含めてそのまま戻る。 <sub>`the_tool_applies_one_batch_and_one_undo_restores_the_original`</sub>
+- 存在しないネットを指定しても何も変わらず、undoの履歴も増えず、返事でそのことが分かる。 <sub>`naming_an_unknown_net_changes_nothing`</sub>
+- 配線の無いシートには空の返事を返し、空のバッチも実行しない。 <sub>`a_sheet_without_wires_gives_an_empty_reply_and_no_edit`</sub>
+- POST /api/v1/route/reroute はツールと同じ形の返事を返し、1回の編集として適用し、undo一発で元のエンティティに戻る。 <sub>`the_endpoint_applies_one_batch_and_one_undo_restores_the_original`</sub>
+- 存在しないシートidを渡すと、エンドポイントは400を返す。 <sub>`the_endpoint_rejects_an_unknown_sheet`</sub>
+
 ### search_api
 
 - GET /search はプロジェクト全体から全種別を探し、ジャンプ先のシートとゾーンつきで各ヒットを返す。 <sub>`searching_over_the_link_api_returns_located_hits`</sub>
@@ -2234,6 +2244,9 @@
 - madake renumberは既定でプロジェクト全体を1から追い番で採番する。 <sub>`renumber_defaults_to_whole_project_append_from_one`</sub>
 - madake renumberは対象シート・採番方式・開始番号をそのままコマンドへ載せる。 <sub>`renumber_forwards_sheet_mode_and_start`</sub>
 - madake renumberは全ネットが採番済みで変更が無かったことを伝える。 <sub>`renumber_reports_when_nothing_changed`</sub>
+- madake rerouteは指定が無ければシートもネット名も送らず、アプリが先頭シートの全ネットを引き直す。 <sub>`reroute_defaults_to_no_sheet_and_no_nets`</sub>
+- madake rerouteは--sheetと、繰り返し指定した--netを順番どおりに送る。 <sub>`reroute_forwards_the_sheet_and_repeated_nets`</sub>
+- madake reroute --json は返事をそのまま出し、通常の出力は引き直さなかったネットを理由つきで並べる。 <sub>`reroute_prints_json_or_a_human_summary`</sub>
 - madake undoは戻す操作が無いことをユーザーに伝える。 <sub>`undo_reports_empty_history`</sub>
 - madake redoは成功時に新しいドキュメントrevisionを報告する。 <sub>`redo_reports_revision`</sub>
 - madake save/openは対象のファイルパスを報告する。 <sub>`save_and_open_report_path`</sub>
