@@ -3,6 +3,7 @@
 //! UIにもTauriにも依存しない。全ての編集はシリアライズ可能な [`command::Command`] として
 //! [`command::Engine`] で実行され、UI(Tauri IPC)とAI(MCPサーバー)が同じAPIを共有する。
 
+pub mod arrange;
 pub mod block;
 pub mod cable;
 pub mod cable_run;

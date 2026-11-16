@@ -10,11 +10,24 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3479仕様項目**。
+全6領域・**3489仕様項目**。
 
 
 ## コアドメイン (madake-core)
 
+
+### arrange
+
+- 重なる区間は1つの帯にまとまり、離れた区間は別の帯のまま順に並ぶ。 <sub>`overlapping_spans_merge_into_bands`</sub>
+- 区間が無ければ帯も無い。 <sub>`an_empty_sheet_gives_no_bands`</sub>
+- 通り道より狭い空きは、2.5mm刻みで通り道の幅以上に広がる。 <sub>`narrow_gaps_widen_to_the_channel`</sub>
+- 上限より広い空きは詰まるが、上限より狭くはならない。 <sub>`wide_gaps_shrink_to_the_maximum`</sub>
+- 写像は帯の中の点を帯と一緒に動かし、帯の間の空きは順序を保ったまま伸び縮みさせる。 <sub>`the_warp_is_monotone_and_follows_bands`</sub>
+- ほぼ同じ座標は下側の中央値にそろい、離れた座標は動かない。 <sub>`nearly_aligned_keys_snap_to_the_median`</sub>
+- 1つの部品だけにつながる電源マークは、その部品の衛星になり一緒に動く。 <sub>`a_mark_wired_to_one_part_is_its_satellite`</sub>
+- 2つの部品のピンにつながるラベルは、それだけで1つの単位になる。 <sub>`a_label_between_two_symbols_is_its_own_unit`</sub>
+- 部品から3mm以内の注記は部品と一緒に動き、遠い注記はどの単位にも入らない。 <sub>`nearby_notes_join_their_part`</sub>
+- 範囲外の設定は、項目名を含むメッセージで断られる。 <sub>`bad_options_are_refused`</sub>
 
 ### block
 

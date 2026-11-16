@@ -10,11 +10,24 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3479 specification clauses** across 6 areas.
+**3489 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
 
+
+### arrange
+
+- Overlapping spans merge into one band and separate spans stay apart, in order. <sub>`overlapping_spans_merge_into_bands`</sub>
+- No spans give no bands. <sub>`an_empty_sheet_gives_no_bands`</sub>
+- A gap narrower than the channel widens to at least the channel, in 2.5 mm steps. <sub>`narrow_gaps_widen_to_the_channel`</sub>
+- A gap wider than the maximum shrinks, but never below the maximum. <sub>`wide_gaps_shrink_to_the_maximum`</sub>
+- The warp moves points inside a band with the band and stretches the gaps between bands, keeping order. <sub>`the_warp_is_monotone_and_follows_bands`</sub>
+- Nearly equal keys line up on the lower median; distant keys stay put. <sub>`nearly_aligned_keys_snap_to_the_median`</sub>
+- A power mark wired only to one part becomes that part's satellite and moves with it. <sub>`a_mark_wired_to_one_part_is_its_satellite`</sub>
+- A label wired to pins of two different parts is its own unit. <sub>`a_label_between_two_symbols_is_its_own_unit`</sub>
+- A note within 3 mm of a part moves with it; a note far away belongs to no unit. <sub>`nearby_notes_join_their_part`</sub>
+- Out-of-range options are refused with a message naming the field. <sub>`bad_options_are_refused`</sub>
 
 ### block
 
