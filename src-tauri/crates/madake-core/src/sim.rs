@@ -149,18 +149,40 @@ pub struct SimOpResult {
 
 /// 計算ケースを指定した依頼の条件。ケースの開路・置き換え・故障を `base` に足す (直接指定が優先)。
 /// 無いケースの id はエラー。
+///
+/// ケースはプロジェクト全体のもので、故障はどれか1枚のシートの電線・部品を指す。計算するシート
+/// (`sheet_id`、None なら先頭) に無く、別のシートにある対象の故障は外す (そのシートでは関係が無い)。
+/// どのシートにも無い対象の故障は残し、計算が「見つかりません」の注意を出す。
 pub fn options_for_case(
     project: &crate::model::Project,
+    sheet_id: Option<crate::SheetId>,
     case_id: Option<uuid::Uuid>,
     base: SimOptions,
 ) -> Result<SimOptions, String> {
+    use crate::model::{FaultTarget, SimFault};
     let Some(id) = case_id else { return Ok(base) };
     let case = project
         .sim_cases
         .iter()
         .find(|c| c.id == id)
         .ok_or_else(|| format!("計算ケース {id} がありません"))?;
-    Ok(base.with_case(case))
+    let here = match sheet_id {
+        Some(sid) => project.sheet(sid),
+        None => project.sheets.first(),
+    };
+    let target_of = |f: &SimFault| match f {
+        SimFault::Open { wire_id } => *wire_id,
+        SimFault::Short { target: FaultTarget::Wire { wire_id } } => *wire_id,
+        SimFault::Short { target: FaultTarget::Pin { entity_id, .. } } => *entity_id,
+    };
+    let mut case = case.clone();
+    case.faults.retain(|f| {
+        let id = target_of(f);
+        let on_here = here.is_some_and(|s| s.entities.contains_key(&id));
+        let elsewhere = project.sheets.iter().any(|s| s.entities.contains_key(&id));
+        on_here || !elsewhere
+    });
+    Ok(base.with_case(&case))
 }
 
 /// DC動作点を解く。`open_switches`の参照記号の導通部品は開路として扱う。
@@ -1332,9 +1354,34 @@ mod tests {
         let mut p = crate::model::Project::new("t");
         let case = SimCase { id: Uuid::new_v4(), name: "c".into(), open_switches: vec!["SW1".into()], overrides: Default::default(), faults: vec![] };
         p.sim_cases.push(case.clone());
-        let o = options_for_case(&p, Some(case.id), SimOptions::default()).unwrap();
+        let o = options_for_case(&p, None, Some(case.id), SimOptions::default()).unwrap();
         assert_eq!(o.open_switches, vec!["SW1".to_string()]);
-        assert!(options_for_case(&p, None, SimOptions::default()).unwrap().open_switches.is_empty());
-        assert!(options_for_case(&p, Some(Uuid::new_v4()), SimOptions::default()).unwrap_err().contains("ありません"));
+        assert!(options_for_case(&p, None, None, SimOptions::default()).unwrap().open_switches.is_empty());
+        assert!(options_for_case(&p, None, Some(Uuid::new_v4()), SimOptions::default()).unwrap_err().contains("ありません"));
+    }
+
+    /// A study case's faults that sit on another sheet of the project are left out when simulating this sheet (no "not found" warning); faults whose target is on no sheet are kept so the simulation can warn about them.
+    /// 計算ケースの故障のうち、プロジェクトの別のシートにあるものは、このシートの計算では外す (「見つかりません」と言わない)。どのシートにも無い対象の故障は残し、計算で注意を出す。
+    #[test]
+    fn faults_on_other_sheets_are_left_out() {
+        let mut p = crate::model::Project::new("t");
+        let s1 = p.sheets[0].id;
+        let mut sheet2 = Sheet::new("2", PaperSize::A3, Orientation::Landscape);
+        let w2 = add_wire(&mut sheet2, &[(0.0, 0.0), (10.0, 0.0)], 0.75, None);
+        let s2 = sheet2.id;
+        p.sheets.push(sheet2);
+        let gone = Uuid::new_v4();
+        let case = SimCase {
+            id: Uuid::new_v4(),
+            name: "c".into(),
+            open_switches: vec![],
+            overrides: Default::default(),
+            faults: vec![SimFault::Short { target: FaultTarget::Wire { wire_id: w2 } }, SimFault::Open { wire_id: gone }],
+        };
+        p.sim_cases.push(case.clone());
+        let on1 = options_for_case(&p, Some(s1), Some(case.id), SimOptions::default()).unwrap();
+        assert_eq!(on1.faults, vec![SimFault::Open { wire_id: gone }]);
+        let on2 = options_for_case(&p, Some(s2), Some(case.id), SimOptions::default()).unwrap();
+        assert_eq!(on2.faults.len(), 2);
     }
 }

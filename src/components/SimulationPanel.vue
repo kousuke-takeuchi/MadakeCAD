@@ -3,12 +3,12 @@
 // 見出し: 定格超過の件数と「図面に重ねる」。条件バー: 属性の置き換え・短絡のチップと入力。古い結果の注意。
 // 本体: 定格超過 (重さで絞り込み、行クリックで選択+ズーム) と選択中の詳細。下端: すべての値 (ネット電圧・部品電流) の折りたたみ。
 import { ChevronDown, ChevronRight, Copy, Layers, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-vue-next";
-import { computed, inject, ref } from "vue";
+import { computed, inject, ref, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
 import type { SimFinding } from "../ipc";
 import type { EditorController } from "../tools/controller";
 import { useDocumentStore } from "../stores/document";
-import { useSimulationStore } from "../stores/simulation";
+import { useSimulationStore, type SimConditionChip } from "../stores/simulation";
 import { formatProbe } from "../canvas/simOverlay";
 import { roleAttributes } from "../canvas/simCaseView";
 
@@ -79,11 +79,17 @@ function setValue(attr: string, ev: Event) {
 }
 
 /** 条件のチップの文字。 */
-function chipLabel(c: { kind: "set" | "short" | "open"; label: string; missing: boolean }): string {
+function chipLabel(c: SimConditionChip): string {
+  const target = c.wire ? t("simulation.wire") : t("simulation.pinTarget", { reference: c.reference ?? "", pin: c.pin ?? "" });
   const text =
-    c.kind === "short" ? t("simulation.shortChip", { net: c.label }) : c.kind === "open" ? t("simulation.openChip", { label: c.label }) : c.label;
+    c.kind === "short" ? t("simulation.shortChip", { net: target }) : c.kind === "open" ? t("simulation.openChip", { label: target }) : c.label;
   return c.missing ? `${text} (${t("simulation.missing")})` : text;
 }
+
+// 新しいケースの名前の頭を画面の言語に合わせる
+watchEffect(() => {
+  sim.caseNameBase = t("simulation.caseBase");
+});
 
 /** すべての値 (ネット電圧・部品電流) を開いているか。 */
 const showAll = ref(false);
@@ -218,7 +224,7 @@ function pick(f: SimFinding) {
               :class="{ set: r.value !== '' }"
               :value="r.value"
               placeholder="—"
-              @keydown.enter="setValue(r.attr, $event)"
+              @keydown.enter="($event.target as HTMLInputElement).blur()"
               @blur="setValue(r.attr, $event)"
             />
           </div>

@@ -702,7 +702,7 @@ async fn post_simulate_op(
         None => engine.project().sheets.first(),
     }
     .ok_or_else(|| bad_request("sheet not found"))?;
-    let options = madake_core::sim::options_for_case(engine.project(), body.case_id, body.options)
+    let options = madake_core::sim::options_for_case(engine.project(), Some(sheet.id), body.case_id, body.options)
         .map_err(bad_request)?;
     let result = madake_core::sim::simulate_op_opts(sheet, &sheet_symbol_defs(sheet), &options)
         .map_err(bad_request)?;

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3567仕様項目**。
+全6領域・**3572仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1110,6 +1110,7 @@
 - 電線・部品・ピンが無くなった故障は、注意を出して飛ばし、計算はそのまま成功する。 <sub>`faults_on_missing_targets_are_skipped_with_warnings`</sub>
 - 計算ケースを当てると、その開路・置き換え・故障が足される。同じ依頼で直接指定した値はケースより優先する。 <sub>`a_study_case_is_applied_on_top_of_explicit_options`</sub>
 - 計算ケースを指定した依頼はそのケースの条件で計算し、無いケースの id はエラーになる。 <sub>`options_for_case_applies_the_named_case`</sub>
+- 計算ケースの故障のうち、プロジェクトの別のシートにあるものは、このシートの計算では外す (「見つかりません」と言わない)。どのシートにも無い対象の故障は残し、計算で注意を出す。 <sub>`faults_on_other_sheets_are_left_out`</sub>
 
 ### SPICEネットリスト生成
 
@@ -3905,6 +3906,10 @@
 - 条件は1つずつ外せ (部品の最後の属性を外すとその部品も消える)、属性名に「.」があっても外せる。まとめて全部外すとケースは空で残る <sub>`simulation store`</sub>
 - 同じ故障は2回足しても1つだけ <sub>`simulation store`</sub>
 - ケースの複製は「元の名前 1」のような空いた名前で作られ、選ばれる <sub>`simulation store`</sub>
+- 別のシートにある電線を指す故障は「見つからない」にしない (どのシートにも無いときだけ印を付ける) <sub>`simulation store`</sub>
+- 続けて速く編集しても、編集は1つずつ順に保存され、どれも失われない (「通常」から2つ足してもケースは1つ) <sub>`simulation store`</sub>
+- 新しいケースの名前の頭は画面の言語に合わせて変えられる <sub>`simulation store`</sub>
+- 故障のチップは、電線かどうか・参照記号・ピン番号を言語に依らない形で持つ <sub>`simulation store`</sub>
 
 ### 開始テンプレート
 

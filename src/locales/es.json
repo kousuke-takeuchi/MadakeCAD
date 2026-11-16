@@ -1780,7 +1780,9 @@
     "drawingValue": "Plano",
     "caseValue": "En este caso",
     "missing": "no encontrado",
-    "openChip": "✕ Corte {label}"
+    "openChip": "✕ Corte {label}",
+    "caseBase": "Caso",
+    "pinTarget": "{reference} pin {pin}"
   },
   "verification": {
     "title": "Verificación",

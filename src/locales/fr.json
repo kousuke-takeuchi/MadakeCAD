@@ -1780,7 +1780,9 @@
     "drawingValue": "Plan",
     "caseValue": "Dans ce cas",
     "missing": "introuvable",
-    "openChip": "✕ Coupure {label}"
+    "openChip": "✕ Coupure {label}",
+    "caseBase": "Cas",
+    "pinTarget": "{reference} broche {pin}"
   },
   "verification": {
     "title": "Vérification",

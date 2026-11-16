@@ -1780,7 +1780,9 @@
     "drawingValue": "图纸值",
     "caseValue": "此工况的值",
     "missing": "找不到",
-    "openChip": "✕ 断线 {label}"
+    "openChip": "✕ 断线 {label}",
+    "caseBase": "工况",
+    "pinTarget": "{reference} 引脚 {pin}"
   },
   "verification": {
     "title": "校验",

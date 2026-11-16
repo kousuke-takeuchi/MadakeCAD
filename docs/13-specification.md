@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3567 specification clauses** across 6 areas.
+**3572 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1110,6 +1110,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A fault whose wire, part or pin no longer exists is skipped with a warning and the run still succeeds. <sub>`faults_on_missing_targets_are_skipped_with_warnings`</sub>
 - Applying a study case adds its switches, overrides and faults; values given explicitly in the same request win over the case. <sub>`a_study_case_is_applied_on_top_of_explicit_options`</sub>
 - A simulation request naming a study case uses that case's conditions, and an unknown case id is an error. <sub>`options_for_case_applies_the_named_case`</sub>
+- A study case's faults that sit on another sheet of the project are left out when simulating this sheet (no "not found" warning); faults whose target is on no sheet are kept so the simulation can warn about them. <sub>`faults_on_other_sheets_are_left_out`</sub>
 
 ### SPICE netlist generation
 
@@ -3905,6 +3906,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - conditions can be removed one by one, also with a dotted attribute, or all at once <sub>`simulation store`</sub>
 - the same fault is stored once <sub>`simulation store`</sub>
 - duplicating a case makes a copy with a free name and selects it <sub>`simulation store`</sub>
+- a fault on a wire of another sheet is not marked missing <sub>`simulation store`</sub>
+- quick successive edits are saved one after another and none is lost <sub>`simulation store`</sub>
+- the new-case name prefix follows the language set by the panel <sub>`simulation store`</sub>
+- fault chips carry the wire flag, reference and pin instead of translated text <sub>`simulation store`</sub>
 
 ### Start templates
 

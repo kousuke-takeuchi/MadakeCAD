@@ -323,4 +323,46 @@ describe("simulation store", () => {
     expect(store.selectedCase?.name).toBe("ケース 1 1");
     expect(store.selectedCase?.overrides).toEqual({ M1: { current_a: "40" } });
   });
+
+  // ja: 別のシートにある電線を指す故障は「見つからない」にしない (どのシートにも無いときだけ印を付ける)
+  it("a fault on a wire of another sheet is not marked missing", () => {
+    const doc = docWith(["w1"]);
+    (doc.project!.sheets as unknown as { id: string; entities: Record<string, unknown> }[]).push({ id: "s2", entities: { w9: { kind: "wire", id: "w9", points: [] } } });
+    doc.project!.sim_cases = [{ id: "c1", name: "c", open_switches: [], overrides: {}, faults: [
+      { kind: "open", wire_id: "w9" }, { kind: "open", wire_id: "nowhere" } ] }];
+    const store = useSimulationStore();
+    store.selectCase("c1");
+    expect(store.conditions.map((c) => c.missing)).toEqual([false, true]);
+  });
+
+  // ja: 続けて速く編集しても、編集は1つずつ順に保存され、どれも失われない (「通常」から2つ足してもケースは1つ)
+  it("quick successive edits are saved one after another and none is lost", async () => {
+    const doc = docWith(["w1"]);
+    fakeExecute(doc);
+    const store = useSimulationStore();
+    await Promise.all([store.setOverride("M1", "current_a", "40"), store.setOverride("M2", "current_a", "5")]);
+    expect(doc.project!.sim_cases?.length).toBe(1);
+    expect(store.selectedCase?.overrides).toEqual({ M1: { current_a: "40" }, M2: { current_a: "5" } });
+  });
+
+  // ja: 新しいケースの名前の頭は画面の言語に合わせて変えられる
+  it("the new-case name prefix follows the language set by the panel", async () => {
+    const doc = docWith(["w1"]);
+    fakeExecute(doc);
+    const store = useSimulationStore();
+    store.caseNameBase = "Case";
+    await store.newCase();
+    expect(store.selectedCase?.name).toBe("Case 1");
+  });
+
+  // ja: 故障のチップは、電線かどうか・参照記号・ピン番号を言語に依らない形で持つ
+  it("fault chips carry the wire flag, reference and pin instead of translated text", () => {
+    const doc = docWith(["w1"]);
+    (doc.project!.sheets[0].entities as Record<string, unknown>).f1 = { kind: "symbol", id: "f1", symbol_id: "x", reference: "F1" };
+    doc.project!.sim_cases = [{ id: "c1", name: "c", open_switches: [], overrides: {}, faults: [
+      { kind: "short", target: { wire_id: "w1" } }, { kind: "short", target: { entity_id: "f1", pin: "2" } } ] }];
+    const store = useSimulationStore();
+    store.selectCase("c1");
+    expect(store.conditions.map((c) => [c.wire, c.reference, c.pin])).toEqual([[true, undefined, undefined], [false, "F1", "2"]]);
+  });
 });

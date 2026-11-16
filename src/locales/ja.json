@@ -1780,7 +1780,9 @@
     "drawingValue": "図面の値",
     "caseValue": "このケースでの値",
     "missing": "見つかりません",
-    "openChip": "✕ 断線 {label}"
+    "openChip": "✕ 断線 {label}",
+    "caseBase": "ケース",
+    "pinTarget": "{reference} ピン{pin}"
   },
   "verification": {
     "title": "検証結果",

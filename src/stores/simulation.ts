@@ -17,17 +17,25 @@ export function nextCaseName(cases: SimCase[], base = "ケース"): string {
   }
 }
 
-/** 条件のチップ1つ。 */
+/** 条件のチップ1つ (文字は画面が言語に合わせて作る)。 */
 export interface SimConditionChip {
   key: string;
-  /** 置き換えは「参照記号.属性=値」、短絡・断線は対象の説明 (電線 / 参照記号 ピンN)。 */
+  /** 置き換えは「参照記号.属性=値」。故障では空。 */
   label: string;
   kind: "set" | "short" | "open";
-  /** 対象の電線・部品が図面に無い。 */
+  /** 故障の対象が電線か。 */
+  wire?: boolean;
+  /** ピンの短絡の参照記号とピン番号。 */
+  reference?: string;
+  pin?: string;
+  /** 対象の電線・部品がどのシートにも無い。 */
   missing: boolean;
 }
 
 const sameFault = (a: SimFault, b: SimFault) => JSON.stringify(a) === JSON.stringify(b);
+
+/** ケースの編集の順番待ち (1つずつ保存する)。 */
+let editQueue: Promise<unknown> = Promise.resolve();
 
 export const useSimulationStore = defineStore("simulation", {
   state: () => ({
@@ -45,6 +53,8 @@ export const useSimulationStore = defineStore("simulation", {
     resultRevision: null as number | null,
     /** 結果を図面に重ねて表示するか。 */
     showOnDrawing: true,
+    /** 新しいケースの名前の頭 (画面が言語に合わせて設定する)。 */
+    caseNameBase: "ケース",
   }),
   getters: {
     /** プロジェクトの計算ケース。 */
@@ -101,7 +111,14 @@ export const useSimulationStore = defineStore("simulation", {
       const c = this.selectedCase;
       if (!c) return [];
       const doc = useDocumentStore();
-      const entities = doc.activeSheet?.entities ?? {};
+      // 故障の対象はどれか1枚のシートにある。どのシートにも無いときだけ「見つからない」
+      const entityOf = (id: string) => {
+        for (const sh of doc.project?.sheets ?? []) {
+          const e = sh.entities[id];
+          if (e) return e;
+        }
+        return undefined;
+      };
       const out: SimConditionChip[] = [];
       for (const [reference, attrs] of Object.entries(c.overrides)) {
         for (const [attr, value] of Object.entries(attrs)) {
@@ -110,13 +127,13 @@ export const useSimulationStore = defineStore("simulation", {
       }
       c.faults.forEach((f, i) => {
         if (f.kind === "open") {
-          out.push({ key: `open:${i}`, label: "電線", kind: "open", missing: !(f.wire_id in entities) });
+          out.push({ key: `open:${i}`, label: "", kind: "open", wire: true, missing: !entityOf(f.wire_id) });
         } else if ("wire_id" in f.target) {
-          out.push({ key: `short:${i}`, label: "電線", kind: "short", missing: !(f.target.wire_id in entities) });
+          out.push({ key: `short:${i}`, label: "", kind: "short", wire: true, missing: !entityOf(f.target.wire_id) });
         } else {
-          const e = entities[f.target.entity_id];
-          const ref = e && e.kind === "symbol" ? e.reference || e.symbol_id : "";
-          out.push({ key: `short:${i}`, label: `${ref} ピン${f.target.pin}`, kind: "short", missing: !e });
+          const e = entityOf(f.target.entity_id);
+          const reference = e && e.kind === "symbol" ? e.reference || e.symbol_id : "";
+          out.push({ key: `short:${i}`, label: "", kind: "short", wire: false, reference, pin: f.target.pin, missing: !e });
         }
       });
       return out;
@@ -169,21 +186,29 @@ export const useSimulationStore = defineStore("simulation", {
     /** 編集するケース。通常を選んでいれば「ケース N」を作って選ぶ。 */
     async ensureCase(): Promise<SimCase | null> {
       if (this.selectedCase) return this.selectedCase;
-      const c: SimCase = { id: crypto.randomUUID(), name: nextCaseName(this.cases), open_switches: [], overrides: {}, faults: [] };
+      const c: SimCase = { id: crypto.randomUUID(), name: nextCaseName(this.cases, this.caseNameBase), open_switches: [], overrides: {}, faults: [] };
       if (!(await this.saveCase(c))) return null;
       this.caseId = c.id;
       return this.selectedCase;
     },
-    /** 選んでいるケースを書き換えて保存し、計算し直す。 */
-    async editCase(change: (c: SimCase) => SimCase): Promise<boolean> {
-      const c = await this.ensureCase();
-      if (!c) return false;
-      const ok = await this.saveCase(change(JSON.parse(JSON.stringify(c)) as SimCase));
-      if (ok) this.rerunAfterChange();
-      return ok;
+    /**
+     * 選んでいるケースを書き換えて保存し、計算し直す。編集は1つずつ順に行う (前の保存が終わってから
+     * 最新のケースを読み直して書き換える。速い連続の編集で、古いケースから書き換えて前の編集を消さない)。
+     */
+    editCase(change: (c: SimCase) => SimCase): Promise<boolean> {
+      const run = async () => {
+        const c = await this.ensureCase();
+        if (!c) return false;
+        const ok = await this.saveCase(change(JSON.parse(JSON.stringify(c)) as SimCase));
+        if (ok) this.rerunAfterChange();
+        return ok;
+      };
+      const next = editQueue.then(run, run);
+      editQueue = next.catch(() => false);
+      return next;
     },
     async newCase(): Promise<boolean> {
-      const c: SimCase = { id: crypto.randomUUID(), name: nextCaseName(this.cases), open_switches: [], overrides: {}, faults: [] };
+      const c: SimCase = { id: crypto.randomUUID(), name: nextCaseName(this.cases, this.caseNameBase), open_switches: [], overrides: {}, faults: [] };
       if (!(await this.saveCase(c))) return false;
       this.selectCase(c.id);
       return true;

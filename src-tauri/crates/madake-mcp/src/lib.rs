@@ -2134,7 +2134,7 @@ impl MadakeMcp {
             shorts: p.shorts,
             faults: Vec::new(),
         };
-        let opts = madake_core::sim::options_for_case(engine.project(), p.case_id, opts)
+        let opts = madake_core::sim::options_for_case(engine.project(), Some(sheet.id), p.case_id, opts)
             .map_err(|e| ErrorData::invalid_params(e, None))?;
         let result = madake_core::sim::simulate_op_opts(sheet, &sheet_symbol_defs(sheet), &opts)
             .map_err(internal)?;
