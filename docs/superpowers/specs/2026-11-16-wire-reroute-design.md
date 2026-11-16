@@ -34,15 +34,41 @@ All three plan the result first (pure function in madake-core) and then apply it
 existing commands** (`delete_entities` + `add_entity`), the same pattern `connect_cable` uses. No new
 `Command` variant and no file format change. Undo restores the old wires in one step.
 
+The plan is made on a copy of the sheet outside the engine lock, so a large sheet does not hold up other
+edits. The copy is taken together with the engine revision; the batch is applied only if the revision is
+still the same, otherwise the plan is made again (at most three times, then an error).
+
+### Options
+
+`options` tunes the search: `grid_mm` (0.5 to 10 mm), `bend_cost`, `cross_cost`, `near_cost`,
+`clearance_mm`, `frame_margin_mm` and `title_block_mm`. Costs, clearance and margins must be finite and
+not negative. Invalid options are refused before the engine lock is taken (MCP: invalid params; Link API:
+400) with a Japanese message that names the setting, and `plan_reroute` itself returns the same error.
+
 ### What is rerouted
 
 - Default: every net on the sheet that is made only of plain wires and junctions.
 - `nets`: only the named nets (net names as the netlist reports them).
-- A net is **left unchanged** (and listed in the reply with the reason) when it:
-  - has a wire that a cable run's cores refer to (`Cable::is_run`), so the cable keeps its wires;
-  - has wires with different colour, cross-section, part number, wire number, dash or weight (the
-    reroute cannot know which new segment should carry which attribute);
-  - cannot be routed (no path found) — its old wires stay.
+- The unit of routing is a **physically connected wire cluster** of a net (wires joined by shared ends,
+  pins, labels or junctions). A net that is joined only through net labels or net-name marks consists of
+  several clusters; each is routed on its own and they are never joined by new wires.
+- A whole net is **left unchanged** (and listed in the reply with the reason) when it:
+  - is not among the named nets (`not selected`; not shown in the MCP/API reply);
+  - shares wires with another net (port contacts);
+  - has a wire that a cable run's cores refer to (`Cable::is_run`), so the cable keeps its wires.
+- A cluster is **left unchanged** when:
+  - a wire has no path, or a wire end touches nothing;
+  - its wires differ in colour, cross-section, part number, wire number, dash or weight (the reroute
+    cannot know which new segment should carry which attribute);
+  - its wires carry lengths from different sources (`length_source`), see Result shape;
+  - another entity points at one of its wires or junctions (`Entity::refs`: a cable core assigned to a
+    wire, a note leader, a dimension), or a FreeCAD link (`Project::mech_links`) names one of them — the
+    planner takes these extra ids as a parameter, the MCP tool and Link API pass the mech-link ids;
+  - it has fewer than two terminals;
+  - a pin's lead (the short piece from the pin to the routing grid) would touch a wire, wire end or
+    junction of a net that is not rerouted, the old wires of a cluster that keeps its wires, or the lead
+    of another cluster, or would end on a grid point another cluster's lead already ends on;
+  - it cannot be routed (no path found) — its old wires stay.
 
 ### Terminals
 
@@ -61,9 +87,13 @@ recreated where the new route needs them.
 - A route never passes over a pin of another net, never runs along (overlaps) a wire of another net, and
   never passes through a symbol outline or a text box. Crossing another net at right angles is allowed
   but costs.
-- Attributes of the old wires (colour, cross-section, part number, wire number, dash, weight, length and
-  its source) are copied to every new segment of the net. The schematic route does not define the
-  physical length, so `length_m` is kept as it was.
+- Attributes of the old wires (colour, cross-section, part number, wire number, dash and weight) are
+  copied to every new wire of the cluster. The schematic route does not define the physical length, so
+  the length is kept: the sum of the old `length_m` values goes on the longest new wire only (with their
+  common `length_source`), and the other new wires carry no length, so BOM and wire-list totals do not
+  count it twice. If the old wires with a length have different sources, the cluster is left unchanged.
+- Unnamed nets get their automatic names (N001 and so on) from the netlist, which orders them by wire
+  ids. The new wires get new ids, so these automatic names may change places after a reroute.
 
 ### Reply
 
@@ -76,7 +106,13 @@ wire_length_mm: { before, after } }`.
    terminals and the old wire and junction ids per net.
 2. **Obstacle map.** A grid over the paper area at 1.25 mm. Blocked cells: symbol bounds
    (`tidy::symbol_bounds`, inflated by 0.6 mm) except the lead cells in front of each pin, text boxes
-   (`tidy::text_boxes`), frame and title block. Wires of nets that are not rerouted are fixed obstacles.
+   (`tidy::text_boxes`), frame and title block. Pins and labels block their grid point (or grid edge)
+   when they are within `CONNECT_EPS` (the netlist's tolerance) of it. Wires of nets that are not
+   rerouted are fixed obstacles.
+   Leads are built and checked here: a cluster whose lead touches a fixed wire, wire end or junction, a
+   fixed cell, or another cluster's lead, or ends on a grid point another lead already holds, is left
+   unchanged. A lead's grid points are part of the cluster's route, so a cluster that later keeps its
+   old wires sends a routed cluster whose lead touches those wires back to "left unchanged".
 3. **Order.** Nets with fewer terminals and shorter bounding boxes first (ties by net name, so the
    result is deterministic).
 4. **Route a net.** Start the tree at the terminal nearest the net's centre. Repeatedly connect the
@@ -94,8 +130,10 @@ wire_length_mm: { before, after } }`.
 6. **Emit.** Merge consecutive collinear grid steps into polyline vertices; one `Wire` per tree edge
    between terminals/junctions; `Junction` entities at Ts.
 
-Bounds: the search is limited to the paper; the grid is about 340 × 480 cells for A2 portrait, so A* per
-connection stays well under a second for the sheet sizes MadakeCAD supports.
+Bounds: each A* search first looks only inside the bounding box of its start and the tree, widened by
+15 mm; if that finds nothing it searches the whole paper once. Each search stops after 150 000 expanded
+states, so a terminal that cannot be reached does not flood an A0 sheet (a failing search on A0 takes
+about 15 ms in release builds).
 
 ## Verification
 
@@ -114,5 +152,5 @@ connection stays well under a second for the sheet sizes MadakeCAD supports.
 
 ## Documents
 
-`docs/internal/feature-inventory.md`, `docs/10-automation-api(.ja).md` (tool and endpoint), CLI help in
-`README(.ja).md`, regenerated `docs/13-specification*.md`.
+`docs/internal/feature-inventory.md`, `docs/10-automation-api(.ja).md` (tool and endpoint),
+regenerated `docs/13-specification*.md`.
