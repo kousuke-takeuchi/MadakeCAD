@@ -176,3 +176,51 @@ async fn arranging_an_arranged_sheet_applies_no_edit() {
     assert_eq!(doc.engine.lock().unwrap().revision(), revision);
     assert_eq!(doc.engine.lock().unwrap().undo_depth(), depth);
 }
+
+/// One edit that bumps the revision: adds a note to the first sheet.
+fn bump(doc: &SharedDoc) {
+    let sheet_id = first_sheet(doc);
+    let text: madake_core::TextEntity =
+        serde_json::from_value(json!({"id": Uuid::new_v4(), "at": {"x": 300.0, "y": 200.0}, "text": "note", "height": 3.5})).unwrap();
+    doc.engine
+        .lock()
+        .unwrap()
+        .execute(madake_core::Command::AddEntity { sheet_id, entity: madake_core::Entity::Text(text) })
+        .expect("注記を足せる");
+}
+
+/// When the drawing changes once between planning and applying, the arrange plans again and applies on the new drawing as one edit.
+/// 計画と適用の間に図面が1度変わると、並べ直しは計画を作り直し、新しい図面に1回の編集として当てる。
+#[tokio::test]
+async fn arrange_plans_again_after_one_concurrent_edit() {
+    let (doc, bridge, _) = fixture();
+    let sheet = two_squeezed_parts(&doc, &bridge).await;
+    let depth = doc.engine.lock().unwrap().undo_depth();
+    let mut calls = 0;
+    let reply = doc
+        .arrange_sheet_with(sheet, &Default::default(), madake_core::EditOrigin::Mcp, || {
+            calls += 1;
+            if calls == 1 {
+                bump(&doc);
+            }
+        })
+        .expect("並べ直せる");
+    assert_eq!(calls, 2);
+    assert!(reply["moved"].as_u64().unwrap() >= 1, "{reply}");
+    // 注記を足した編集と、並べ直しの編集の2つ
+    assert_eq!(doc.engine.lock().unwrap().undo_depth(), depth + 2);
+}
+
+/// When the drawing keeps changing, the arrange gives up after three tries with a message and applies nothing of its own.
+/// 図面が変わり続けると、並べ直しは3回で諦めてメッセージを返し、自分の変更は何も当てない。
+#[tokio::test]
+async fn arrange_gives_up_when_the_drawing_keeps_changing() {
+    let (doc, bridge, _) = fixture();
+    let sheet = two_squeezed_parts(&doc, &bridge).await;
+    let depth = doc.engine.lock().unwrap().undo_depth();
+    let err = doc
+        .arrange_sheet_with(sheet, &Default::default(), madake_core::EditOrigin::Mcp, || bump(&doc))
+        .expect_err("諦めるはず");
+    assert!(err.contains("何度も変わった"), "{err}");
+    assert_eq!(doc.engine.lock().unwrap().undo_depth(), depth + 3);
+}

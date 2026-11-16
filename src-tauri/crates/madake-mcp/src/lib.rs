@@ -246,8 +246,9 @@ impl SharedDoc {
     }
 
     /// [`Self::arrange_sheet`] の本体。`between` は計画を作った後、適用のロックを取る前に呼ばれる
-    /// (試験で、その間に図面が変わった場合を作るため)。
-    fn arrange_sheet_with(
+    /// (試験で、その間に図面が変わった場合を作るため。普段は [`Self::arrange_sheet`] を使う)。
+    #[doc(hidden)]
+    pub fn arrange_sheet_with(
         &self,
         sheet_id: Uuid,
         options: &madake_core::arrange::ArrangeOptions,
@@ -2319,79 +2320,4 @@ pub async fn serve(
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, router).await
-}
-
-#[cfg(test)]
-mod arrange_retry_tests {
-    use super::*;
-    use madake_core::{Orientation, PaperSize, Project, Sheet};
-
-    /// A project with two resistors closer than the channel width.
-    fn doc() -> (SharedDoc, Uuid) {
-        let mut project = Project::new("並べ直しのやり直し");
-        let mut sheet = Sheet::new("S1", PaperSize::A3, Orientation::Landscape);
-        for (x, reference) in [(100.0, "R1"), (122.0, "R2")] {
-            let id = Uuid::new_v4();
-            sheet.entities.insert(
-                id,
-                Entity::Symbol(madake_core::SymbolInstance {
-                    id,
-                    symbol_id: "resistor".into(),
-                    at: madake_core::Point::new(x, 100.0),
-                    rotation: 0,
-                    mirror: false,
-                    reference: reference.into(),
-                    value: String::new(),
-                    attrs: Default::default(),
-                }),
-            );
-        }
-        let sheet_id = sheet.id;
-        project.sheets = vec![sheet];
-        (SharedDoc::new(Engine::new(project)), sheet_id)
-    }
-
-    /// 改訂を1つ進める編集 (シートに注記を1つ足す)。
-    fn bump(doc: &SharedDoc, sheet_id: Uuid) {
-        let id = Uuid::new_v4();
-        let text: madake_core::TextEntity =
-            serde_json::from_value(serde_json::json!({"id": id, "at": {"x": 300.0, "y": 200.0}, "text": "note", "height": 3.5})).unwrap();
-        doc.engine
-            .lock()
-            .unwrap()
-            .execute(Command::AddEntity { sheet_id, entity: Entity::Text(text) })
-            .unwrap();
-    }
-
-    /// When the drawing changes once between planning and applying, the arrange plans again and applies on the new drawing as one edit.
-    /// 計画と適用の間に図面が1度変わると、並べ直しは計画を作り直し、新しい図面に1回の編集として当てる。
-    #[test]
-    fn arrange_plans_again_after_one_concurrent_edit() {
-        let (doc, sheet_id) = doc();
-        let mut calls = 0;
-        let reply = doc
-            .arrange_sheet_with(sheet_id, &Default::default(), EditOrigin::Mcp, || {
-                calls += 1;
-                if calls == 1 {
-                    bump(&doc, sheet_id);
-                }
-            })
-            .expect("arranged");
-        assert_eq!(calls, 2);
-        assert!(reply["moved"].as_u64().unwrap() >= 1, "{reply}");
-        // 注記を足した編集と、並べ直しの編集の2つ
-        assert_eq!(doc.engine.lock().unwrap().undo_depth(), 2);
-    }
-
-    /// When the drawing keeps changing, the arrange gives up after three tries with a message and applies nothing of its own.
-    /// 図面が変わり続けると、並べ直しは3回で諦めてメッセージを返し、自分の変更は何も当てない。
-    #[test]
-    fn arrange_gives_up_when_the_drawing_keeps_changing() {
-        let (doc, sheet_id) = doc();
-        let err = doc
-            .arrange_sheet_with(sheet_id, &Default::default(), EditOrigin::Mcp, || bump(&doc, sheet_id))
-            .expect_err("must give up");
-        assert!(err.contains("何度も変わった"), "{err}");
-        assert_eq!(doc.engine.lock().unwrap().undo_depth(), 3);
-    }
 }

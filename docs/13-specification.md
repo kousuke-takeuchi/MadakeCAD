@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3537 specification clauses** across 6 areas.
+**3539 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1737,6 +1737,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The Link API arrange endpoint gives the same reply shape and refuses bad options with 400 and no change. <sub>`the_link_api_arranges_and_refuses_bad_options`</sub>
 - A sheet with a cable is refused over MCP and over the Link API, and the drawing and its revision stay as they were. <sub>`a_refused_arrange_changes_nothing`</sub>
 - Arranging a sheet that is already arranged applies no edit at all: no new undo step and no change of revision. <sub>`arranging_an_arranged_sheet_applies_no_edit`</sub>
+- When the drawing changes once between planning and applying, the arrange plans again and applies on the new drawing as one edit. <sub>`arrange_plans_again_after_one_concurrent_edit`</sub>
+- When the drawing keeps changing, the arrange gives up after three tries with a message and applies nothing of its own. <sub>`arrange_gives_up_when_the_drawing_keeps_changing`</sub>
 
 ### drawing_tools
 

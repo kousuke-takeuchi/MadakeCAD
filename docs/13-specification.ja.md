@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3537仕様項目**。
+全6領域・**3539仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1737,6 +1737,8 @@
 - Link APIの並べ直しは同じ形の返り値を返し、使えない設定は400で断って何も変えない。 <sub>`the_link_api_arranges_and_refuses_bad_options`</sub>
 - ケーブルのあるシートはMCPでもLink APIでも断られ、図面も版番号も変わらない。 <sub>`a_refused_arrange_changes_nothing`</sub>
 - 並べ直し済みのシートをもう一度並べ直しても編集は1つも当てず、undoの履歴も版番号も増えない。 <sub>`arranging_an_arranged_sheet_applies_no_edit`</sub>
+- 計画と適用の間に図面が1度変わると、並べ直しは計画を作り直し、新しい図面に1回の編集として当てる。 <sub>`arrange_plans_again_after_one_concurrent_edit`</sub>
+- 図面が変わり続けると、並べ直しは3回で諦めてメッセージを返し、自分の変更は何も当てない。 <sub>`arrange_gives_up_when_the_drawing_keeps_changing`</sub>
 
 ### drawing_tools
 
