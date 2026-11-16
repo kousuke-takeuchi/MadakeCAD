@@ -146,4 +146,78 @@ describe("simulation store", () => {
     store.removeCondition(key);
     expect(store.overrides).toEqual({});
   });
+
+  const withLoads = (ids: string[]): SimOpResult => ({
+    ...result,
+    findings: [],
+    loads: ids.map((id) => ({ entity_id: id, kind: "wire" as const, amps: 12, volts: [24, 23], limit: 10, limit_kind: "wire_ampacity" as const, ratio: 1.2 })),
+  });
+  const docWith = (ids: string[], sheetId = "s1") => {
+    const doc = useDocumentStore();
+    doc.project = { sheets: [{ id: sheetId, entities: Object.fromEntries(ids.map((id) => [id, { kind: "wire", id, points: [] }])) }] } as unknown as typeof doc.project;
+    doc.activeSheetId = sheetId;
+    doc.revision = 5;
+    return doc;
+  };
+
+  // ja: 結果は計算したシートにだけ重ね、ほかのシートを開いているときは描かない
+  it("the overlay is shown only on the sheet that was simulated", async () => {
+    const doc = docWith(["w1"]);
+    const store = useSimulationStore();
+    vi.spyOn(ipc, "simulateOp").mockResolvedValue(withLoads(["w1"]));
+    await store.run("s1");
+    expect(store.overlay?.items.get("w1")?.level).toBe("over");
+    doc.activeSheetId = "other";
+    expect(store.overlay).toBeNull();
+  });
+
+  // ja: 計算の後で図面を編集すると結果は古いとみなされ、重ねる表示は「古い」印付きになる
+  it("editing the drawing after a run marks the result stale", async () => {
+    const doc = docWith(["w1"]);
+    const store = useSimulationStore();
+    vi.spyOn(ipc, "simulateOp").mockResolvedValue(withLoads(["w1"]));
+    await store.run("s1");
+    expect(store.stale).toBe(false);
+    doc.revision = 6;
+    expect(store.stale).toBe(true);
+    expect(store.overlay?.stale).toBe(true);
+  });
+
+  // ja: 計算に失敗すると、前の結果の色は残らない
+  it("a failed run leaves no overlay from the previous result", async () => {
+    docWith(["w1"]);
+    const store = useSimulationStore();
+    const spy = vi.spyOn(ipc, "simulateOp").mockResolvedValue(withLoads(["w1"]));
+    await store.run("s1");
+    spy.mockRejectedValue(new Error("ngspice"));
+    await store.run("s1");
+    expect(store.overlay).toBeNull();
+  });
+
+  // ja: 「図面に重ねる」を切ると表示が消え、パネルを閉じても消える
+  it("turning off the drawing toggle or closing the panel hides the overlay", async () => {
+    docWith(["w1"]);
+    const store = useSimulationStore();
+    vi.spyOn(ipc, "simulateOp").mockResolvedValue(withLoads(["w1"]));
+    await store.run("s1");
+    store.toggleShowOnDrawing();
+    expect(store.overlay).toBeNull();
+    store.toggleShowOnDrawing();
+    expect(store.overlay).not.toBeNull();
+    store.close();
+    expect(store.overlay).toBeNull();
+  });
+
+  // ja: 図面で選んだ電線・部品の値を引ける (値の無い物を選んでいれば空)
+  it("the selected wire or part's values can be looked up", async () => {
+    const doc = docWith(["w1", "x"]);
+    const store = useSimulationStore();
+    vi.spyOn(ipc, "simulateOp").mockResolvedValue(withLoads(["w1"]));
+    await store.run("s1");
+    doc.selection = new Set(["x"]);
+    expect(store.selectedLoad).toBeNull();
+    doc.selection = new Set(["w1"]);
+    expect(store.selectedLoad?.amps).toBe(12);
+    expect(store.loadOf("w1")?.limit).toBe(10);
+  });
 });

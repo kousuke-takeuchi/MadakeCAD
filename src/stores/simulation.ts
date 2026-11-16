@@ -1,7 +1,8 @@
 // DC動作点シミュレーション結果ストア (spec §3.6)。
 
 import { defineStore } from "pinia";
-import { ipc, type SimFinding, type SimOpResult } from "../ipc";
+import { ipc, type EntityLoad, type SimFinding, type SimOpResult } from "../ipc";
+import { buildOverlay, type OverlayItem } from "../canvas/simOverlay";
 import { parseSimCondition } from "./simConditions";
 import { useDocumentStore } from "./document";
 
@@ -19,8 +20,38 @@ export const useSimulationStore = defineStore("simulation", {
     shorts: [] as string[],
     /** 最後に計算したシート (定格超過の行から部品へ移るときに使う)。null = 先頭シート。 */
     sheetId: null as string | null,
+    /** 結果を計算したときの文書の revision (今と違えば結果は古い)。 */
+    resultRevision: null as number | null,
+    /** 結果を図面に重ねて表示するか。 */
+    showOnDrawing: true,
   }),
   getters: {
+    /** 計算の後で図面が変わったか。 */
+    stale(state): boolean {
+      return state.result !== null && state.resultRevision !== useDocumentStore().revision;
+    },
+    /** 図面に重ねる表示。パネルが閉じている・切ってある・結果が無い・別のシートなら null。 */
+    overlay(state): { items: Map<string, OverlayItem>; stale: boolean } | null {
+      const doc = useDocumentStore();
+      const sheet = doc.activeSheet;
+      if (!state.panelOpen || !state.showOnDrawing || !state.result || !sheet || state.sheetId !== doc.activeSheetId) {
+        return null;
+      }
+      return { items: buildOverlay(state.result, sheet), stale: this.stale };
+    },
+    /** エンティティ id から負荷を引く (無ければ null)。 */
+    loadOf(state): (id: string) => EntityLoad | null {
+      const byId = new Map((state.result?.loads ?? []).map((l) => [l.entity_id, l]));
+      return (id: string) => byId.get(id) ?? null;
+    },
+    /** 図面で選んだ物のうち、最初に負荷のある物の値。 */
+    selectedLoad(): EntityLoad | null {
+      for (const id of useDocumentStore().selection) {
+        const l = this.loadOf(id);
+        if (l) return l;
+      }
+      return null;
+    },
     /** 定格超過 (結果に無ければ空)。 */
     findings(state): SimFinding[] {
       return state.result?.findings ?? [];
@@ -54,8 +85,10 @@ export const useSimulationStore = defineStore("simulation", {
         this.error = null;
         // 計算したシート (指定が無ければ先頭シート)。定格超過の行から部品へ移るとき、このシートへ切り替える
         this.sheetId = sheetId ?? useDocumentStore().project?.sheets[0]?.id ?? null;
+        this.resultRevision = useDocumentStore().revision;
       } catch (e) {
         this.result = null;
+        this.resultRevision = null;
         this.error = e instanceof Error ? e.message : String(e);
       } finally {
         this.running = false;
@@ -107,6 +140,9 @@ export const useSimulationStore = defineStore("simulation", {
       this.overrides = {};
       this.shorts = [];
       this.rerunAfterChange();
+    },
+    toggleShowOnDrawing() {
+      this.showOnDrawing = !this.showOnDrawing;
     },
     close() {
       this.panelOpen = false;

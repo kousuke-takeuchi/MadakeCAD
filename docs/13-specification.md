@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3468 specification clauses** across 6 areas.
+**3473 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -3794,6 +3794,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - changing a condition before any run does not start one <sub>`simulation store`</sub>
 - a run remembers its sheet, or the first sheet when none is given <sub>`simulation store`</sub>
 - an override whose attribute contains a dot can be removed from its chip <sub>`simulation store`</sub>
+- the overlay is shown only on the sheet that was simulated <sub>`simulation store`</sub>
+- editing the drawing after a run marks the result stale <sub>`simulation store`</sub>
+- a failed run leaves no overlay from the previous result <sub>`simulation store`</sub>
+- turning off the drawing toggle or closing the panel hides the overlay <sub>`simulation store`</sub>
+- the selected wire or part's values can be looked up <sub>`simulation store`</sub>
 
 ### Start templates
 
