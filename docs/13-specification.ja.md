@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3404仕様項目**。
+全6領域・**3425仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -930,6 +930,27 @@
 - 途中に文字の注記があるときは、文字の枠を避けて迂回する。 <sub>`the_wire_goes_around_a_text_box_in_the_way`</sub>
 - ピンが壁で完全に囲まれていて届かないときは、経路なしになる。 <sub>`a_pin_that_is_walled_in_has_no_route`</sub>
 - 格子の上にないピンには、ピンの位置ぴったりから始まり格子の上で終わる短い引き出し線がつく。 <sub>`an_off_grid_pin_gets_a_lead_that_starts_exactly_at_the_pin`</sub>
+- 遠回りしている2ピンのネットは、ピンぴったりに始まり終わる、直交する1本の新しい配線に置き換わる。 <sub>`a_two_pin_net_is_replaced_by_one_orthogonal_wire`</sub>
+- 端子が3つのネットは、T字の分岐が1か所だけの木になり、分岐点にはジャンクションの点が付く。 <sub>`a_three_terminal_net_gets_one_t_and_a_junction`</sub>
+- 1点のまわりに4つの端子があっても、4本が1点で出会う十字にはならず、ジャンクション付きのT字が2か所になる。 <sub>`four_terminals_around_one_point_never_make_a_four_way_point`</sub>
+- 新しい配線は、別の部品のピンの上を通らない。通るとネットリスト上でそのピンが配線につながってしまうため。 <sub>`a_route_never_passes_over_another_nets_pin`</sub>
+- 新しい配線は、ぽつんと置かれたネットラベルの上を通らない。通るとネットリスト上でラベルが配線につながってしまうため。 <sub>`a_route_never_passes_over_a_lone_net_label`</sub>
+- 近くに描かれた2つのネットの新しい配線は、端点を共有しない。共有するとネットリスト上で1つに合体してしまうため。 <sub>`two_nets_never_share_a_wire_endpoint`</sub>
+- 他のネットを横切るしかないときは、直角に横切るだけで、つながらない。 <sub>`a_perpendicular_crossing_is_used_when_it_cannot_be_avoided`</sub>
+- 線の色がまちまちなネットは、そのまま残し、理由を知らせる。 <sub>`a_net_with_mixed_wire_colours_is_left_unchanged_with_a_reason`</sub>
+- ケーブルの区間が使っている配線のネットは、ケーブルが配線を失わないよう、そのまま残す。 <sub>`a_net_used_by_a_cable_run_is_left_unchanged`</sub>
+- 経路が見つからないネットは、古い配線をそのまま残し、理由を知らせる。 <sub>`an_unroutable_net_keeps_its_old_wires`</sub>
+- 同じ図面に2回かけても、同じ配線が同じ順序で得られる。 <sub>`the_result_is_deterministic`</sub>
+- 名前を指定したネットだけを引き直し、ほかのネットは「選ばれていない」と知らせる。存在しない名前もそう知らせる。 <sub>`only_the_named_nets_are_rerouted`</sub>
+- 新しい配線には、古い配線の色・線径・品番・線番・破線・太さ・長さがそのまま引き継がれる。 <sub>`new_wires_keep_the_attributes_of_the_old_wires`</sub>
+- 何にもつながっていない配線の端があるネットは、その端が何のためか分からないので、そのまま残す。 <sub>`a_net_with_a_free_wire_end_is_left_unchanged`</sub>
+- ふつうのネットが何本あっても、引き直した後のピンのまとまりは元とまったく同じになる。 <sub>`plain_nets_keep_the_same_pin_groups`</sub>
+- ネットラベルだけでつながったネットも、ピンのまとまりは変わらず、ラベルは配線の上に残る。 <sub>`nets_joined_by_net_labels_keep_their_pins_and_labels`</sub>
+- 接地の印 (ネット名を持つシンボル) でつながったネットも、ピンのまとまりは変わらず、印は配線につながったままになる。 <sub>`nets_joined_by_ground_marks_keep_their_pins`</sub>
+- 部品を格子に並べてランダムに配線した多数の図面で、引き直した後もネットのピンのまとまりは元と同じになる。 <sub>`generated_sheets_keep_the_same_pin_groups`</sub>
+- 90度回した部品は、回したあとのピンの向きに配線を出す。下向きになったピンからは、まず下へ線が出る。 <sub>`a_rotated_part_sends_its_wire_out_in_the_turned_direction`</sub>
+- 格子の上にないピンにも、ピンの位置ぴったりから始まる配線がつく。 <sub>`a_wire_at_an_off_grid_pin_starts_exactly_on_the_pin`</sub>
+- そのまま残すネットの配線は動かさず、ほかのネットはそれにつながらないように避けて引かれる。 <sub>`a_net_left_unchanged_is_avoided_by_the_other_nets`</sub>
 
 ### search
 

@@ -13,8 +13,8 @@ use std::collections::{BinaryHeap, HashMap};
 use serde::{Deserialize, Serialize};
 
 use crate::geometry::Point;
-use crate::model::{Entity, EntityId, Orientation, Sheet};
-use crate::netlist::{pin_positions, transform_local, CONNECT_EPS};
+use crate::model::{Entity, EntityId, Orientation, Sheet, Wire};
+use crate::netlist::{extract_netlist, on_wire, pin_positions, transform_local, CONNECT_EPS};
 use crate::pin_wiring::world_dir;
 use crate::symbol::{DefIndex, PinDir, SymbolDef};
 use crate::tidy::{symbol_bounds, text_boxes, Rect, TextKind};
@@ -241,7 +241,6 @@ impl Tree {
         *self.mask.entry(lead.node).or_insert(0) |= bit;
     }
 
-    #[allow(dead_code)] // タスク2 (ネットの木) で使う
     pub(crate) fn add_path(&mut self, path: &[usize], grid: &RouteGrid) {
         for w in path.windows(2) {
             let d = grid.dir_between(w[0], w[1]);
@@ -356,7 +355,6 @@ impl RouteGrid {
     }
 
     /// 隣り合う2点を結ぶ向き。
-    #[allow(dead_code)] // タスク2 (ネットの木) で使う
     pub(crate) fn dir_between(&self, a: usize, b: usize) -> Dir {
         let ((ax, ay), (bx, by)) = (self.xy(a), self.xy(b));
         if bx > ax {
@@ -651,6 +649,649 @@ impl Searcher {
     }
 }
 
+/// 引き直しの設定。
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default)]
+pub struct RerouteOptions {
+    /// 引き直すネットの名前。空なら全てのネット。
+    pub nets: Vec<String>,
+    /// 経路探索の設定。
+    pub route: RouteOptions,
+}
+
+/// 引き直しの計画。図面は書き換えず、消すものと足すものだけを返す。
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ReroutePlan {
+    /// 消すエンティティ (古い配線とジャンクション)。
+    pub remove: Vec<EntityId>,
+    /// 足すエンティティ (新しい配線とジャンクション)。
+    pub add: Vec<Entity>,
+    /// 引き直したネットの名前 (重複なし、名前順)。
+    pub rerouted: Vec<String>,
+    /// 変えなかったネットの (名前, 理由)。
+    pub unchanged: Vec<(String, String)>,
+}
+
+/// 引き直しの1単位: ネットのうち、配線で物理的につながった1かたまり。
+///
+/// ネットは同名のネットラベルで離れたかたまりをつなぐので、かたまりごとに別々に引き直す
+/// (離れたかたまりを新しい配線でつなぐと、図面の見た目が変わるため)。
+struct Unit {
+    net: String,
+    wires: Vec<EntityId>,
+    junctions: Vec<EntityId>,
+    template: Wire,
+    old_lines: Vec<Vec<Point>>,
+    old_junctions: Vec<Point>,
+    /// 端子 (ピン・ラベル) の位置と向き。位置順。
+    terms: Vec<(Point, Option<Dir>)>,
+    leads: Vec<Lead>,
+}
+
+/// 経路が使う場所。他のネットの探索に対する占有を表す。
+struct UnitRoute {
+    segs: Vec<(Point, Point)>,
+    nodes: HashMap<usize, u8>,
+    /// 経路が収まる格子の範囲 (x0, y0, x1, y1)。
+    bbox: (i64, i64, i64, i64),
+}
+
+/// 配線の線分を格子の占有に直す。(格子点, 辺のビット, 通れない印) の並び。
+///
+/// 格子の上の軸に平行な線分は、通る点にその辺のビットを付ける (真っすぐ通る点は直角に横切れる)。
+/// それ以外の線分は、近い格子点を通れなくする。
+fn rasterize(grid: &RouteGrid, line: &[Point]) -> Vec<(usize, u8, bool)> {
+    let g = grid.opts.grid_mm;
+    let on = |v: f64| (v / g - (v / g).round()).abs() * g < 1e-6;
+    let mut out = Vec::new();
+    for w in line.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        let dir = Dir::between(a, b);
+        let aligned = (a.x - b.x).abs() < 1e-9 || (a.y - b.y).abs() < 1e-9;
+        match (dir, aligned && on(a.x) && on(a.y) && on(b.x) && on(b.y)) {
+            (Some(d), true) => {
+                let (Some(na), Some(nb)) = (grid.nearest(a), grid.nearest(b)) else { continue };
+                let mut cur = na;
+                out.push((cur, d.bit(), false));
+                while cur != nb {
+                    let Some(next) = grid.step(cur, d) else { break };
+                    out.push((next, d.opp().bit() | if next == nb { 0 } else { d.bit() }, false));
+                    cur = next;
+                }
+            }
+            _ => {
+                let (x0, x1) = ((a.x.min(b.x) / g).floor() as i64 - 1, (a.x.max(b.x) / g).ceil() as i64 + 1);
+                let (y0, y1) = ((a.y.min(b.y) / g).floor() as i64 - 1, (a.y.max(b.y) / g).ceil() as i64 + 1);
+                for iy in y0..=y1 {
+                    for ix in x0..=x1 {
+                        if let Some(n) = grid.node(ix, iy) {
+                            if crate::netlist::segment_distance(&grid.point(n), &a, &b) < g / 2.0 + 1e-6 {
+                                out.push((n, 0, true));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// 点の近くの格子点を通れなくする記述。
+fn block_point(grid: &RouteGrid, q: Point) -> Vec<(usize, u8, bool)> {
+    rasterize(grid, &[q, q]).into_iter().chain(point_nodes(grid, q)).collect()
+}
+
+fn point_nodes(grid: &RouteGrid, q: Point) -> Vec<(usize, u8, bool)> {
+    let g = grid.opts.grid_mm;
+    let (cx, cy) = ((q.x / g).round() as i64, (q.y / g).round() as i64);
+    let mut out = Vec::new();
+    for iy in cy - 1..=cy + 1 {
+        for ix in cx - 1..=cx + 1 {
+            if let Some(n) = grid.node(ix, iy) {
+                if grid.point(n).distance_to(&q) < g / 2.0 + 1e-6 {
+                    out.push((n, 0, true));
+                }
+            }
+        }
+    }
+    out
+}
+
+fn apply_raster(occ: &mut Occ, entries: &[(usize, u8, bool)]) {
+    for &(n, bits, block) in entries {
+        if block {
+            occ.dyn_block[n] = true;
+        } else {
+            occ.mask[n] |= bits;
+        }
+    }
+}
+
+/// 経路が、動かない配線の占有 (`fixed`) とぶつかるか。
+fn conflicts(route: &UnitRoute, fixed: &[(usize, u8, bool)]) -> bool {
+    let mut by_node: HashMap<usize, (u8, bool)> = HashMap::new();
+    for &(n, bits, block) in fixed {
+        let e = by_node.entry(n).or_insert((0, false));
+        e.0 |= bits;
+        e.1 |= block;
+    }
+    route.nodes.iter().any(|(n, &mine)| match by_node.get(n) {
+        None => false,
+        Some(&(theirs, block)) => {
+            if block {
+                return true;
+            }
+            if theirs == 0 {
+                return false;
+            }
+            let crossing = (mine == NS && theirs == EW) || (mine == EW && theirs == NS);
+            !crossing
+        }
+    })
+}
+
+fn add_route(occ: &mut Occ, r: &UnitRoute) {
+    for (&n, &m) in &r.nodes {
+        occ.mask[n] |= m;
+    }
+}
+
+fn remove_route(occ: &mut Occ, r: &UnitRoute) {
+    for (&n, &m) in &r.nodes {
+        occ.mask[n] &= !m;
+    }
+}
+
+/// 1つの単位の木を作る。最初に中心に最も近い端子を木の根にし、残りを近い順に木へつなぐ。
+fn route_unit(grid: &RouteGrid, occ: &Occ, searcher: &mut Searcher, unit: &Unit) -> Option<UnitRoute> {
+    let n = unit.terms.len();
+    let (cx, cy) = (
+        unit.terms.iter().map(|t| t.0.x).sum::<f64>() / n as f64,
+        unit.terms.iter().map(|t| t.0.y).sum::<f64>() / n as f64,
+    );
+    let first = (0..n)
+        .min_by(|&a, &b| {
+            let da = (unit.terms[a].0.x - cx).hypot(unit.terms[a].0.y - cy);
+            let db = (unit.terms[b].0.x - cx).hypot(unit.terms[b].0.y - cy);
+            da.total_cmp(&db).then(a.cmp(&b))
+        })
+        .unwrap_or(0);
+    let mut tree = Tree::default();
+    let mut segs: Vec<(Point, Point)> = Vec::new();
+    let lead_segs = |l: &Lead, segs: &mut Vec<(Point, Point)>| segs.extend(l.points.windows(2).map(|w| (w[0], w[1])));
+    tree.add_lead(&unit.leads[first]);
+    lead_segs(&unit.leads[first], &mut segs);
+    let mut remaining: Vec<usize> = (0..n).filter(|&i| i != first).collect();
+    while !remaining.is_empty() {
+        // 木に最も近い端子 (格子上の直線距離)
+        let dist = |i: usize| -> i64 {
+            let (x, y) = grid.xy(unit.leads[i].node);
+            tree.mask
+                .keys()
+                .map(|&k| {
+                    let (kx, ky) = grid.xy(k);
+                    (kx - x).abs() + (ky - y).abs()
+                })
+                .min()
+                .unwrap_or(0)
+        };
+        let pos = (0..remaining.len()).min_by_key(|&k| (dist(remaining[k]), remaining[k]))?;
+        let t = remaining.remove(pos);
+        let lead = &unit.leads[t];
+        let path = if tree.mask.contains_key(&lead.node) {
+            let m = tree.mask[&lead.node];
+            let bit = lead.back().map_or(0, Dir::bit);
+            if m & bit != 0 || (m | bit).count_ones() > 3 {
+                return None;
+            }
+            vec![lead.node]
+        } else {
+            searcher.search(grid, occ, &tree, lead.node, lead.out)?
+        };
+        tree.add_lead(lead);
+        tree.add_path(&path, grid);
+        lead_segs(lead, &mut segs);
+        segs.extend(path.windows(2).map(|w| (grid.point(w[0]), grid.point(w[1]))));
+    }
+    let mut bbox = (i64::MAX, i64::MAX, i64::MIN, i64::MIN);
+    for &k in tree.mask.keys() {
+        let (x, y) = grid.xy(k);
+        bbox = (bbox.0.min(x), bbox.1.min(y), bbox.2.max(x), bbox.3.max(y));
+    }
+    Some(UnitRoute { segs, nodes: tree.mask, bbox })
+}
+
+fn quant(q: Point) -> (i64, i64) {
+    ((q.x * 1000.0).round() as i64, (q.y * 1000.0).round() as i64)
+}
+
+/// 経路の線分から、配線とジャンクションを作る。端子とジャンクション (3方向以上の点) の間を1本の配線にし、
+/// 途中の一直線上の点は省く。
+fn emit(unit: &Unit, route: &UnitRoute) -> Vec<Entity> {
+    use std::collections::BTreeMap;
+    use std::collections::BTreeSet;
+    let mut keys: BTreeMap<(i64, i64), usize> = BTreeMap::new();
+    let mut pts: Vec<Point> = Vec::new();
+    let intern = |q: Point, keys: &mut BTreeMap<(i64, i64), usize>, pts: &mut Vec<Point>| -> usize {
+        *keys.entry(quant(q)).or_insert_with(|| {
+            pts.push(q);
+            pts.len() - 1
+        })
+    };
+    let terminal: BTreeSet<usize> = unit.terms.iter().map(|t| intern(t.0, &mut keys, &mut pts)).collect();
+    let mut adj: Vec<BTreeSet<usize>> = Vec::new();
+    for &(a, b) in &route.segs {
+        let (ia, ib) = (intern(a, &mut keys, &mut pts), intern(b, &mut keys, &mut pts));
+        adj.resize(pts.len(), BTreeSet::new());
+        if ia != ib {
+            adj[ia].insert(ib);
+            adj[ib].insert(ia);
+        }
+    }
+    adj.resize(pts.len(), BTreeSet::new());
+    let is_vertex = |v: usize| terminal.contains(&v) || adj[v].len() != 2;
+    let mut used: BTreeSet<(usize, usize)> = BTreeSet::new();
+    let mut out = Vec::new();
+    for v in keys.values().copied().collect::<Vec<_>>() {
+        if !is_vertex(v) {
+            continue;
+        }
+        for &nb in &adj[v] {
+            if used.contains(&(v, nb)) {
+                continue;
+            }
+            let mut path = vec![v, nb];
+            used.insert((v, nb));
+            used.insert((nb, v));
+            let (mut prev, mut cur) = (v, nb);
+            while !is_vertex(cur) {
+                let Some(&next) = adj[cur].iter().find(|&&x| x != prev) else { break };
+                used.insert((cur, next));
+                used.insert((next, cur));
+                path.push(next);
+                prev = cur;
+                cur = next;
+            }
+            let points = simplify(path.iter().map(|&i| pts[i]).collect());
+            if points.len() >= 2 {
+                out.push(Entity::Wire(Wire { id: uuid::Uuid::new_v4(), points, ..unit.template.clone() }));
+            }
+        }
+    }
+    for v in keys.values().copied().collect::<Vec<_>>() {
+        if adj[v].len() >= 3 {
+            out.push(Entity::Junction(crate::model::Junction { id: uuid::Uuid::new_v4(), at: pts[v] }));
+        }
+    }
+    out
+}
+
+/// 配線の端点が、ピン・ラベル・ジャンクション・別の配線の端点のどれかにつながっているか。
+fn attached(q: Point, owner: EntityId, others: &[(EntityId, Point)], anchors: &[Point]) -> bool {
+    anchors.iter().any(|&a| same(a, q)) || others.iter().any(|&(id, e)| id != owner && same(e, q))
+}
+
+/// ネットの配線を、配線で物理的につながったかたまりに分ける (ネットリストと同じつなぎ方)。
+fn clusters(wires: &[&Wire], anchors: &[Point]) -> Vec<Vec<usize>> {
+    let mut parent: Vec<usize> = (0..wires.len()).collect();
+    fn find(parent: &mut [usize], mut i: usize) -> usize {
+        while parent[i] != i {
+            parent[i] = parent[parent[i]];
+            i = parent[i];
+        }
+        i
+    }
+    let union = |parent: &mut Vec<usize>, a: usize, b: usize| {
+        let (ra, rb) = (find(parent, a), find(parent, b));
+        if ra != rb {
+            parent[ra.max(rb)] = ra.min(rb);
+        }
+    };
+    let ends = |w: &Wire| -> Vec<Point> {
+        match (w.points.first(), w.points.last()) {
+            (Some(a), Some(b)) => vec![*a, *b],
+            _ => vec![],
+        }
+    };
+    for a in 0..wires.len() {
+        for b in a + 1..wires.len() {
+            if ends(wires[a]).iter().any(|x| ends(wires[b]).iter().any(|y| same(*x, *y))) {
+                union(&mut parent, a, b);
+            }
+        }
+    }
+    for &q in anchors {
+        let hit: Vec<usize> = (0..wires.len()).filter(|&i| on_wire(wires[i], &q)).collect();
+        for w in hit.windows(2) {
+            union(&mut parent, w[0], w[1]);
+        }
+    }
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    let mut root_of: HashMap<usize, usize> = HashMap::new();
+    for i in 0..wires.len() {
+        let r = find(&mut parent, i);
+        let g = *root_of.entry(r).or_insert_with(|| {
+            groups.push(Vec::new());
+            groups.len() - 1
+        });
+        groups[g].push(i);
+    }
+    groups
+}
+
+/// 端子の引き出し線。向きの分からない端子 (ラベル) は、外へ出られる最も短い向きを選ぶ。
+fn make_lead(grid: &RouteGrid, pos: Point, dir: Option<Dir>) -> Option<Lead> {
+    match dir {
+        Some(_) => grid.lead(pos, dir),
+        None => grid.lead(pos, None).or_else(|| {
+            Dir::ALL
+                .iter()
+                .enumerate()
+                .filter_map(|(i, &d)| grid.lead(pos, Some(d)).map(|l| (l.points.len(), i, l)))
+                .min_by_key(|(len, i, _)| (*len, *i))
+                .map(|(_, _, l)| l)
+        }),
+    }
+}
+
+/// シートの配線を、接続を変えずに引き直す計画を作る。図面は書き換えない。
+///
+/// ネットごと、配線で物理的につながったかたまりごとに、ピン・ネットラベル・ネット名シンボルのピンを
+/// 端子とする木を格子の上に引く。引き直さないネット (ケーブルの芯・属性がまちまち・端が浮いている・
+/// 選ばれていない) の配線は動かない障害物として扱う。経路が見つからないかたまりは古い配線を残す。
+pub fn plan_reroute(sheet: &Sheet, defs: &[SymbolDef], opts: &RerouteOptions) -> ReroutePlan {
+    use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
+    let mut plan = ReroutePlan::default();
+    let nets = extract_netlist(sheet, defs);
+    let grid = RouteGrid::build(sheet, defs, &opts.route);
+    let pins = pin_points(sheet, defs);
+    let labels: Vec<Point> = sheet.entities.values().filter_map(|e| if let Entity::NetLabel(l) = e { Some(l.at) } else { None }).collect();
+    let junctions: Vec<(EntityId, Point)> =
+        sheet.entities.values().filter_map(|e| if let Entity::Junction(j) = e { Some((j.id, j.at)) } else { None }).collect();
+    let wires: BTreeMap<EntityId, &Wire> = sheet.entities.iter().filter_map(|(id, e)| if let Entity::Wire(w) = e { Some((*id, w)) } else { None }).collect();
+    let anchors: Vec<Point> = pins.iter().map(|q| q.pos).chain(labels.iter().copied()).chain(junctions.iter().map(|j| j.1)).collect();
+    let all_ends: Vec<(EntityId, Point)> =
+        wires.values().flat_map(|w| [w.points.first(), w.points.last()].into_iter().flatten().map(|&q| (w.id, q))).collect();
+
+    // 他のネットと共有している配線 (ポートの接点) と、ケーブルの区間が使う配線
+    let mut uses: HashMap<EntityId, usize> = HashMap::new();
+    for net in &nets {
+        for id in &net.wire_ids {
+            *uses.entry(*id).or_insert(0) += 1;
+        }
+    }
+    let mut cable_wires: HashSet<EntityId> = HashSet::new();
+    for e in sheet.entities.values() {
+        if let Entity::Cable(c) = e {
+            if c.is_run() {
+                for core in &c.cores {
+                    for end in [&core.end_a, &core.end_b].into_iter().flatten() {
+                        if let crate::model::CoreEnd::Wire { wire } = end {
+                            cable_wires.insert(*wire);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut units: Vec<Unit> = Vec::new();
+    let mut fixed_wires: Vec<EntityId> = Vec::new();
+    for net in &nets {
+        if net.wire_ids.is_empty() {
+            continue;
+        }
+        let reason = if !(opts.nets.is_empty() || opts.nets.contains(&net.name)) {
+            Some("not selected".to_string())
+        } else if net.wire_ids.iter().any(|id| uses.get(id).copied().unwrap_or(0) > 1) {
+            Some("wires are shared by several nets (port contacts)".to_string())
+        } else if !net.cable_cores.is_empty() || net.wire_ids.iter().any(|id| cable_wires.contains(id)) {
+            Some("a cable run uses these wires (cable)".to_string())
+        } else {
+            None
+        };
+        if let Some(r) = reason {
+            plan.unchanged.push((net.name.clone(), r));
+            fixed_wires.extend(net.wire_ids.iter().copied());
+            continue;
+        }
+        let net_wires: Vec<&Wire> = net.wire_ids.iter().filter_map(|id| wires.get(id).copied()).collect();
+        for group in clusters(&net_wires, &anchors) {
+            let ws: Vec<&Wire> = group.iter().map(|&i| net_wires[i]).collect();
+            let keep = |plan: &mut ReroutePlan, fixed: &mut Vec<EntityId>, why: &str| {
+                plan.unchanged.push((net.name.clone(), why.to_string()));
+                fixed.extend(ws.iter().map(|w| w.id));
+            };
+            let t = ws[0];
+            if ws.iter().any(|w| w.points.len() < 2) {
+                keep(&mut plan, &mut fixed_wires, "a wire has no path");
+                continue;
+            }
+            let mixed = ws.iter().any(|w| {
+                w.color != t.color || w.sq != t.sq || w.part_no != t.part_no || w.net != t.net || w.dashed != t.dashed || w.weight_mm != t.weight_mm
+            });
+            if mixed {
+                keep(&mut plan, &mut fixed_wires, "wires differ in colour, cross-section, part number, wire number, dash or weight");
+                continue;
+            }
+            let free = ws.iter().any(|w| {
+                [w.points[0], *w.points.last().unwrap()].iter().any(|&e| {
+                    !attached(e, w.id, &all_ends, &anchors)
+                })
+            });
+            if free {
+                keep(&mut plan, &mut fixed_wires, "a wire has a free end that touches nothing");
+                continue;
+            }
+            // 端子: 配線の上にあるピンとラベル。同じ位置ならピン (向きを持つ) が先
+            let on_group = |q: Point| ws.iter().any(|w| on_wire(w, &q));
+            let mut terms: Vec<(Point, Option<Dir>)> = Vec::new();
+            for q in &pins {
+                if on_group(q.pos) && !terms.iter().any(|t| same(t.0, q.pos)) {
+                    terms.push((q.pos, Some(q.dir)));
+                }
+            }
+            for &q in &labels {
+                if on_group(q) && !terms.iter().any(|t| same(t.0, q)) {
+                    terms.push((q, None));
+                }
+            }
+            terms.sort_by_key(|t| quant(t.0));
+            if terms.len() < 2 {
+                keep(&mut plan, &mut fixed_wires, "fewer than two terminals");
+                continue;
+            }
+            units.push(Unit {
+                net: net.name.clone(),
+                wires: ws.iter().map(|w| w.id).collect(),
+                junctions: junctions.iter().filter(|j| on_group(j.1)).map(|j| j.0).collect(),
+                template: (*t).clone(),
+                old_lines: ws.iter().map(|w| w.points.clone()).collect(),
+                old_junctions: junctions.iter().filter(|j| on_group(j.1)).map(|j| j.1).collect(),
+                terms,
+                leads: Vec::new(),
+            });
+        }
+    }
+    for name in &opts.nets {
+        if !nets.iter().any(|n| &n.name == name) {
+            plan.unchanged.push((name.clone(), "no such net".to_string()));
+        }
+    }
+
+    // 動かない配線と、引き直さないネットのジャンクション
+    let mut occ = Occ::new(&grid);
+    for id in &fixed_wires {
+        if let Some(w) = wires.get(id) {
+            apply_raster(&mut occ, &rasterize(&grid, &w.points));
+        }
+    }
+    let moving: HashSet<EntityId> = units.iter().flat_map(|u| u.junctions.iter().copied()).collect();
+    for &(id, at) in &junctions {
+        if !moving.contains(&id) {
+            apply_raster(&mut occ, &block_point(&grid, at));
+        }
+    }
+
+    // 引き出し線。出られない端子のある単位は引き直せない
+    let mut failed: Vec<bool> = vec![false; units.len()];
+    for (i, u) in units.iter_mut().enumerate() {
+        let leads: Option<Vec<Lead>> = u.terms.iter().map(|&(pos, dir)| make_lead(&grid, pos, dir)).collect();
+        match leads {
+            Some(l) => {
+                for lead in &l {
+                    occ.reserved[lead.node] = i as u32;
+                }
+                u.leads = l;
+            }
+            None => failed[i] = true,
+        }
+    }
+
+    // 順序: 端子が少なく、範囲が小さい単位から。同点は名前と位置で決める
+    let span = |u: &Unit| -> i64 {
+        let (x0, x1) = u.terms.iter().fold((f64::MAX, f64::MIN), |(a, b), t| (a.min(t.0.x), b.max(t.0.x)));
+        let (y0, y1) = u.terms.iter().fold((f64::MAX, f64::MIN), |(a, b), t| (a.min(t.0.y), b.max(t.0.y)));
+        ((x1 - x0 + y1 - y0) * 1000.0).round() as i64
+    };
+    let mut order: Vec<usize> = (0..units.len()).collect();
+    order.sort_by(|&a, &b| {
+        let (ua, ub) = (&units[a], &units[b]);
+        (ua.terms.len(), span(ua), &ua.net, quant(ua.terms[0].0), a).cmp(&(ub.terms.len(), span(ub), &ub.net, quant(ub.terms[0].0), b))
+    });
+
+    let mut searcher = Searcher::new(&grid);
+    let mut routes: Vec<Option<UnitRoute>> = (0..units.len()).map(|_| None).collect();
+    let mut tries: Vec<u32> = vec![0; units.len()];
+    let mut routed: Vec<usize> = Vec::new();
+    let mut queue: VecDeque<usize> = order.into_iter().collect();
+    let max_rounds = 3;
+
+    // 経路を諦めた単位: 古い配線を動かない障害物にし、それとぶつかる経路は引き直しに回す
+    let settle_failed = |first: usize,
+                         units: &[Unit],
+                         occ: &mut Occ,
+                         routes: &mut Vec<Option<UnitRoute>>,
+                         routed: &mut Vec<usize>,
+                         queue: &mut VecDeque<usize>,
+                         failed: &mut Vec<bool>,
+                         tries: &mut Vec<u32>| {
+        let mut work = vec![first];
+        while let Some(u) = work.pop() {
+            failed[u] = true;
+            let mut entries: Vec<(usize, u8, bool)> = Vec::new();
+            for line in &units[u].old_lines {
+                entries.extend(rasterize(&grid, line));
+            }
+            for &q in &units[u].old_junctions {
+                entries.extend(block_point(&grid, q));
+            }
+            let hit: Vec<usize> = routed.iter().copied().filter(|&v| routes[v].as_ref().is_some_and(|r| conflicts(r, &entries))).collect();
+            for v in hit {
+                if let Some(r) = routes[v].take() {
+                    remove_route(occ, &r);
+                }
+                routed.retain(|&x| x != v);
+                tries[v] += 1;
+                if tries[v] > max_rounds {
+                    work.push(v);
+                } else {
+                    queue.push_front(v);
+                }
+            }
+            apply_raster(occ, &entries);
+        }
+    };
+
+    for u in 0..units.len() {
+        if failed[u] {
+            let mut work_queue = VecDeque::new();
+            settle_failed(u, &units, &mut occ, &mut routes, &mut routed, &mut work_queue, &mut failed, &mut tries);
+            for v in work_queue.into_iter().rev() {
+                queue.push_front(v);
+            }
+        }
+    }
+    queue.retain(|&u| !failed[u]);
+
+    while let Some(u) = queue.pop_front() {
+        if failed[u] {
+            continue;
+        }
+        if let Some(r) = route_unit(&grid, &occ, &mut searcher, &units[u]) {
+            add_route(&mut occ, &r);
+            routes[u] = Some(r);
+            routed.push(u);
+            continue;
+        }
+        // 引き直し: 邪魔をしている最新の経路をいったん外し、この単位を引いてから、外した単位を引き直す
+        let want = {
+            let t = &units[u].terms;
+            let (x0, x1) = t.iter().fold((f64::MAX, f64::MIN), |(a, b), q| (a.min(q.0.x), b.max(q.0.x)));
+            let (y0, y1) = t.iter().fold((f64::MAX, f64::MIN), |(a, b), q| (a.min(q.0.y), b.max(q.0.y)));
+            let m = 20.0 / grid.opts.grid_mm;
+            (
+                (x0 / grid.opts.grid_mm - m) as i64,
+                (y0 / grid.opts.grid_mm - m) as i64,
+                (x1 / grid.opts.grid_mm + m) as i64,
+                (y1 / grid.opts.grid_mm + m) as i64,
+            )
+        };
+        let mut tried: Vec<usize> = Vec::new();
+        let mut done = false;
+        for _ in 0..max_rounds {
+            let victim = routed.iter().rev().copied().find(|&v| {
+                !tried.contains(&v)
+                    && tries[v] < max_rounds
+                    && routes[v].as_ref().is_some_and(|r| r.bbox.0 <= want.2 && r.bbox.2 >= want.0 && r.bbox.1 <= want.3 && r.bbox.3 >= want.1)
+            });
+            let Some(v) = victim else { break };
+            tried.push(v);
+            let at = routed.iter().position(|&x| x == v).unwrap_or(0);
+            let rv = routes[v].take().expect("routed");
+            remove_route(&mut occ, &rv);
+            routed.remove(at);
+            if let Some(r) = route_unit(&grid, &occ, &mut searcher, &units[u]) {
+                add_route(&mut occ, &r);
+                routes[u] = Some(r);
+                routed.push(u);
+                tries[v] += 1;
+                queue.push_front(v);
+                done = true;
+                break;
+            }
+            add_route(&mut occ, &rv);
+            routes[v] = Some(rv);
+            routed.insert(at, v);
+        }
+        if !done {
+            let mut work_queue = VecDeque::new();
+            settle_failed(u, &units, &mut occ, &mut routes, &mut routed, &mut work_queue, &mut failed, &mut tries);
+            for v in work_queue.into_iter().rev() {
+                queue.push_front(v);
+            }
+            queue.retain(|&x| !failed[x]);
+        }
+    }
+
+    // 結果
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    for (i, u) in units.iter().enumerate() {
+        match (&routes[i], failed[i]) {
+            (Some(r), false) => {
+                plan.remove.extend(u.wires.iter().copied());
+                plan.remove.extend(u.junctions.iter().copied());
+                plan.add.extend(emit(u, r));
+                names.insert(u.net.clone());
+            }
+            _ => plan.unchanged.push((u.net.clone(), "no route found; the old wires are kept".to_string())),
+        }
+    }
+    plan.rerouted = names.into_iter().collect();
+    plan
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -863,5 +1504,599 @@ mod tests {
         assert_eq!((lead.points[0], *lead.points.last().unwrap()), (pin.pos, p(58.75, 50.0)));
         let route = connect(&sheet, ("F1", "1"), ("R2", "1")).expect("route");
         assert_eq!((route[0], *route.last().unwrap()), (pin.pos, p(90.0, 50.0)));
+    }
+
+    // ------------------------------------------------------------------
+    // ネットの木・他のネット・計画 (タスク2)
+    // ------------------------------------------------------------------
+
+    use std::collections::BTreeSet;
+
+    /// A ground mark: a net-name symbol whose single pin sits on its top edge.
+    fn gnd() -> SymbolDef {
+        let mut d = def(
+            "gnd",
+            vec![Primitive::Line { pts: vec![p(0.0, 0.0), p(0.0, 4.0)] }, Primitive::Line { pts: vec![p(-3.0, 4.0), p(3.0, 4.0)] }],
+            vec![pin("1", 0.0, 0.0, PinDir::Up)],
+        );
+        d.net = Some("GND".into());
+        d
+    }
+
+    fn all_defs() -> Vec<SymbolDef> {
+        let mut d = defs();
+        d.push(gnd());
+        d
+    }
+
+    fn old_wire(sheet: &mut Sheet, pts: &[(f64, f64)]) -> EntityId {
+        let id = Uuid::new_v4();
+        sheet.entities.insert(
+            id,
+            Entity::Wire(Wire {
+                id,
+                points: pts.iter().map(|&(x, y)| p(x, y)).collect(),
+                color: "black".into(),
+                sq: 0.75,
+                length_m: None,
+                length_source: Default::default(),
+                part_no: None,
+                net: None,
+                dashed: false,
+                weight_mm: None,
+            }),
+        );
+        id
+    }
+
+    fn old_junction(sheet: &mut Sheet, at: (f64, f64)) -> EntityId {
+        let id = Uuid::new_v4();
+        sheet.entities.insert(id, Entity::Junction(Junction { id, at: p(at.0, at.1) }));
+        id
+    }
+
+    fn old_label(sheet: &mut Sheet, at: (f64, f64), name: &str) -> EntityId {
+        let id = Uuid::new_v4();
+        sheet.entities.insert(id, Entity::NetLabel(NetLabel { id, at: p(at.0, at.1), name: name.into(), rotation: 0, attrs: Default::default() }));
+        id
+    }
+
+    fn run(sheet: &Sheet) -> ReroutePlan {
+        plan_reroute(sheet, &all_defs(), &RerouteOptions::default())
+    }
+
+    /// Applies a plan to a copy of the sheet (test only: production code never edits the model).
+    fn apply(sheet: &Sheet, plan: &ReroutePlan) -> Sheet {
+        let mut out = sheet.clone();
+        for id in &plan.remove {
+            assert!(out.entities.remove(id).is_some(), "removed id exists");
+        }
+        for e in &plan.add {
+            out.entities.insert(e.id(), e.clone());
+        }
+        out
+    }
+
+    /// The set of pin groups of all nets, e.g. {["R1:2", "R2:1"]}.
+    fn pin_sets(sheet: &Sheet) -> BTreeSet<Vec<String>> {
+        extract_netlist(sheet, &all_defs())
+            .iter()
+            .map(|n| {
+                let mut v: Vec<String> = n.pins.iter().map(|q| format!("{}:{}", q.reference, q.pin)).collect();
+                v.sort();
+                v
+            })
+            .collect()
+    }
+
+    fn assert_connectivity_kept(sheet: &Sheet, plan: &ReroutePlan) {
+        let after = apply(sheet, plan);
+        assert_eq!(pin_sets(sheet), pin_sets(&after));
+    }
+
+    fn added_wires(plan: &ReroutePlan) -> Vec<&Wire> {
+        plan.add.iter().filter_map(|e| if let Entity::Wire(w) = e { Some(w) } else { None }).collect()
+    }
+
+    fn added_junctions(plan: &ReroutePlan) -> Vec<Point> {
+        plan.add.iter().filter_map(|e| if let Entity::Junction(j) = e { Some(j.at) } else { None }).collect()
+    }
+
+    /// Geometry of a plan without the random ids, for comparing two runs.
+    fn shape(plan: &ReroutePlan) -> (Vec<Vec<(i64, i64)>>, Vec<(i64, i64)>, Vec<String>, Vec<(String, String)>) {
+        let q = |a: Point| ((a.x * 1000.0).round() as i64, (a.y * 1000.0).round() as i64);
+        let wires = added_wires(plan).iter().map(|w| w.points.iter().map(|&a| q(a)).collect()).collect();
+        let junctions = added_junctions(plan).into_iter().map(q).collect();
+        (wires, junctions, plan.rerouted.clone(), plan.unchanged.clone())
+    }
+
+    /// The most branches meeting at any vertex, end or junction of the added wires.
+    fn max_branches(plan: &ReroutePlan) -> u32 {
+        let segs: Vec<(Point, Point)> = added_wires(plan).iter().flat_map(|w| w.points.windows(2).map(|s| (s[0], s[1]))).collect();
+        let mut spots: Vec<Point> = added_wires(plan).iter().flat_map(|w| w.points.iter().copied()).collect();
+        spots.extend(added_junctions(plan));
+        let mut best = 0;
+        for s in spots {
+            let mut dirs = 0u8;
+            for &(a, b) in &segs {
+                let dir = Dir::between(a, b).expect("segment has length");
+                if same(s, a) {
+                    dirs |= dir.bit();
+                } else if same(s, b) {
+                    dirs |= dir.opp().bit();
+                } else if crate::netlist::segment_distance(&s, &a, &b) < CONNECT_EPS {
+                    dirs |= dir.bit() | dir.opp().bit();
+                }
+            }
+            best = best.max(dirs.count_ones());
+        }
+        best
+    }
+
+    fn net_of_pin(sheet: &Sheet, reference: &str, number: &str) -> crate::netlist::Net {
+        extract_netlist(sheet, &all_defs())
+            .into_iter()
+            .find(|n| n.pins.iter().any(|q| q.reference == reference && q.pin == number))
+            .expect("net of pin")
+    }
+
+    fn wire_ends(sheet: &Sheet, net: &crate::netlist::Net) -> Vec<Point> {
+        net.wire_ids
+            .iter()
+            .filter_map(|id| if let Some(Entity::Wire(w)) = sheet.entities.get(id) { Some(w) } else { None })
+            .flat_map(|w| [w.points[0], *w.points.last().unwrap()])
+            .collect()
+    }
+
+    /// Two nets that cross: R1.2 to R4.1 and R2.2 to R3.1, drawn as long diagonals.
+    fn crossing_pair() -> Sheet {
+        let mut sheet = new_sheet();
+        place(&mut sheet, "box2", (50.0, 50.0), "R1");
+        place(&mut sheet, "box2", (50.0, 70.0), "R2");
+        place(&mut sheet, "box2", (100.0, 50.0), "R3");
+        place(&mut sheet, "box2", (100.0, 70.0), "R4");
+        old_wire(&mut sheet, &[(60.0, 50.0), (90.0, 70.0)]);
+        old_wire(&mut sheet, &[(60.0, 70.0), (90.0, 50.0)]);
+        sheet
+    }
+
+    /// A closed room: its left and right ends are walls touching R1 and R2, so a wire from the top half to the bottom half must cross the line between R1 and R2.
+    fn closed_room() -> Sheet {
+        let mut sheet = new_sheet();
+        place(&mut sheet, "box2", (45.0, 50.0), "R1");
+        place(&mut sheet, "box2", (135.0, 50.0), "R2");
+        place(&mut sheet, "cap", (90.0, 25.0), "C1");
+        place(&mut sheet, "cap", (90.0, 75.0), "C2");
+        for x in [65.0, 115.0] {
+            place(&mut sheet, "wall_h", (x, 12.5), "");
+            place(&mut sheet, "wall_h", (x, 87.5), "");
+        }
+        for y in [30.0, 70.0] {
+            place(&mut sheet, "wall_v", (32.5, y), "");
+            place(&mut sheet, "wall_v", (147.5, y), "");
+        }
+        old_wire(&mut sheet, &[(55.0, 50.0), (125.0, 50.0)]);
+        old_wire(&mut sheet, &[(90.0, 35.0), (90.0, 65.0)]);
+        sheet
+    }
+
+    /// Two resistors in a row whose pins face each other; the wire between them is a long loop.
+    fn two_resistors_with_loop() -> (Sheet, EntityId) {
+        let mut sheet = new_sheet();
+        place(&mut sheet, "box2", (50.0, 50.0), "R1");
+        place(&mut sheet, "box2", (100.0, 70.0), "R2");
+        let id = old_wire(&mut sheet, &[(60.0, 50.0), (60.0, 30.0), (75.0, 30.0), (75.0, 70.0), (90.0, 70.0)]);
+        (sheet, id)
+    }
+
+    /// A two-pin net with a long detour is replaced by one new wire that is orthogonal and starts and ends exactly on the pins.
+    /// 遠回りしている2ピンのネットは、ピンぴったりに始まり終わる、直交する1本の新しい配線に置き換わる。
+    #[test]
+    fn a_two_pin_net_is_replaced_by_one_orthogonal_wire() {
+        let (sheet, old) = two_resistors_with_loop();
+        let plan = run(&sheet);
+        assert_eq!(plan.remove, vec![old]);
+        let wires = added_wires(&plan);
+        assert_eq!(wires.len(), 1, "{plan:?}");
+        assert!(orthogonal(&wires[0].points), "{:?}", wires[0].points);
+        assert_eq!((wires[0].points[0], *wires[0].points.last().unwrap()), (p(60.0, 50.0), p(90.0, 70.0)));
+        assert!(plan.add.iter().all(|e| matches!(e, Entity::Wire(_))));
+        assert_eq!((plan.rerouted.len(), plan.unchanged.len()), (1, 0));
+        assert_connectivity_kept(&sheet, &plan);
+    }
+
+    /// A net with three terminals becomes a tree with exactly one T, and the T gets a junction dot.
+    /// 端子が3つのネットは、T字の分岐が1か所だけの木になり、分岐点にはジャンクションの点が付く。
+    #[test]
+    fn a_three_terminal_net_gets_one_t_and_a_junction() {
+        let mut sheet = new_sheet();
+        place(&mut sheet, "box2", (50.0, 50.0), "R1");
+        place(&mut sheet, "box2", (110.0, 50.0), "R2");
+        place(&mut sheet, "cap", (80.0, 80.0), "C1");
+        old_wire(&mut sheet, &[(60.0, 50.0), (80.0, 50.0)]);
+        old_wire(&mut sheet, &[(80.0, 50.0), (100.0, 50.0)]);
+        old_wire(&mut sheet, &[(80.0, 50.0), (80.0, 70.0)]);
+        old_junction(&mut sheet, (80.0, 50.0));
+        let plan = run(&sheet);
+        assert_eq!(plan.remove.len(), 4);
+        assert_eq!(added_junctions(&plan).len(), 1, "{plan:?}");
+        assert_eq!(added_wires(&plan).len(), 3);
+        assert_eq!(max_branches(&plan), 3);
+        assert_connectivity_kept(&sheet, &plan);
+    }
+
+    /// Four terminals around one point never meet in a four-way point: the tree makes two Ts, each with a junction.
+    /// 1点のまわりに4つの端子があっても、4本が1点で出会う十字にはならず、ジャンクション付きのT字が2か所になる。
+    #[test]
+    fn four_terminals_around_one_point_never_make_a_four_way_point() {
+        let mut sheet = new_sheet();
+        place(&mut sheet, "box2", (50.0, 50.0), "R1");
+        place(&mut sheet, "box2", (120.0, 50.0), "R2");
+        place(&mut sheet, "cap", (85.0, 20.0), "C1");
+        place(&mut sheet, "cap", (85.0, 80.0), "C2");
+        old_wire(&mut sheet, &[(60.0, 50.0), (85.0, 50.0)]);
+        old_wire(&mut sheet, &[(110.0, 50.0), (85.0, 50.0)]);
+        old_wire(&mut sheet, &[(85.0, 30.0), (85.0, 50.0)]);
+        old_wire(&mut sheet, &[(85.0, 70.0), (85.0, 50.0)]);
+        old_junction(&mut sheet, (85.0, 50.0));
+        let plan = run(&sheet);
+        assert_eq!(plan.rerouted.len(), 1, "{plan:?}");
+        assert!(max_branches(&plan) <= 3, "{plan:?}");
+        assert_eq!(added_junctions(&plan).len(), 2, "{plan:?}");
+        assert_connectivity_kept(&sheet, &plan);
+    }
+
+    /// A new route never passes over a pin of another part, because the netlist would join that pin to the wire.
+    /// 新しい配線は、別の部品のピンの上を通らない。通るとネットリスト上でそのピンが配線につながってしまうため。
+    #[test]
+    fn a_route_never_passes_over_another_nets_pin() {
+        let mut sheet = new_sheet();
+        place(&mut sheet, "box2", (50.0, 50.0), "R1");
+        place(&mut sheet, "box2", (90.0, 50.0), "R2");
+        place(&mut sheet, "box2", (130.0, 50.0), "R3");
+        old_wire(&mut sheet, &[(60.0, 50.0), (60.0, 30.0), (120.0, 30.0), (120.0, 50.0)]);
+        let plan = run(&sheet);
+        assert_eq!(plan.rerouted.len(), 1, "{plan:?}");
+        let (a, b) = (pin_of(&sheet, &all_defs(), "R2", "1").pos, pin_of(&sheet, &all_defs(), "R2", "2").pos);
+        for w in added_wires(&plan) {
+            assert!(!on_wire(w, &a) && !on_wire(w, &b), "{:?}", w.points);
+        }
+        assert_connectivity_kept(&sheet, &plan);
+    }
+
+    /// A new route never runs over a lone net label, because the netlist would join the label to the wire.
+    /// 新しい配線は、ぽつんと置かれたネットラベルの上を通らない。通るとネットリスト上でラベルが配線につながってしまうため。
+    #[test]
+    fn a_route_never_passes_over_a_lone_net_label() {
+        let mut sheet = new_sheet();
+        place(&mut sheet, "box2", (50.0, 50.0), "R1");
+        place(&mut sheet, "box2", (100.0, 50.0), "R2");
+        old_wire(&mut sheet, &[(60.0, 50.0), (60.0, 30.0), (90.0, 30.0), (90.0, 50.0)]);
+        old_label(&mut sheet, (75.3, 50.0), "LONE");
+        let plan = run(&sheet);
+        assert_eq!(plan.rerouted.len(), 1, "{plan:?}");
+        for w in added_wires(&plan) {
+            assert!(!on_wire(w, &p(75.3, 50.0)), "{:?}", w.points);
+        }
+        assert_connectivity_kept(&sheet, &plan);
+    }
+
+    /// Two nets that are drawn close together never end up sharing a wire end, because the netlist would merge them.
+    /// 近くに描かれた2つのネットの新しい配線は、端点を共有しない。共有するとネットリスト上で1つに合体してしまうため。
+    #[test]
+    fn two_nets_never_share_a_wire_endpoint() {
+        let sheet = crossing_pair();
+        let plan = run(&sheet);
+        assert_eq!(plan.rerouted.len(), 2, "{plan:?}");
+        let after = apply(&sheet, &plan);
+        let (n1, n2) = (net_of_pin(&after, "R1", "2"), net_of_pin(&after, "R2", "2"));
+        let (e1, e2) = (wire_ends(&after, &n1), wire_ends(&after, &n2));
+        assert!(!e1.is_empty() && !e2.is_empty());
+        for a in &e1 {
+            assert!(!e2.iter().any(|b| same(*a, *b)), "shared end {a:?}");
+        }
+        assert_connectivity_kept(&sheet, &plan);
+    }
+
+    /// When the only way is across another net, the wire crosses it at a right angle without touching it.
+    /// 他のネットを横切るしかないときは、直角に横切るだけで、つながらない。
+    #[test]
+    fn a_perpendicular_crossing_is_used_when_it_cannot_be_avoided() {
+        let sheet = closed_room();
+        let plan = run(&sheet);
+        assert_eq!(plan.rerouted.len(), 2, "{plan:?}");
+        let after = apply(&sheet, &plan);
+        let (horizontal, vertical) = (net_of_pin(&after, "R1", "2"), net_of_pin(&after, "C1", "2"));
+        let segs = |net: &crate::netlist::Net| -> Vec<(Point, Point)> {
+            net.wire_ids
+                .iter()
+                .filter_map(|id| if let Some(Entity::Wire(w)) = after.entities.get(id) { Some(w) } else { None })
+                .flat_map(|w| w.points.windows(2).map(|s| (s[0], s[1])).collect::<Vec<_>>())
+                .collect()
+        };
+        let crossings = segs(&horizontal)
+            .iter()
+            .flat_map(|h| segs(&vertical).into_iter().map(move |v| (*h, v)))
+            .filter(|((h0, h1), (v0, v1))| {
+                h0.y == h1.y && v0.x == v1.x && v0.x > h0.x.min(h1.x) && v0.x < h0.x.max(h1.x) && h0.y > v0.y.min(v1.y) && h0.y < v0.y.max(v1.y)
+            })
+            .count();
+        assert_eq!(crossings, 1);
+        assert_connectivity_kept(&sheet, &plan);
+    }
+
+    /// A net whose wires have different colours is left as it is, and the reply says why.
+    /// 線の色がまちまちなネットは、そのまま残し、理由を知らせる。
+    #[test]
+    fn a_net_with_mixed_wire_colours_is_left_unchanged_with_a_reason() {
+        let (mut sheet, old) = two_resistors_with_loop();
+        let second = old_wire(&mut sheet, &[(60.0, 50.0), (60.0, 45.0)]);
+        let _ = second;
+        if let Some(Entity::Wire(w)) = sheet.entities.get_mut(&old) {
+            w.color = "red".into();
+        }
+        let plan = run(&sheet);
+        assert!(plan.remove.is_empty() && plan.add.is_empty(), "{plan:?}");
+        assert!(plan.rerouted.is_empty());
+        assert_eq!(plan.unchanged.len(), 1);
+        assert!(plan.unchanged[0].1.contains("colour"), "{:?}", plan.unchanged);
+    }
+
+    /// A net whose wire is used by a cable run is left as it is, so the cable keeps its wire.
+    /// ケーブルの区間が使っている配線のネットは、ケーブルが配線を失わないよう、そのまま残す。
+    #[test]
+    fn a_net_used_by_a_cable_run_is_left_unchanged() {
+        let (mut sheet, old) = two_resistors_with_loop();
+        let id = Uuid::new_v4();
+        sheet.entities.insert(
+            id,
+            Entity::Cable(Cable {
+                id,
+                reference: "W1".into(),
+                part_no: String::new(),
+                core_count: 1,
+                sq: 0.0,
+                points: vec![],
+                cores: vec![CableCore { core: "1".into(), end_a: Some(CoreEnd::Wire { wire: old }), ..Default::default() }],
+                shield: None,
+                length_m: None,
+                run: vec![p(10.0, 100.0), p(20.0, 100.0)],
+            }),
+        );
+        let plan = run(&sheet);
+        assert!(plan.remove.is_empty() && plan.add.is_empty(), "{plan:?}");
+        assert_eq!(plan.unchanged.len(), 1);
+        assert!(plan.unchanged[0].1.contains("cable"), "{:?}", plan.unchanged);
+    }
+
+    /// A net that cannot be routed keeps its old wires and is reported.
+    /// 経路が見つからないネットは、古い配線をそのまま残し、理由を知らせる。
+    #[test]
+    fn an_unroutable_net_keeps_its_old_wires() {
+        let mut sheet = new_sheet();
+        place(&mut sheet, "box2", (50.0, 50.0), "R1");
+        place(&mut sheet, "box2", (130.0, 50.0), "R2");
+        place(&mut sheet, "wall_h", (130.0, 35.0), "");
+        place(&mut sheet, "wall_h", (130.0, 65.0), "");
+        place(&mut sheet, "wall_v", (97.5, 50.0), "");
+        place(&mut sheet, "wall_v", (162.5, 50.0), "");
+        old_wire(&mut sheet, &[(60.0, 50.0), (120.0, 50.0)]);
+        let plan = run(&sheet);
+        assert!(plan.remove.is_empty() && plan.add.is_empty(), "{plan:?}");
+        assert_eq!(plan.unchanged.len(), 1);
+        assert!(plan.unchanged[0].1.contains("no route"), "{:?}", plan.unchanged);
+    }
+
+    /// Running the planner twice on the same sheet gives the same wires, in the same order.
+    /// 同じ図面に2回かけても、同じ配線が同じ順序で得られる。
+    #[test]
+    fn the_result_is_deterministic() {
+        let sheet = crossing_pair();
+        assert!(!shape(&run(&sheet)).0.is_empty());
+        assert_eq!(shape(&run(&sheet)), shape(&run(&sheet)));
+        let room = closed_room();
+        assert_eq!(shape(&run(&room)), shape(&run(&room)));
+    }
+
+    /// A net named in the request is rerouted and the others are reported as not selected; an unknown name is reported too.
+    /// 名前を指定したネットだけを引き直し、ほかのネットは「選ばれていない」と知らせる。存在しない名前もそう知らせる。
+    #[test]
+    fn only_the_named_nets_are_rerouted() {
+        let sheet = crossing_pair();
+        let nets = extract_netlist(&sheet, &all_defs());
+        let first = nets[0].name.clone();
+        let opts = RerouteOptions { nets: vec![first.clone(), "NO_SUCH_NET".into()], ..Default::default() };
+        let plan = plan_reroute(&sheet, &all_defs(), &opts);
+        assert_eq!(plan.rerouted, vec![first]);
+        assert!(plan.unchanged.iter().any(|(n, r)| n == &nets[1].name && r.contains("not selected")), "{:?}", plan.unchanged);
+        assert!(plan.unchanged.iter().any(|(n, r)| n == "NO_SUCH_NET" && r.contains("no such net")), "{:?}", plan.unchanged);
+        assert_connectivity_kept(&sheet, &plan);
+    }
+
+    /// New wires carry the colour, cross-section, part number, wire number, dash, weight and length of the old wires.
+    /// 新しい配線には、古い配線の色・線径・品番・線番・破線・太さ・長さがそのまま引き継がれる。
+    #[test]
+    fn new_wires_keep_the_attributes_of_the_old_wires() {
+        let (mut sheet, old) = two_resistors_with_loop();
+        if let Some(Entity::Wire(w)) = sheet.entities.get_mut(&old) {
+            w.color = "red".into();
+            w.sq = 1.5;
+            w.part_no = Some("WIRE-15".into());
+            w.net = Some("W7".into());
+            w.dashed = true;
+            w.weight_mm = Some(0.5);
+            w.length_m = Some(2.5);
+        }
+        let plan = run(&sheet);
+        let wires = added_wires(&plan);
+        assert!(!wires.is_empty());
+        for w in wires {
+            assert_eq!(
+                (w.color.as_str(), w.sq, w.part_no.as_deref(), w.net.as_deref(), w.dashed, w.weight_mm, w.length_m),
+                ("red", 1.5, Some("WIRE-15"), Some("W7"), true, Some(0.5), Some(2.5))
+            );
+        }
+    }
+
+    /// A net with a wire end that touches nothing is left as it is, because the new route could not know what that end is for.
+    /// 何にもつながっていない配線の端があるネットは、その端が何のためか分からないので、そのまま残す。
+    #[test]
+    fn a_net_with_a_free_wire_end_is_left_unchanged() {
+        let (mut sheet, _) = two_resistors_with_loop();
+        old_wire(&mut sheet, &[(60.0, 50.0), (60.0, 45.0)]);
+        let plan = run(&sheet);
+        assert!(plan.remove.is_empty() && plan.add.is_empty(), "{plan:?}");
+        assert_eq!(plan.unchanged.len(), 1);
+        assert!(plan.unchanged[0].1.contains("free end"), "{:?}", plan.unchanged);
+    }
+
+    /// Several plain nets keep exactly the same pin groups after the reroute.
+    /// ふつうのネットが何本あっても、引き直した後のピンのまとまりは元とまったく同じになる。
+    #[test]
+    fn plain_nets_keep_the_same_pin_groups() {
+        let sheet = crossing_pair();
+        let plan = run(&sheet);
+        assert!(!plan.add.is_empty());
+        assert_connectivity_kept(&sheet, &plan);
+        let room = closed_room();
+        let plan = run(&room);
+        assert!(!plan.add.is_empty());
+        assert_connectivity_kept(&room, &plan);
+    }
+
+    /// Nets joined only by net labels keep their pins, and each label stays on its wire.
+    /// ネットラベルだけでつながったネットも、ピンのまとまりは変わらず、ラベルは配線の上に残る。
+    #[test]
+    fn nets_joined_by_net_labels_keep_their_pins_and_labels() {
+        let mut sheet = new_sheet();
+        place(&mut sheet, "box2", (50.0, 50.0), "R1");
+        place(&mut sheet, "box2", (150.0, 90.0), "R2");
+        old_wire(&mut sheet, &[(60.0, 50.0), (60.0, 35.0), (80.0, 35.0)]);
+        old_label(&mut sheet, (80.0, 35.0), "SIG");
+        old_wire(&mut sheet, &[(140.0, 90.0), (120.0, 90.0), (120.0, 70.0)]);
+        old_label(&mut sheet, (120.0, 70.0), "SIG");
+        let plan = run(&sheet);
+        assert_eq!(plan.rerouted, vec!["SIG".to_string()], "{plan:?}");
+        assert_connectivity_kept(&sheet, &plan);
+        let after = apply(&sheet, &plan);
+        for at in [p(80.0, 35.0), p(120.0, 70.0)] {
+            assert!(crate::netlist::label_is_attached(&after, &all_defs(), &at), "label at {at:?} is not on a wire");
+        }
+        assert_eq!(net_of_pin(&after, "R1", "2").name, "SIG");
+    }
+
+    /// Nets joined through ground marks (net-name symbols) keep their pins, and the marks stay connected to their wires.
+    /// 接地の印 (ネット名を持つシンボル) でつながったネットも、ピンのまとまりは変わらず、印は配線につながったままになる。
+    #[test]
+    fn nets_joined_by_ground_marks_keep_their_pins() {
+        let mut sheet = new_sheet();
+        place(&mut sheet, "box2", (50.0, 50.0), "R1");
+        place(&mut sheet, "box2", (130.0, 50.0), "R2");
+        place(&mut sheet, "gnd", (60.0, 90.0), "G1");
+        place(&mut sheet, "gnd", (140.0, 80.0), "G2");
+        old_wire(&mut sheet, &[(60.0, 50.0), (75.0, 50.0), (75.0, 70.0), (60.0, 70.0), (60.0, 90.0)]);
+        old_wire(&mut sheet, &[(140.0, 50.0), (150.0, 50.0), (150.0, 65.0), (140.0, 65.0), (140.0, 80.0)]);
+        let plan = run(&sheet);
+        assert_eq!(plan.rerouted, vec!["GND".to_string()], "{plan:?}");
+        assert!(!plan.add.is_empty());
+        assert_connectivity_kept(&sheet, &plan);
+    }
+
+    /// A tiny pseudo-random generator so the generated sheets are the same on every run.
+    fn lcg(seed: &mut u64) -> usize {
+        *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        (*seed >> 33) as usize
+    }
+
+    /// For many generated sheets (a grid of parts joined by random diagonal wires), the reroute keeps every net's pin group.
+    /// 部品を格子に並べてランダムに配線した多数の図面で、引き直した後もネットのピンのまとまりは元と同じになる。
+    #[test]
+    fn generated_sheets_keep_the_same_pin_groups() {
+        for seed in 1..=25u64 {
+            let mut state = seed * 7919;
+            let mut sheet = new_sheet();
+            let mut pins: Vec<Point> = Vec::new();
+            for row in 0..3 {
+                for col in 0..4 {
+                    let at = (50.0 + col as f64 * 55.0, 50.0 + row as f64 * 45.0);
+                    let name = format!("R{}", row * 4 + col + 1);
+                    place(&mut sheet, if (row + col) % 2 == 0 { "box2" } else { "cap" }, at, &name);
+                }
+            }
+            for q in pin_points(&sheet, &all_defs()) {
+                pins.push(q.pos);
+            }
+            for _ in 0..(3 + lcg(&mut state) % 6) {
+                let (a, b) = (pins[lcg(&mut state) % pins.len()], pins[lcg(&mut state) % pins.len()]);
+                if same(a, b) {
+                    continue;
+                }
+                old_wire(&mut sheet, &[(a.x, a.y), (b.x, b.y)]);
+            }
+            let plan = run(&sheet);
+            assert_connectivity_kept(&sheet, &plan);
+            for w in added_wires(&plan) {
+                assert!(orthogonal(&w.points), "seed {seed}: {:?}", w.points);
+            }
+            assert!(max_branches(&plan) <= 3, "seed {seed}");
+        }
+    }
+
+    /// A part turned by 90 degrees sends its wire out in the turned pin direction, so the wire first runs down from a pin that points down.
+    /// 90度回した部品は、回したあとのピンの向きに配線を出す。下向きになったピンからは、まず下へ線が出る。
+    #[test]
+    fn a_rotated_part_sends_its_wire_out_in_the_turned_direction() {
+        let mut sheet = new_sheet();
+        let r1 = place(&mut sheet, "box2", (50.0, 50.0), "R1");
+        if let Some(Entity::Symbol(s)) = sheet.entities.get_mut(&r1) {
+            s.rotation = 90;
+        }
+        place(&mut sheet, "box2", (100.0, 80.0), "R2");
+        let start = pin_of(&sheet, &all_defs(), "R1", "2").pos;
+        old_wire(&mut sheet, &[(start.x, start.y), (90.0, 80.0)]);
+        let plan = run(&sheet);
+        let wires = added_wires(&plan);
+        let first = wires.iter().find(|w| same(w.points[0], start) || same(*w.points.last().unwrap(), start)).expect("wire at the pin");
+        let pts: Vec<Point> = if same(first.points[0], start) { first.points.clone() } else { first.points.iter().rev().copied().collect() };
+        assert_eq!(pts[0].x, pts[1].x, "{pts:?}");
+        assert!(pts[1].y > pts[0].y, "{pts:?}");
+        assert_connectivity_kept(&sheet, &plan);
+    }
+
+    /// A pin that is not on the routing grid keeps a wire that starts exactly on the pin.
+    /// 格子の上にないピンにも、ピンの位置ぴったりから始まる配線がつく。
+    #[test]
+    fn a_wire_at_an_off_grid_pin_starts_exactly_on_the_pin() {
+        let mut sheet = new_sheet();
+        place(&mut sheet, "freebox", (50.0, 50.0), "F1");
+        place(&mut sheet, "box2", (100.0, 70.0), "R2");
+        let start = pin_of(&sheet, &all_defs(), "F1", "1").pos;
+        old_wire(&mut sheet, &[(start.x, start.y), (90.0, 70.0)]);
+        let plan = run(&sheet);
+        assert_eq!(plan.rerouted.len(), 1, "{plan:?}");
+        assert!(added_wires(&plan).iter().any(|w| w.points[0] == start || *w.points.last().unwrap() == start), "{plan:?}");
+        assert_connectivity_kept(&sheet, &plan);
+    }
+
+    /// A net that is left unchanged stays where it is and the other nets route around it without touching it.
+    /// そのまま残すネットの配線は動かさず、ほかのネットはそれにつながらないように避けて引かれる。
+    #[test]
+    fn a_net_left_unchanged_is_avoided_by_the_other_nets() {
+        let mut sheet = new_sheet();
+        place(&mut sheet, "box2", (50.0, 50.0), "R1");
+        place(&mut sheet, "box2", (100.0, 50.0), "R2");
+        place(&mut sheet, "cap", (75.0, 20.0), "C1");
+        place(&mut sheet, "cap", (75.0, 80.0), "C2");
+        let red = old_wire(&mut sheet, &[(60.0, 50.0), (75.0, 50.0)]);
+        old_wire(&mut sheet, &[(75.0, 50.0), (90.0, 50.0)]);
+        if let Some(Entity::Wire(w)) = sheet.entities.get_mut(&red) {
+            w.color = "red".into();
+        }
+        old_wire(&mut sheet, &[(75.0, 30.0), (75.0, 70.0)]);
+        let plan = run(&sheet);
+        assert_eq!(plan.unchanged.len(), 1, "{plan:?}");
+        assert!(!plan.remove.contains(&red));
+        assert_eq!(plan.rerouted.len(), 1, "{plan:?}");
+        assert_connectivity_kept(&sheet, &plan);
     }
 }

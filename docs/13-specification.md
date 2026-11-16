@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3404 specification clauses** across 6 areas.
+**3425 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -930,6 +930,27 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A text note in the way makes the wire go around the text box. <sub>`the_wire_goes_around_a_text_box_in_the_way`</sub>
 - When a pin is walled in so that no wire can reach it, no route is returned. <sub>`a_pin_that_is_walled_in_has_no_route`</sub>
 - A pin that is not on the routing grid gets a short lead that starts exactly at the pin and ends on the grid. <sub>`an_off_grid_pin_gets_a_lead_that_starts_exactly_at_the_pin`</sub>
+- A two-pin net with a long detour is replaced by one new wire that is orthogonal and starts and ends exactly on the pins. <sub>`a_two_pin_net_is_replaced_by_one_orthogonal_wire`</sub>
+- A net with three terminals becomes a tree with exactly one T, and the T gets a junction dot. <sub>`a_three_terminal_net_gets_one_t_and_a_junction`</sub>
+- Four terminals around one point never meet in a four-way point: the tree makes two Ts, each with a junction. <sub>`four_terminals_around_one_point_never_make_a_four_way_point`</sub>
+- A new route never passes over a pin of another part, because the netlist would join that pin to the wire. <sub>`a_route_never_passes_over_another_nets_pin`</sub>
+- A new route never runs over a lone net label, because the netlist would join the label to the wire. <sub>`a_route_never_passes_over_a_lone_net_label`</sub>
+- Two nets that are drawn close together never end up sharing a wire end, because the netlist would merge them. <sub>`two_nets_never_share_a_wire_endpoint`</sub>
+- When the only way is across another net, the wire crosses it at a right angle without touching it. <sub>`a_perpendicular_crossing_is_used_when_it_cannot_be_avoided`</sub>
+- A net whose wires have different colours is left as it is, and the reply says why. <sub>`a_net_with_mixed_wire_colours_is_left_unchanged_with_a_reason`</sub>
+- A net whose wire is used by a cable run is left as it is, so the cable keeps its wire. <sub>`a_net_used_by_a_cable_run_is_left_unchanged`</sub>
+- A net that cannot be routed keeps its old wires and is reported. <sub>`an_unroutable_net_keeps_its_old_wires`</sub>
+- Running the planner twice on the same sheet gives the same wires, in the same order. <sub>`the_result_is_deterministic`</sub>
+- A net named in the request is rerouted and the others are reported as not selected; an unknown name is reported too. <sub>`only_the_named_nets_are_rerouted`</sub>
+- New wires carry the colour, cross-section, part number, wire number, dash, weight and length of the old wires. <sub>`new_wires_keep_the_attributes_of_the_old_wires`</sub>
+- A net with a wire end that touches nothing is left as it is, because the new route could not know what that end is for. <sub>`a_net_with_a_free_wire_end_is_left_unchanged`</sub>
+- Several plain nets keep exactly the same pin groups after the reroute. <sub>`plain_nets_keep_the_same_pin_groups`</sub>
+- Nets joined only by net labels keep their pins, and each label stays on its wire. <sub>`nets_joined_by_net_labels_keep_their_pins_and_labels`</sub>
+- Nets joined through ground marks (net-name symbols) keep their pins, and the marks stay connected to their wires. <sub>`nets_joined_by_ground_marks_keep_their_pins`</sub>
+- For many generated sheets (a grid of parts joined by random diagonal wires), the reroute keeps every net's pin group. <sub>`generated_sheets_keep_the_same_pin_groups`</sub>
+- A part turned by 90 degrees sends its wire out in the turned pin direction, so the wire first runs down from a pin that points down. <sub>`a_rotated_part_sends_its_wire_out_in_the_turned_direction`</sub>
+- A pin that is not on the routing grid keeps a wire that starts exactly on the pin. <sub>`a_wire_at_an_off_grid_pin_starts_exactly_on_the_pin`</sub>
+- A net that is left unchanged stays where it is and the other nets route around it without touching it. <sub>`a_net_left_unchanged_is_avoided_by_the_other_nets`</sub>
 
 ### search
 
