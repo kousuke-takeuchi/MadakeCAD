@@ -34,6 +34,7 @@ pub mod plc;
 pub mod relay_xref;
 pub mod report_sheet;
 pub mod reports;
+pub mod route;
 pub mod search;
 pub mod shape;
 pub mod sim;

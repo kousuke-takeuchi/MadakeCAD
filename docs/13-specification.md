@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3398 specification clauses** across 6 areas.
+**3404 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -921,6 +921,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A static plug or socket carrying a pole number shows it in the wire list (X44A:2) instead of its only pin 1; one without a pole is unchanged. <sub>`wire_list_shows_the_pole_of_a_mate_half`</sub>
 - A run-cable core that lands on a port pin shows its contact in the From-To row (39:U3/VBUS). <sub>`a_core_on_a_port_pin_shows_its_contact`</sub>
 - The wire list keeps one row for a wire between two USB ports, from port pin to port pin, with no contact in the text. <sub>`a_usb_wire_is_one_wire_list_row`</sub>
+
+### route
+
+- Two pins that face each other on one line are joined by one straight wire. <sub>`facing_pins_on_one_line_get_a_straight_wire`</sub>
+- Two pins that are not in line are joined by an L shape with exactly one bend. <sub>`pins_not_in_line_get_an_l_shaped_wire`</sub>
+- A symbol standing between two pins makes the wire go around it, never through its outline. <sub>`the_wire_goes_around_a_symbol_in_the_way`</sub>
+- A text note in the way makes the wire go around the text box. <sub>`the_wire_goes_around_a_text_box_in_the_way`</sub>
+- When a pin is walled in so that no wire can reach it, no route is returned. <sub>`a_pin_that_is_walled_in_has_no_route`</sub>
+- A pin that is not on the routing grid gets a short lead that starts exactly at the pin and ends on the grid. <sub>`an_off_grid_pin_gets_a_lead_that_starts_exactly_at_the_pin`</sub>
 
 ### search
 

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3398仕様項目**。
+全6領域・**3404仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -921,6 +921,15 @@
 - 極番号 (pole) を持つ静的なプラグ・ソケットは、電線リストで唯一のピン1の代わりにその極番号 (X44A:2) で表記される。極番号の無いものは従来どおり。 <sub>`wire_list_shows_the_pole_of_a_mate_half`</sub>
 - ポートのピンに着く区間ケーブルの芯は、From-To の行に接点を書く (39:U3/VBUS)。 <sub>`a_core_on_a_port_pin_shows_its_contact`</sub>
 - 電線リストでは、2つの USB ポートの間の配線はポートのピンからポートのピンへの1行のまま (接点は書かない)。 <sub>`a_usb_wire_is_one_wire_list_row`</sub>
+
+### route
+
+- 向かい合ったピンが一直線上にあるときは、1本の直線の配線でつながる。 <sub>`facing_pins_on_one_line_get_a_straight_wire`</sub>
+- 一直線上にないピンどうしは、曲がりが1回だけのL字の配線でつながる。 <sub>`pins_not_in_line_get_an_l_shaped_wire`</sub>
+- 2つのピンの間にシンボルがあるときは、外形の中を通らずに迂回する。 <sub>`the_wire_goes_around_a_symbol_in_the_way`</sub>
+- 途中に文字の注記があるときは、文字の枠を避けて迂回する。 <sub>`the_wire_goes_around_a_text_box_in_the_way`</sub>
+- ピンが壁で完全に囲まれていて届かないときは、経路なしになる。 <sub>`a_pin_that_is_walled_in_has_no_route`</sub>
+- 格子の上にないピンには、ピンの位置ぴったりから始まり格子の上で終わる短い引き出し線がつく。 <sub>`an_off_grid_pin_gets_a_lead_that_starts_exactly_at_the_pin`</sub>
 
 ### search
 
