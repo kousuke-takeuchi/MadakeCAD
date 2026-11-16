@@ -544,7 +544,8 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
                 vec![s.id],
             ));
         }
-        if s.reference.trim().is_empty() {
+        // ネット名を持つシンボル (接地の印など) は参照記号を持たないのが普通なので、未設定を指摘しない
+        if s.reference.trim().is_empty() && def.net_name().is_none() {
             diags.push(diag(
                 Severity::Warning,
                 "erc.empty_reference",
@@ -597,7 +598,8 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
     let mut by_ref: BTreeMap<&str, Vec<(EntityId, String)>> = BTreeMap::new();
     for e in sheet.entities.values() {
         if let Entity::Symbol(s) = e {
-            if s.reference.trim().is_empty() {
+            // 接地の印 (ネット名を持つシンボル) は部品ではないので、同じ参照記号でも重複にしない
+            if s.reference.trim().is_empty() || defs.get(s).is_some_and(|d| d.net_name().is_some()) {
                 continue;
             }
             let category = defs
@@ -1346,6 +1348,52 @@ mod tests {
         symbols.push(crate::symbol::test_net_mark("test_gnd_mark", "GND"));
         symbols.push(crate::symbol::test_net_mark("test_pe_mark", "PE"));
         verify_sheet(&sheet, &symbols).into_iter().filter(|d| d.code == LABEL_CONFLICT).collect()
+    }
+
+    /// A ground mark (a symbol whose definition carries a net name) without a reference designator is not flagged, while an ordinary symbol without one still is.
+    /// 接地の印 (定義にネット名を持つシンボル) に参照記号が無くても指摘しない。普通のシンボルに無ければ、これまでどおり指摘する。
+    #[test]
+    fn a_ground_mark_needs_no_reference_designator() {
+        let sheet = sheet_with(vec![
+            wire(&[(0.0, 10.0), (20.0, 10.0)]),
+            mark("test_gnd_mark", 0.0, 10.0),
+            mark("test_gnd_mark", 20.0, 10.0),
+            symbol("resistor", "", 100.0, 50.0),
+        ]);
+        let mut symbols = sheet_symbol_defs(&sheet);
+        symbols.push(crate::symbol::test_net_mark("test_gnd_mark", "GND"));
+        let empty: Vec<_> = verify_sheet(&sheet, &symbols).into_iter().filter(|d| d.code == "erc.empty_reference").collect();
+        assert_eq!(empty.len(), 1, "{empty:?}");
+        assert!(empty[0].message.contains("resistor"), "{empty:?}");
+    }
+
+    /// Ground marks that happen to share a reference designator are not reported as duplicates, because a mark is not a part.
+    /// 同じ参照記号を持つ接地の印どうしは重複として指摘しない (印は部品ではない)。
+    #[test]
+    fn ground_marks_sharing_a_reference_are_not_duplicates() {
+        let mut a = mark("test_gnd_mark", 0.0, 10.0);
+        let mut b = mark("test_gnd_mark", 20.0, 10.0);
+        for e in [&mut a, &mut b] {
+            if let Entity::Symbol(s) = e {
+                s.reference = "GND".into();
+            }
+        }
+        let sheet = sheet_with(vec![wire(&[(0.0, 10.0), (20.0, 10.0)]), a, b]);
+        let mut symbols = sheet_symbol_defs(&sheet);
+        symbols.push(crate::symbol::test_net_mark("test_gnd_mark", "GND"));
+        let dups: Vec<_> = verify_sheet(&sheet, &symbols).into_iter().filter(|d| d.code == "erc.duplicate_reference").collect();
+        assert!(dups.is_empty(), "{dups:?}");
+    }
+
+    /// A symbol whose net name is only blanks is an ordinary symbol, so a missing reference designator is still reported.
+    /// ネット名が空白だけのシンボルは普通のシンボルなので、参照記号が無ければ指摘する。
+    #[test]
+    fn a_blank_net_name_still_needs_a_reference_designator() {
+        let sheet = sheet_with(vec![mark("test_blank_mark", 0.0, 10.0)]);
+        let mut symbols = sheet_symbol_defs(&sheet);
+        symbols.push(crate::symbol::test_net_mark("test_blank_mark", "  "));
+        let empty = verify_sheet(&sheet, &symbols).into_iter().filter(|d| d.code == "erc.empty_reference").count();
+        assert_eq!(empty, 1);
     }
 
     fn mark(symbol_id: &str, x: f64, y: f64) -> Entity {

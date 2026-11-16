@@ -1479,6 +1479,8 @@ is drawn for it. A missing or blank name is an ordinary symbol; bundled symbols 
 The name also works across sheets, in the label-conflict check, in simulation and in KiCad
 export; when a net carries more than one name, the existing label-conflict warning reports it.
 
+A mark needs no reference designator: the checks for missing and repeated designators skip it, the parts list leaves it out, and the wire list writes a wire end on a mark as the mark's net name (2026-11-16).
+
 ## Summary by impact
 
 | Impact | Gaps |

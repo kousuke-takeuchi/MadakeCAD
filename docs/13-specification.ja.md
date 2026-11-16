@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3346仕様項目**。
+全6領域・**3353仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -873,6 +873,10 @@
 ### 帳票 (部品表 / 電線リスト)
 
 - 部品表はシンボルを型番でまとめ、数量を集計する。 <sub>`bom_groups_by_value_and_counts`</sub>
+- 接地の印 (定義にネット名を持つシンボル) は部品ではないので、部品表に載せない。普通のシンボルは載ったまま。 <sub>`bom_leaves_out_ground_marks`</sub>
+- ネット名が空白だけのシンボルは普通の部品なので、部品表に載る。 <sub>`bom_keeps_a_symbol_whose_net_name_is_blank`</sub>
+- 電線リストでは、接地の印に届いた電線の端を、空の参照記号とピン番号ではなく印のネット名で書く。 <sub>`a_wire_end_on_a_ground_mark_is_written_as_its_net_name`</sub>
+- 接地の印に届いた電線は、同じ名前の別の印の先にあるデバイスが1つならそこまで辿る。印そのものはデバイスに数えない。 <sub>`a_ground_mark_end_follows_the_net_to_the_one_device_beyond_the_other_mark`</sub>
 - 部品表の先頭列は盤のアイテム番号なので、盤図面のバルーンと部品表が突き合わせられる。 <sub>`bom_starts_with_the_panel_item_number`</sub>
 - まだ盤に置いていない部品はアイテム番号の欄が空欄になり、部品表の他の欄はそのまま出る。 <sub>`bom_leaves_the_item_number_empty_for_unplaced_parts`</sub>
 - 配線の無いプロジェクトには電線集約行が1行も付かない (部品だけの部品表はそのまま)。 <sub>`bom_has_no_wire_rollup_rows_without_any_wires`</sub>
@@ -1458,6 +1462,9 @@
 - ngspiceがあれば電気検証はソルバの実測値で報告され、近似モードの通知は出ない。 <sub>`simulation_mode_reports_measured_values_when_ngspice_installed`</sub>
 - ソルバ結果が無い場合はグラフ近似にフォールバックし、その旨をInfoで明示する。 <sub>`fallback_mode_emits_approximate_info`</sub>
 - 1つのネットに異なるネットラベルが混在する状態(異電位の短絡)はエラーになる。 <sub>`conflicting_net_labels_on_one_net_are_an_error`</sub>
+- 接地の印 (定義にネット名を持つシンボル) に参照記号が無くても指摘しない。普通のシンボルに無ければ、これまでどおり指摘する。 <sub>`a_ground_mark_needs_no_reference_designator`</sub>
+- 同じ参照記号を持つ接地の印どうしは重複として指摘しない (印は部品ではない)。 <sub>`ground_marks_sharing_a_reference_are_not_duplicates`</sub>
+- ネット名が空白だけのシンボルは普通のシンボルなので、参照記号が無ければ指摘する。 <sub>`a_blank_net_name_still_needs_a_reference_designator`</sub>
 - 接地の印 (ネット名 GND) と別の名前のネットラベルを配線でつなぐと、ラベルの衝突として指摘される。 <sub>`a_ground_mark_and_a_different_label_on_one_net_conflict`</sub>
 - ネット名の違う2つの印 (GND と PE) を配線でつなぐと、ラベルの衝突として指摘される。 <sub>`two_marks_with_different_net_names_on_one_net_conflict`</sub>
 - 接地の印と同じ名前のネットラベルが1つのネットにあっても、衝突にはならない。 <sub>`a_ground_mark_and_a_same_named_label_do_not_conflict`</sub>

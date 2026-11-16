@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3346 specification clauses** across 6 areas.
+**3353 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -873,6 +873,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### Reports (BOM / wire list)
 
 - The BOM groups symbols by part number and counts quantities per group. <sub>`bom_groups_by_value_and_counts`</sub>
+- Ground marks (symbols whose definition carries a net name) are not parts, so the parts list leaves them out; ordinary symbols stay. <sub>`bom_leaves_out_ground_marks`</sub>
+- A symbol whose net name is only blanks is an ordinary part, so the parts list still counts it. <sub>`bom_keeps_a_symbol_whose_net_name_is_blank`</sub>
+- In the wire list, a wire end on a ground mark is written as the mark's net name, not as an empty reference with a pin number. <sub>`a_wire_end_on_a_ground_mark_is_written_as_its_net_name`</sub>
+- A wire that ends on a ground mark follows the net to the one device on another mark of the same name, and the marks themselves are not counted as devices. <sub>`a_ground_mark_end_follows_the_net_to_the_one_device_beyond_the_other_mark`</sub>
 - The parts list carries the panel item number as its first column, so the balloons on the panel drawing and the parts list line up. <sub>`bom_starts_with_the_panel_item_number`</sub>
 - Parts that are not on a panel yet leave the item number column empty; the rest of the parts list is unaffected. <sub>`bom_leaves_the_item_number_empty_for_unplaced_parts`</sub>
 - The BOM has no wire roll-up rows at all when the project has no wires (a project with only components is unaffected). <sub>`bom_has_no_wire_rollup_rows_without_any_wires`</sub>
@@ -1458,6 +1462,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - With ngspice installed, electrical findings carry solver-measured values and no approximate-mode note appears. <sub>`simulation_mode_reports_measured_values_when_ngspice_installed`</sub>
 - Without a solver result, checks fall back to a graph approximation and say so with an Info note. <sub>`fallback_mode_emits_approximate_info`</sub>
 - Two different net labels on one net (a short between potentials) is an error. <sub>`conflicting_net_labels_on_one_net_are_an_error`</sub>
+- A ground mark (a symbol whose definition carries a net name) without a reference designator is not flagged, while an ordinary symbol without one still is. <sub>`a_ground_mark_needs_no_reference_designator`</sub>
+- Ground marks that happen to share a reference designator are not reported as duplicates, because a mark is not a part. <sub>`ground_marks_sharing_a_reference_are_not_duplicates`</sub>
+- A symbol whose net name is only blanks is an ordinary symbol, so a missing reference designator is still reported. <sub>`a_blank_net_name_still_needs_a_reference_designator`</sub>
 - A wire joining a ground mark (net name GND) to a net label with a different name is reported as a label conflict. <sub>`a_ground_mark_and_a_different_label_on_one_net_conflict`</sub>
 - A wire joining two marks with different net names (GND and PE) is reported as a label conflict. <sub>`two_marks_with_different_net_names_on_one_net_conflict`</sub>
 - A ground mark and a net label of the same name on one net are not a conflict. <sub>`a_ground_mark_and_a_same_named_label_do_not_conflict`</sub>

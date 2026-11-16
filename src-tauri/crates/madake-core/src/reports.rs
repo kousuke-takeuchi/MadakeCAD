@@ -173,11 +173,26 @@ fn fmt_money(v: f64) -> String {
 
 /// 図面から数えた部品表の先頭5列 (カタログを引く前)。
 fn base_bom_rows(project: &Project) -> Vec<Vec<String>> {
+    base_bom_rows_with(project, crate::symbol::sheet_symbol_defs)
+}
+
+/// [`base_bom_rows`] の本体。シートのシンボル定義の引き方を渡せる (テストでユーザーシンボルを足すため)。
+/// ネット名を持つシンボル (接地の印など) は部品ではないので載せない。
+fn base_bom_rows_with(
+    project: &Project,
+    defs_for: impl Fn(&crate::model::Sheet) -> Vec<crate::symbol::SymbolDef>,
+) -> Vec<Vec<String>> {
     let item_numbers = crate::panel::item_numbers(project);
     let mut groups: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
     for sheet in &project.sheets {
+        let defs = defs_for(sheet);
+        let marks: std::collections::BTreeSet<&str> =
+            defs.iter().filter(|d| d.net_name().is_some()).map(|d| d.id.as_str()).collect();
         for entity in sheet.entities.values() {
             if let Entity::Symbol(s) = entity {
+                if marks.contains(s.symbol_id.as_str()) {
+                    continue;
+                }
                 groups
                     .entry((s.value.clone(), s.symbol_id.clone()))
                     .or_default()
@@ -389,6 +404,15 @@ fn resolve_endpoint(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> EndKind {
                 let Some(def) = by_id.get(s) else {
                     continue;
                 };
+                // ネット名を持つシンボル (接地の印) のピンは、その名前のネットラベルと同じに扱う
+                if let Some(name) = def.net_name() {
+                    if pin_positions(s, &def).iter().any(|(_, pos)| pos.distance_to(at) < CONNECT_EPS)
+                        && label_hit.as_ref().is_none_or(|cur| name < cur.as_str())
+                    {
+                        label_hit = Some(name.to_string());
+                    }
+                    continue;
+                }
                 for (no, pos) in pin_positions(s, &def) {
                     if pos.distance_to(at) < CONNECT_EPS {
                         let text = format!("{}:{}", s.reference, no);
@@ -444,15 +468,18 @@ pub fn endpoint_label(sheet: &Sheet, defs: &[SymbolDef], at: &Point) -> String {
 fn resolve_label_end(
     sheet: &Sheet,
     nets: &[Net],
+    marks: &std::collections::BTreeSet<crate::EntityId>,
     label_name: &str,
     exclude: Option<&(crate::EntityId, String)>,
 ) -> (String, &'static str) {
     let Some(net) = nets.iter().find(|n| n.label.as_deref() == Some(label_name)) else {
         return (label_name.to_string(), "");
     };
+    // 接地の印 (ネット名を持つシンボル) のピンは辿る先のデバイスに数えない
     let others: Vec<&NetPin> = net
         .pins
         .iter()
+        .filter(|p| !marks.contains(&p.entity_id))
         .filter(|p| exclude.is_none_or(|(id, pin)| *id != p.entity_id || pin != &p.pin))
         .collect();
     match others.as_slice() {
@@ -491,12 +518,30 @@ pub fn wire_from_to(
     let (Some(a), Some(b)) = (wire.points.first(), wire.points.last()) else {
         return (String::new(), String::new(), String::new(), String::new());
     };
-    from_to(sheet, nets, [resolve_endpoint(sheet, defs, a), resolve_endpoint(sheet, defs, b)])
+    from_to(sheet, nets, &mark_ids(sheet, defs), [resolve_endpoint(sheet, defs, a), resolve_endpoint(sheet, defs, b)])
+}
+
+/// シートに置かれた、ネット名を持つシンボル (接地の印) の entity id。
+fn mark_ids(sheet: &Sheet, defs: &[SymbolDef]) -> std::collections::BTreeSet<crate::EntityId> {
+    let by_id = crate::symbol::DefIndex::new(defs);
+    sheet
+        .entities
+        .values()
+        .filter_map(|e| match e {
+            Entity::Symbol(s) if by_id.get(s).is_some_and(|d| d.net_name().is_some()) => Some(s.id),
+            _ => None,
+        })
+        .collect()
 }
 
 /// 両端の解決結果から (From, To, 嵌合相手, 備考) を組み立てる ([`wire_from_to`] と区間ケーブルの
 /// 芯の行が共有する。規則は [`wire_from_to`] の説明のとおり)。
-fn from_to(sheet: &Sheet, nets: &[Net], kinds: [EndKind; 2]) -> (String, String, String, String) {
+fn from_to(
+    sheet: &Sheet,
+    nets: &[Net],
+    marks: &std::collections::BTreeSet<crate::EntityId>,
+    kinds: [EndKind; 2],
+) -> (String, String, String, String) {
     let mut multi = false;
     let mut no_device = false;
     let mut resolved: Vec<String> = Vec::with_capacity(2);
@@ -511,7 +556,7 @@ fn from_to(sheet: &Sheet, nets: &[Net], kinds: [EndKind; 2]) -> (String, String,
                     EndKind::Pin { entity_id, pin, .. } => Some((*entity_id, pin.clone())),
                     _ => None,
                 };
-                let (text, mark) = resolve_label_end(sheet, nets, name, exclude.as_ref());
+                let (text, mark) = resolve_label_end(sheet, nets, marks, name, exclude.as_ref());
                 multi |= mark == REMARK_MULTI_ENDED;
                 no_device |= mark == REMARK_NO_DEVICE;
                 text
@@ -611,7 +656,7 @@ pub fn wire_list_rows(project: &Project) -> Vec<Vec<String>> {
                     core_end_kind(sheet, &defs, c, core, RunEnd::A),
                     core_end_kind(sheet, &defs, c, core, RunEnd::B),
                 ];
-                let (from, to, mate, remark) = from_to(sheet, &nets, kinds);
+                let (from, to, mate, remark) = from_to(sheet, &nets, &mark_ids(sheet, &defs), kinds);
                 let wire_no = RunEnd::BOTH
                     .iter()
                     .find_map(|&end| match core.end(end) {
@@ -742,6 +787,115 @@ mod tests {
             "10kが2個に集計される (カタログの無い6列は空欄): {csv}"
         );
         assert!(lines.iter().any(|l| l.contains("RLY-24V") && l.ends_with(",1,,,,,,")));
+    }
+
+    /// Ground marks (symbols whose definition carries a net name) are not parts, so the parts list leaves them out; ordinary symbols stay.
+    /// 接地の印 (定義にネット名を持つシンボル) は部品ではないので、部品表に載せない。普通のシンボルは載ったまま。
+    #[test]
+    fn bom_leaves_out_ground_marks() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        let r = sym("R1", "10k");
+        sheet.entities.insert(r.id(), r);
+        for _ in 0..2 {
+            let mut g = sym("", "");
+            if let Entity::Symbol(s) = &mut g {
+                s.symbol_id = "test_gnd_mark".into();
+            }
+            sheet.entities.insert(g.id(), g);
+        }
+        let rows = base_bom_rows_with(&project, |sheet| {
+            let mut defs = crate::symbol::sheet_symbol_defs(sheet);
+            defs.push(crate::symbol::test_net_mark("test_gnd_mark", "GND"));
+            defs
+        });
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        assert_eq!(rows[0][1], "R1");
+    }
+
+    /// A symbol whose net name is only blanks is an ordinary part, so the parts list still counts it.
+    /// ネット名が空白だけのシンボルは普通の部品なので、部品表に載る。
+    #[test]
+    fn bom_keeps_a_symbol_whose_net_name_is_blank() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        let mut g = sym("X1", "");
+        if let Entity::Symbol(s) = &mut g {
+            s.symbol_id = "test_blank_mark".into();
+        }
+        sheet.entities.insert(g.id(), g);
+        let rows = base_bom_rows_with(&project, |sheet| {
+            let mut defs = crate::symbol::sheet_symbol_defs(sheet);
+            defs.push(crate::symbol::test_net_mark("test_blank_mark", "  "));
+            defs
+        });
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        assert_eq!(rows[0][3], "test_blank_mark");
+    }
+
+    fn mark_at(x: f64, y: f64) -> Entity {
+        let mut g = sym("", "");
+        if let Entity::Symbol(s) = &mut g {
+            s.symbol_id = "test_gnd_mark".into();
+            s.at = Point::new(x, y);
+        }
+        g
+    }
+
+    /// From-to of every wire on a sheet, with a ground mark definition added to the bundled symbols.
+    fn from_to_rows(sheet: &Sheet) -> Vec<(String, String, String)> {
+        let mut defs = crate::symbol::sheet_symbol_defs(sheet);
+        defs.push(crate::symbol::test_net_mark("test_gnd_mark", "GND"));
+        let nets = extract_wire_nets(sheet, &defs);
+        let mut rows: Vec<(String, String, String)> = sheet
+            .entities
+            .values()
+            .filter_map(|e| match e {
+                Entity::Wire(w) => {
+                    let (from, to, _, remark) = wire_from_to(sheet, &defs, &nets, w);
+                    Some((from, to, remark))
+                }
+                _ => None,
+            })
+            .collect();
+        rows.sort();
+        rows
+    }
+
+    /// In the wire list, a wire end on a ground mark is written as the mark's net name, not as an empty reference with a pin number.
+    /// 電線リストでは、接地の印に届いた電線の端を、空の参照記号とピン番号ではなく印のネット名で書く。
+    #[test]
+    fn a_wire_end_on_a_ground_mark_is_written_as_its_net_name() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        for e in [resistor("R1", 20.0, 0.0), wire_between((0.0, 0.0), (12.5, 0.0)), mark_at(0.0, 0.0)] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let rows = from_to_rows(&sheet);
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        let (from, to, _) = &rows[0];
+        assert!([from.as_str(), to.as_str()].contains(&"GND"), "{rows:?}");
+        assert!([from.as_str(), to.as_str()].contains(&"R1:1"), "{rows:?}");
+    }
+
+    /// A wire that ends on a ground mark follows the net to the one device on another mark of the same name, and the marks themselves are not counted as devices.
+    /// 接地の印に届いた電線は、同じ名前の別の印の先にあるデバイスが1つならそこまで辿る。印そのものはデバイスに数えない。
+    #[test]
+    fn a_ground_mark_end_follows_the_net_to_the_one_device_beyond_the_other_mark() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        for e in [
+            resistor("R1", 20.0, 0.0),
+            wire_between((0.0, 0.0), (12.5, 0.0)),
+            mark_at(0.0, 0.0),
+            resistor("R2", 100.0, 0.0),
+            wire_between((80.0, 0.0), (92.5, 0.0)),
+            mark_at(80.0, 0.0),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let rows = from_to_rows(&sheet);
+        assert!(rows.iter().any(|(f, t, _)| (f == "R1:1" && t == "R2:1") || (f == "R2:1" && t == "R1:1")), "{rows:?}");
     }
 
     /// The parts list carries the panel item number as its first column, so the balloons on the panel drawing and the parts list line up.
