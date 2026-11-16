@@ -684,6 +684,9 @@ async fn post_export_svg(
 #[derive(Deserialize)]
 struct SimulateBody {
     sheet_id: Option<Uuid>,
+    /// 計算ケースの id。そのケースの条件を足して計算する。
+    #[serde(default)]
+    case_id: Option<Uuid>,
     /// 条件 (開路・属性の置き換え・地絡)。全項目省略可。
     #[serde(flatten)]
     options: madake_core::sim::SimOptions,
@@ -699,7 +702,9 @@ async fn post_simulate_op(
         None => engine.project().sheets.first(),
     }
     .ok_or_else(|| bad_request("sheet not found"))?;
-    let result = madake_core::sim::simulate_op_opts(sheet, &sheet_symbol_defs(sheet), &body.options)
+    let options = madake_core::sim::options_for_case(engine.project(), body.case_id, body.options)
+        .map_err(bad_request)?;
+    let result = madake_core::sim::simulate_op_opts(sheet, &sheet_symbol_defs(sheet), &options)
         .map_err(bad_request)?;
     Ok(Json(serde_json::json!(result)))
 }

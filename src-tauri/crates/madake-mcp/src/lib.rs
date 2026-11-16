@@ -1020,6 +1020,9 @@ pub struct SimulateOpParams {
     /// 接地へ短絡させるネットの名前 (地絡・出力短絡の事故電流を見る)。
     #[serde(default)]
     pub shorts: Vec<String>,
+    /// 計算ケースの id (プロジェクトの sim_cases)。そのケースの開路・置き換え・故障を足して計算する。
+    #[serde(default)]
+    pub case_id: Option<Uuid>,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -2131,6 +2134,8 @@ impl MadakeMcp {
             shorts: p.shorts,
             faults: Vec::new(),
         };
+        let opts = madake_core::sim::options_for_case(engine.project(), p.case_id, opts)
+            .map_err(|e| ErrorData::invalid_params(e, None))?;
         let result = madake_core::sim::simulate_op_opts(sheet, &sheet_symbol_defs(sheet), &opts)
             .map_err(internal)?;
         json_ok(&result)

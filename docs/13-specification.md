@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3549 specification clauses** across 6 areas.
+**3551 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1109,6 +1109,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A break chosen on a wire removes it from the circuit, so the load behind it gets no current. <sub>`an_open_wire_stops_the_current`</sub>
 - A fault whose wire, part or pin no longer exists is skipped with a warning and the run still succeeds. <sub>`faults_on_missing_targets_are_skipped_with_warnings`</sub>
 - Applying a study case adds its switches, overrides and faults; values given explicitly in the same request win over the case. <sub>`a_study_case_is_applied_on_top_of_explicit_options`</sub>
+- A simulation request naming a study case uses that case's conditions, and an unknown case id is an error. <sub>`options_for_case_applies_the_named_case`</sub>
 
 ### SPICE netlist generation
 
@@ -1803,7 +1804,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The REST parts endpoints support searching (sample data included), upserting, category filtering, deleting, and listing wire parts. <sub>`parts_endpoints_search_upsert_delete`</sub>
 - GET /api/v1/verify returns the drawing's diagnostics as JSON (e.g. empty reference and unconnected pins). <sub>`verify_returns_diagnostics`</sub>
 - POST /api/v1/import/kicad replaces the open project with the converted schematic and returns a patch plus an import report. <sub>`import_kicad_replaces_project_and_reports`</sub>
-- POST /api/v1/simulate/op solves the DC operating point and returns net voltages, component currents and rating findings; attribute overrides and shorts in the body change only that run (requires ngspice; skipped otherwise). <sub>`simulate_op_returns_result`</sub>
+- POST /api/v1/simulate/op solves the DC operating point and returns net voltages, component currents and rating findings; attribute overrides and shorts in the body change only that run, and a saved study case can be named by case_id (an unknown id is refused) (requires ngspice; skipped otherwise). <sub>`simulate_op_returns_result`</sub>
 - POST /api/v1/export/pdf writes a valid PDF file to the requested path. <sub>`export_pdf_writes_pdf_file`</sub>
 - POST /api/v1/export/dxf and /export/kicad write the sheet as DXF and .kicad_sch, and POST /api/v1/import/dxf reads the DXF back into a project with an import report. <sub>`export_dxf_kicad_and_import_dxf_round_trip`</sub>
 - POST /api/v1/variants/start copies the sheet once per variant (one undo step) and returns each copy's id map; /variants/finish with a chosen sheet writes it back under the original ids and removes the copies, with null it only removes them; a count outside 1..=4 is rejected. <sub>`variants_start_and_finish_round_trip`</sub>
@@ -2335,6 +2336,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - madake status calls the health endpoint and the project snapshot. <sub>`status_queries_health_and_project`</sub>
 - --json prints raw pretty-printed JSON for piping into jq and similar tools. <sub>`json_flag_emits_raw_json`</sub>
 - madake netlist forwards the --sheet option to the API. <sub>`netlist_forwards_sheet_option`</sub>
+- madake sim --case accepts a study case's name or id and sends its id; an unknown case is refused with the names that exist. <sub>`sim_resolves_a_case_name_to_its_id`</sub>
 - madake sim sends the open switches, every --set REF.ATTR=VALUE as an attribute override and every --short as a net to short, in one request. <sub>`sim_forwards_overrides_and_shorts`</sub>
 - A --set without the REF.ATTR=VALUE shape is refused with an example of the right form, before anything is sent. <sub>`sim_refuses_a_malformed_set`</sub>
 - madake export forwards kind, output path and optional sheet to the API. <sub>`export_forwards_kind_path_and_sheet`</sub>

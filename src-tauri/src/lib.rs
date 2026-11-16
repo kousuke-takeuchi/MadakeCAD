@@ -418,6 +418,7 @@ fn simulate_op(
     open_switches: Vec<String>,
     overrides: Option<std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>>,
     shorts: Option<Vec<String>>,
+    case_id: Option<madake_core::EntityId>,
 ) -> Result<madake_core::sim::SimOpResult, String> {
     let engine = state.doc.engine.lock().unwrap();
     let project = engine.project();
@@ -432,6 +433,7 @@ fn simulate_op(
         shorts: shorts.unwrap_or_default(),
         faults: Vec::new(),
     };
+    let opts = madake_core::sim::options_for_case(project, case_id, opts)?;
     madake_core::sim::simulate_op_opts(sheet, &sheet_symbol_defs(sheet), &opts).map_err(|e| e.to_string())
 }
 

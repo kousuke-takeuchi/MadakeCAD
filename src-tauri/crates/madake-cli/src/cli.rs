@@ -65,6 +65,9 @@ pub enum Commands {
         /// 接地へ短絡させるネット名 (カンマ区切り・繰り返し可。例: --short P24)
         #[arg(long, value_delimiter = ',')]
         short: Vec<String>,
+        /// 計算ケースの名前か id (プロジェクトに保存したケースの条件で計算する)
+        #[arg(long, value_name = "NAME|ID")]
+        case: Option<String>,
     },
     /// 配線を自動で引き直す (接続は変えない。1回の編集でundo可)
     Reroute {
@@ -245,8 +248,12 @@ pub fn run(cli: &Cli, api: &dyn LinkApi) -> Result<String, CliError> {
             }
             Ok(format::parts(&parts))
         }
-        Commands::Sim { sheet, open, set, short } => {
-            let options = sim_options(open, set, short)?;
+        Commands::Sim { sheet, open, set, short, case } => {
+            let mut options = sim_options(open, set, short)?;
+            if let Some(case) = case {
+                let id = resolve_sim_case(&api.project()?, case)?;
+                options["case_id"] = json!(id);
+            }
             let result = api.simulate_op(sheet.as_deref(), options)?;
             if cli.json {
                 return Ok(pretty(&result));
@@ -423,6 +430,22 @@ pub fn run(cli: &Cli, api: &dyn LinkApi) -> Result<String, CliError> {
             ))
         }
     }
+}
+
+/// `--case` の名前か id から計算ケースの id を引く (プロジェクトのスナップショットの `sim_cases`)。
+pub fn resolve_sim_case(snapshot: &Value, wanted: &str) -> Result<String, CliError> {
+    let cases = snapshot["project"]["sim_cases"].as_array().cloned().unwrap_or_default();
+    let wanted = wanted.trim();
+    for c in &cases {
+        if c["id"].as_str() == Some(wanted) || c["name"].as_str().map(str::trim) == Some(wanted) {
+            return Ok(c["id"].as_str().unwrap_or_default().to_string());
+        }
+    }
+    let names: Vec<&str> = cases.iter().filter_map(|c| c["name"].as_str()).collect();
+    Err(CliError::Usage(format!(
+        "計算ケース「{wanted}」がありません (あるケース: {})",
+        if names.is_empty() { "なし".to_string() } else { names.join(", ") }
+    )))
 }
 
 /// `madake sim` の条件 (Link API の本文): 開路・`--set REF.ATTR=VALUE`・`--short NET`。
@@ -980,6 +1003,20 @@ mod tests {
         };
         run(&parse(&["madake", "netlist", "--sheet", "abc"]), &api).unwrap();
         assert_eq!(api.calls(), vec![r#"netlist(Some("abc"))"#]);
+    }
+
+    /// madake sim --case accepts a study case's name or id and sends its id; an unknown case is refused with the names that exist.
+    /// madake sim --case は計算ケースの名前か id を受けて id を送る。無いケースは、あるケースの名前を添えて断る。
+    #[test]
+    fn sim_resolves_a_case_name_to_its_id() {
+        let mut snap = snapshot();
+        snap["project"]["sim_cases"] = json!([{ "id": "c1", "name": "Motor max", "open_switches": [], "overrides": {}, "faults": [] }]);
+        let api = FakeApi { project: snap, ..Default::default() };
+        run(&parse(&["madake", "sim", "--case", "Motor max"]), &api).unwrap();
+        let call = api.calls().into_iter().find(|c| c.starts_with("simulate_op")).unwrap();
+        assert!(call.contains("\"case_id\":\"c1\""), "{call}");
+        let err = run(&parse(&["madake", "sim", "--case", "nope"]), &api).unwrap_err();
+        assert!(matches!(&err, CliError::Usage(m) if m.contains("Motor max")), "{err:?}");
     }
 
     /// madake sim sends the open switches, every --set REF.ATTR=VALUE as an attribute override and every --short as a net to short, in one request.

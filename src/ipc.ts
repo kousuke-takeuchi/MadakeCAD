@@ -830,6 +830,8 @@ export interface SimCase {
 export interface SimExtraOptions {
   overrides?: Record<string, Record<string, string>>;
   shorts?: string[];
+  /** 計算ケースの id。そのケースの条件を足して計算する。 */
+  caseId?: string;
 }
 
 export interface Diagnostic {
@@ -1482,7 +1484,13 @@ const tauriIpc: Ipc = {
   searchParts: (query: string, category?: string) =>
     invoke<Part[]>("search_parts", { query, category }),
   simulateOp: (sheetId: string | null, openSwitches: string[], options?: SimExtraOptions) =>
-    invoke<SimOpResult>("simulate_op", { sheetId, openSwitches, overrides: options?.overrides, shorts: options?.shorts }),
+    invoke<SimOpResult>("simulate_op", {
+      sheetId,
+      openSwitches,
+      overrides: options?.overrides,
+      shorts: options?.shorts,
+      caseId: options?.caseId,
+    }),
   exportSvg: (sheetId: string, path: string) => invoke<void>("export_svg", { sheetId, path }),
   exportPdf: (sheetId: string, path: string) => invoke<void>("export_pdf", { sheetId, path }),
   exportDxf: (sheetId: string, path: string) =>
@@ -1656,7 +1664,13 @@ const httpIpc: Ipc = {
   simulateOp: (sheetId, openSwitches, options) =>
     http<SimOpResult>("/simulate/op", {
       method: "POST",
-      body: JSON.stringify({ sheet_id: sheetId, open_switches: openSwitches, ...options }),
+      body: JSON.stringify({
+        sheet_id: sheetId,
+        open_switches: openSwitches,
+        overrides: options?.overrides,
+        shorts: options?.shorts,
+        case_id: options?.caseId,
+      }),
     }),
   searchParts: (query, category) => {
     const params = new URLSearchParams();

@@ -188,8 +188,8 @@ async fn import_kicad_replaces_project_and_reports() {
     std::fs::remove_file(&sch).ok();
 }
 
-/// POST /api/v1/simulate/op solves the DC operating point and returns net voltages, component currents and rating findings; attribute overrides and shorts in the body change only that run (requires ngspice; skipped otherwise).
-/// POST /api/v1/simulate/op はDC動作点を解き、ネット電圧・部品電流・定格超過を返す。本文の属性の置き換えと短絡はその1回だけに効く(ngspice必須。未導入時はスキップ)。
+/// POST /api/v1/simulate/op solves the DC operating point and returns net voltages, component currents and rating findings; attribute overrides and shorts in the body change only that run, and a saved study case can be named by case_id (an unknown id is refused) (requires ngspice; skipped otherwise).
+/// POST /api/v1/simulate/op はDC動作点を解き、ネット電圧・部品電流・定格超過を返す。本文の属性の置き換えと短絡はその1回だけに効き、保存した計算ケースは case_id で指定できる (無い id は断る)(ngspice必須。未導入時はスキップ)。
 #[tokio::test]
 async fn simulate_op_returns_result() {
     if madake_core::ngspice::find_ngspice().is_none() {
@@ -299,13 +299,43 @@ async fn simulate_op_returns_result() {
             json!({ "overrides": { "L1": { "current_a": "4" } }, "shorts": ["NOPE"] }).to_string(),
         ))
         .unwrap();
-    let response = router.oneshot(request).await.unwrap();
+    let response = router.clone().oneshot(request).await.unwrap();
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
     let amps = l1_amps(&body);
     assert!((amps - 4.0).abs() < 0.1, "{amps}");
     let warnings = body["warnings"].to_string();
     assert!(warnings.contains("NOPE"), "{warnings}");
+
+    // 計算ケース: /commands で保存し、case_id で計算する。無い id は 400
+    let case_id = uuid::Uuid::new_v4();
+    let post = |uri: &'static str, v: Value| {
+        let router = router.clone();
+        async move {
+            let req = Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header("content-type", "application/json")
+                .body(Body::from(v.to_string()))
+                .unwrap();
+            let res = router.oneshot(req).await.unwrap();
+            let status = res.status();
+            let bytes = res.into_body().collect().await.unwrap().to_bytes();
+            (status, serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null))
+        }
+    };
+    let (status, _) = post(
+        "/api/v1/commands",
+        json!([{ "type": "set_sim_case", "case": { "id": case_id, "name": "Lamp 4A", "overrides": { "L1": { "current_a": "4" } } } }]),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = post("/api/v1/simulate/op", json!({ "case_id": case_id })).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let amps = l1_amps(&body);
+    assert!((amps - 4.0).abs() < 0.1, "{amps}");
+    let (status, _) = post("/api/v1/simulate/op", json!({ "case_id": uuid::Uuid::new_v4() })).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 /// POST /api/v1/export/pdf writes a valid PDF file to the requested path.

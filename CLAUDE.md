@@ -68,7 +68,7 @@ cargo run -p madake-cli -- status                    # 接続確認+概要 (carg
 cargo run -p madake-cli -- netlist [--sheet <ID>]
 cargo run -p madake-cli -- verify [--sheet <ID>]     # 図面検証 (ERC+電気検証)
 cargo run -p madake-cli -- parts [<検索語>] [--category <c>]  # 部品DB検索
-cargo run -p madake-cli -- sim [--open SW1,K1] [--set M1.current_a=40] [--short P24]  # DC動作点シミュレーション (属性の置き換え・地絡・定格超過)
+cargo run -p madake-cli -- sim [--open SW1,K1] [--set M1.current_a=40] [--short P24] [--case NAME]  # DC動作点シミュレーション (属性の置き換え・地絡・計算ケース・定格超過)
 cargo run -p madake-cli -- reroute [--sheet <ID>] [--net <NAME>]...  # 配線の自動の引き直し (接続は変えない。undo一発)
 cargo run -p madake-cli -- arrange [--sheet <ID>] [--channel MM]  # 部品の並べ直し (並び順を保って整列し、通り道をあけて全配線を引き直す。undo一発)
 cargo run -p madake-cli -- renumber [--sheet <ID>] [--mode append|renumber] [--start N]  # 線番の自動採番

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3549仕様項目**。
+全6領域・**3551仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1109,6 +1109,7 @@
 - 電線で指定した断線はその電線を回路から外し、その先の負荷には電流が流れない。 <sub>`an_open_wire_stops_the_current`</sub>
 - 電線・部品・ピンが無くなった故障は、注意を出して飛ばし、計算はそのまま成功する。 <sub>`faults_on_missing_targets_are_skipped_with_warnings`</sub>
 - 計算ケースを当てると、その開路・置き換え・故障が足される。同じ依頼で直接指定した値はケースより優先する。 <sub>`a_study_case_is_applied_on_top_of_explicit_options`</sub>
+- 計算ケースを指定した依頼はそのケースの条件で計算し、無いケースの id はエラーになる。 <sub>`options_for_case_applies_the_named_case`</sub>
 
 ### SPICEネットリスト生成
 
@@ -1803,7 +1804,7 @@
 - RESTの部品エンドポイントは検索(サンプル含む)・登録更新・カテゴリ絞り込み・削除・電線品番一覧に対応する。 <sub>`parts_endpoints_search_upsert_delete`</sub>
 - GET /api/v1/verify は図面の診断(空参照・未接続ピンなど)をJSONで返す。 <sub>`verify_returns_diagnostics`</sub>
 - POST /api/v1/import/kicad は開いているプロジェクトを変換結果で置き換え、patchとインポートレポートを返す。 <sub>`import_kicad_replaces_project_and_reports`</sub>
-- POST /api/v1/simulate/op はDC動作点を解き、ネット電圧・部品電流・定格超過を返す。本文の属性の置き換えと短絡はその1回だけに効く(ngspice必須。未導入時はスキップ)。 <sub>`simulate_op_returns_result`</sub>
+- POST /api/v1/simulate/op はDC動作点を解き、ネット電圧・部品電流・定格超過を返す。本文の属性の置き換えと短絡はその1回だけに効き、保存した計算ケースは case_id で指定できる (無い id は断る)(ngspice必須。未導入時はスキップ)。 <sub>`simulate_op_returns_result`</sub>
 - POST /api/v1/export/pdf は指定パスへ正しいPDFファイルを書き出す。 <sub>`export_pdf_writes_pdf_file`</sub>
 - POST /api/v1/export/dxf と /export/kicad はシートをDXFと.kicad_schへ書き出し、POST /api/v1/import/dxf はそのDXFをインポートレポート付きでプロジェクトへ読み戻す。 <sub>`export_dxf_kicad_and_import_dxf_round_trip`</sub>
 - POST /api/v1/variants/start はシートを案の数だけ複製し(undo1回)、案ごとのid対応表を返す。/variants/finish は選んだ案を元idのまま元シートへ写し戻して複製を消し、nullなら複製を消すだけ。1〜4以外の数は拒否される。 <sub>`variants_start_and_finish_round_trip`</sub>
@@ -2335,6 +2336,7 @@
 - madake statusはヘルスチェックとプロジェクト概要を取得する。 <sub>`status_queries_health_and_project`</sub>
 - --jsonはjq等へ渡せる整形JSONをそのまま出力する。 <sub>`json_flag_emits_raw_json`</sub>
 - madake netlistは--sheetオプションをAPIへ引き渡す。 <sub>`netlist_forwards_sheet_option`</sub>
+- madake sim --case は計算ケースの名前か id を受けて id を送る。無いケースは、あるケースの名前を添えて断る。 <sub>`sim_resolves_a_case_name_to_its_id`</sub>
 - madake sim は、開路のスイッチ、--set 参照記号.属性=値 の置き換え、--short の短絡ネットを1回の依頼にまとめて送る。 <sub>`sim_forwards_overrides_and_shorts`</sub>
 - 参照記号.属性=値 の形でない --set は、正しい形の例を添えて断られ、何も送られない。 <sub>`sim_refuses_a_malformed_set`</sub>
 - madake exportは種別・出力パス・シート指定をAPIへ引き渡す。 <sub>`export_forwards_kind_path_and_sheet`</sub>

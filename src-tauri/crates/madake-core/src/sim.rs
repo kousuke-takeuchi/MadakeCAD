@@ -147,6 +147,22 @@ pub struct SimOpResult {
     pub loads: Vec<EntityLoad>,
 }
 
+/// 計算ケースを指定した依頼の条件。ケースの開路・置き換え・故障を `base` に足す (直接指定が優先)。
+/// 無いケースの id はエラー。
+pub fn options_for_case(
+    project: &crate::model::Project,
+    case_id: Option<uuid::Uuid>,
+    base: SimOptions,
+) -> Result<SimOptions, String> {
+    let Some(id) = case_id else { return Ok(base) };
+    let case = project
+        .sim_cases
+        .iter()
+        .find(|c| c.id == id)
+        .ok_or_else(|| format!("計算ケース {id} がありません"))?;
+    Ok(base.with_case(case))
+}
+
 /// DC動作点を解く。`open_switches`の参照記号の導通部品は開路として扱う。
 pub fn simulate_op(
     sheet: &Sheet,
@@ -1307,5 +1323,18 @@ mod tests {
         assert_eq!(o.overrides["M1"]["current_a"], "31");
         assert_eq!(o.overrides["M1"]["v_min"], "20");
         assert_eq!(o.faults.len(), 1);
+    }
+
+    /// A simulation request naming a study case uses that case's conditions, and an unknown case id is an error.
+    /// 計算ケースを指定した依頼はそのケースの条件で計算し、無いケースの id はエラーになる。
+    #[test]
+    fn options_for_case_applies_the_named_case() {
+        let mut p = crate::model::Project::new("t");
+        let case = SimCase { id: Uuid::new_v4(), name: "c".into(), open_switches: vec!["SW1".into()], overrides: Default::default(), faults: vec![] };
+        p.sim_cases.push(case.clone());
+        let o = options_for_case(&p, Some(case.id), SimOptions::default()).unwrap();
+        assert_eq!(o.open_switches, vec!["SW1".to_string()]);
+        assert!(options_for_case(&p, None, SimOptions::default()).unwrap().open_switches.is_empty());
+        assert!(options_for_case(&p, Some(Uuid::new_v4()), SimOptions::default()).unwrap_err().contains("ありません"));
     }
 }
