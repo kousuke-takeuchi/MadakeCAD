@@ -24228,6 +24228,119 @@
             },
             {
               "type": "frame",
+              "id": "TVZzd",
+              "name": "SIMケース選択",
+              "fill": "#FFFFFF",
+              "cornerRadius": 3,
+              "stroke": "$ribbon-line",
+              "strokeWidth": 1,
+              "gap": 6,
+              "padding": [
+                2,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "VGLRu",
+                  "name": "SIMケース名",
+                  "fill": "$ui-text",
+                  "content": "モーター最大",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "icon",
+                  "id": "Iegyf",
+                  "name": "SIMケース開く",
+                  "width": 10,
+                  "height": 10,
+                  "icon": "chevron-down",
+                  "library": "lucide",
+                  "fill": "$ui-muted"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "E5tggm",
+              "name": "SIMケース 新規",
+              "cornerRadius": 3,
+              "padding": 2,
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "vIQt9",
+                  "name": "SIMケースアイコン",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "plus",
+                  "library": "lucide",
+                  "fill": "$ui-muted"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "q1CTZy",
+              "name": "SIMケース 名前の変更",
+              "cornerRadius": 3,
+              "padding": 2,
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "ZbErm",
+                  "name": "SIMケースアイコン",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "pencil",
+                  "library": "lucide",
+                  "fill": "$ui-muted"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "h0ojC",
+              "name": "SIMケース 複製",
+              "cornerRadius": 3,
+              "padding": 2,
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "TlX29",
+                  "name": "SIMケースアイコン",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "copy",
+                  "library": "lucide",
+                  "fill": "$ui-muted"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "vdrj0",
+              "name": "SIMケース 削除",
+              "cornerRadius": 3,
+              "padding": 2,
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "dwRPg",
+                  "name": "SIMケースアイコン",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "trash-2",
+                  "library": "lucide",
+                  "fill": "$ui-muted"
+                }
+              ]
+            },
+            {
+              "type": "frame",
               "id": "jJBBY",
               "x": 237,
               "y": 6.5,
@@ -24457,7 +24570,10 @@
             {
               "type": "frame",
               "id": "e4Pus",
+              "x": 178,
+              "y": 5.5,
               "name": "SIM条件チップ DRV02.current_a=31",
+              "enabled": false,
               "fill": "$pw-chip",
               "cornerRadius": 8,
               "gap": 4,
@@ -24511,7 +24627,7 @@
                   "id": "a52zn",
                   "name": "SIM条件チップ文字",
                   "fill": "#DC2626",
-                  "content": "短絡 N048",
+                  "content": "⚡ 短絡 CN304 ピン1",
                   "fontFamily": "JetBrains Mono",
                   "fontSize": 10,
                   "fontWeight": "600"
@@ -24519,6 +24635,81 @@
                 {
                   "type": "icon",
                   "id": "vjhtl",
+                  "name": "SIM条件チップ削除",
+                  "width": 10,
+                  "height": 10,
+                  "icon": "x",
+                  "library": "lucide",
+                  "fill": "$ui-muted"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "YPTKI",
+              "name": "SIM条件チップ 断線",
+              "fill": "#FFF7ED",
+              "cornerRadius": 8,
+              "gap": 4,
+              "padding": [
+                1,
+                6,
+                1,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "eXqS8",
+                  "name": "SIM条件チップ文字",
+                  "fill": "#D97706",
+                  "content": "✕ 断線 電線",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "icon",
+                  "id": "fMAxo",
+                  "name": "SIM条件チップ削除",
+                  "width": 10,
+                  "height": 10,
+                  "icon": "x",
+                  "library": "lucide",
+                  "fill": "$ui-muted"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "SbR9G",
+              "name": "SIM条件チップ 見つからない",
+              "opacity": 0.6,
+              "fill": "$hover-bg",
+              "cornerRadius": 8,
+              "gap": 4,
+              "padding": [
+                1,
+                6,
+                1,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "nHZYA",
+                  "name": "SIM条件チップ文字",
+                  "fill": "$ui-muted",
+                  "content": "⚡ 短絡 電線 (見つかりません)",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "icon",
+                  "id": "aBGLf",
                   "name": "SIM条件チップ削除",
                   "width": 10,
                   "height": 10,
@@ -25351,7 +25542,7 @@
                       "id": "V1z28N",
                       "name": "SIM選択中名前",
                       "fill": "$ui-text",
-                      "content": "CN301",
+                      "content": "DRV01",
                       "fontFamily": "JetBrains Mono",
                       "fontSize": 12,
                       "fontWeight": "600"
@@ -25372,7 +25563,7 @@
                           "id": "y3mfFy",
                           "name": "SIM選択中超過文字",
                           "fill": "#DC2626",
-                          "content": "超過 142%",
+                          "content": "超過 103%",
                           "fontFamily": "Noto Sans JP",
                           "fontSize": 9,
                           "fontWeight": "600"
@@ -25411,7 +25602,7 @@
                       "id": "Y6YPl",
                       "name": "SIM選択中値",
                       "fill": "$ui-text",
-                      "content": "70.96 A",
+                      "content": "31.00 A",
                       "fontFamily": "JetBrains Mono",
                       "fontSize": 11,
                       "fontWeight": "600"
@@ -25448,7 +25639,7 @@
                       "id": "AF2qt",
                       "name": "SIM選択中値",
                       "fill": "$ui-text",
-                      "content": "24.25 / 24.24 V",
+                      "content": "23.12 / 0.62 V",
                       "fontFamily": "JetBrains Mono",
                       "fontSize": 11,
                       "fontWeight": "600"
@@ -25485,7 +25676,7 @@
                       "id": "X4T19e",
                       "name": "SIM選択中値",
                       "fill": "$ui-text",
-                      "content": "50 A (ピン定格)",
+                      "content": "30 A (ヒューズ定格)",
                       "fontFamily": "JetBrains Mono",
                       "fontSize": 11,
                       "fontWeight": "600"
@@ -25522,7 +25713,7 @@
                       "id": "Z5VzCw",
                       "name": "SIM選択中値",
                       "fill": "$ui-text",
-                      "content": "142%",
+                      "content": "103%",
                       "fontFamily": "JetBrains Mono",
                       "fontSize": 11,
                       "fontWeight": "600"
@@ -25532,12 +25723,247 @@
                 {
                   "type": "text",
                   "id": "j6aZO",
+                  "x": 10,
+                  "y": 120,
                   "name": "SIM選択中ヒント",
+                  "enabled": false,
                   "fill": "$ui-muted",
                   "content": "図面で電線か部品を選ぶと値が出ます (選んでいないとき)",
                   "fontFamily": "Noto Sans JP",
                   "fontSize": 9,
                   "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "L65DgC",
+                  "name": "SIM値の見出し",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "padding": [
+                    6,
+                    0,
+                    0,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "j0AIcJ",
+                      "name": "SIM値の見出し文字",
+                      "fill": "$ui-muted",
+                      "textGrowth": "fixed-width",
+                      "width": 90,
+                      "content": "値",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "hcbXY",
+                      "name": "SIM図面の値見出し",
+                      "fill": "$ui-muted",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "図面の値",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 9,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "vSsMt",
+                      "name": "SIMケースの値見出し",
+                      "fill": "$ui-muted",
+                      "textGrowth": "fixed-width",
+                      "width": 90,
+                      "content": "このケースでの値",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 9,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Jt5Ek",
+                  "name": "SIM値の行 current_a",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ZrXfd",
+                      "name": "SIM属性名",
+                      "fill": "$ui-text",
+                      "textGrowth": "fixed-width",
+                      "width": 90,
+                      "content": "current_a",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "i9dqx",
+                      "name": "SIM図面の値",
+                      "fill": "$ui-muted",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "20",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "OraAj",
+                      "name": "SIMケースの値入力",
+                      "width": 90,
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 3,
+                      "stroke": "$acad-blue",
+                      "strokeWidth": 1,
+                      "padding": [
+                        1,
+                        6
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "tomSx",
+                          "name": "SIMケースの値",
+                          "fill": "$ui-text",
+                          "content": "31",
+                          "fontFamily": "JetBrains Mono",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "G8czVW",
+                  "name": "SIM値の行 v_min",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Ar9Ti",
+                      "name": "SIM属性名",
+                      "fill": "$ui-text",
+                      "textGrowth": "fixed-width",
+                      "width": 90,
+                      "content": "v_min",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "F8IT2",
+                      "name": "SIM図面の値",
+                      "fill": "$ui-muted",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "15",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "i5qDV",
+                      "name": "SIMケースの値入力",
+                      "width": 90,
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 3,
+                      "stroke": "$ribbon-line",
+                      "strokeWidth": 1,
+                      "padding": [
+                        1,
+                        6
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Sc2ZF",
+                          "name": "SIMケースの値",
+                          "fill": "$ui-muted",
+                          "content": "—",
+                          "fontFamily": "JetBrains Mono",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "c6q1pT",
+                  "name": "SIM値の行 pin_rating_a",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Wo0MA",
+                      "name": "SIM属性名",
+                      "fill": "$ui-text",
+                      "textGrowth": "fixed-width",
+                      "width": 90,
+                      "content": "pin_rating_a",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "l7uLdv",
+                      "name": "SIM図面の値",
+                      "fill": "$ui-muted",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "—",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "F9vgj",
+                      "name": "SIMケースの値入力",
+                      "width": 90,
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 3,
+                      "stroke": "$ribbon-line",
+                      "strokeWidth": 1,
+                      "padding": [
+                        1,
+                        6
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "D8uYfE",
+                          "name": "SIMケースの値",
+                          "fill": "$ui-muted",
+                          "content": "—",
+                          "fontFamily": "JetBrains Mono",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
             }
@@ -86318,8 +86744,8 @@
         {
           "type": "frame",
           "id": "Byff1",
-          "x": 540,
-          "y": 120,
+          "x": 560,
+          "y": 150,
           "name": "プローブ",
           "fill": "#2e333be6",
           "cornerRadius": 4,
@@ -86381,10 +86807,123 @@
           "y": 236,
           "name": "説明",
           "fill": "#9aa2ab",
-          "content": "赤 = 負荷率 100% 超 (札付き)、橙 = 80〜100%、色なし = 80% 未満か限度なし。古い結果は薄く塗り、札は出さない",
+          "content": "赤 = 負荷率 100% 超 (札付き)、橙 = 80〜100%。⚡ = 短絡 (電線の始点かピン)、✕ = 断線 (電線の中ほど)。右クリックで短絡・断線を足す・外す",
           "fontFamily": "Noto Sans JP",
           "fontSize": 10,
           "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "UpjpD",
+          "x": 560,
+          "y": 20,
+          "name": "右クリックメニュー",
+          "width": 170,
+          "fill": "#2e333be6",
+          "cornerRadius": 4,
+          "stroke": "#1f6fbf",
+          "strokeWidth": 1,
+          "layout": "vertical",
+          "padding": [
+            3,
+            0
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "OioqM",
+              "name": "メニュー項目 ここで短絡",
+              "width": "fill_container",
+              "padding": [
+                4,
+                12
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "muLcR",
+                  "name": "メニュー文字",
+                  "fill": "#e8eaec",
+                  "content": "ここで短絡",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "s0fZ5A",
+              "name": "メニュー項目 ここで断線",
+              "width": "fill_container",
+              "padding": [
+                4,
+                12
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "j6NE7",
+                  "name": "メニュー文字",
+                  "fill": "#e8eaec",
+                  "content": "ここで断線",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "YBAaH",
+              "name": "メニュー項目 この条件を外す",
+              "width": "fill_container",
+              "stroke": "#1f6fbf",
+              "strokeWidth": {
+                "top": 1
+              },
+              "padding": [
+                4,
+                12
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "AIRLY",
+                  "name": "メニュー文字",
+                  "fill": "#e8eaec",
+                  "content": "この条件を外す",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "a8POlU",
+          "x": 52,
+          "y": 200,
+          "name": "短絡の印",
+          "fill": "#ffd84d",
+          "content": "⚡",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 16,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "text",
+          "id": "Q0pdf0",
+          "x": 232,
+          "y": 202,
+          "name": "断線の印",
+          "fill": "#ffd84d",
+          "content": "✕",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 15,
+          "fontWeight": "700"
         }
       ]
     }
