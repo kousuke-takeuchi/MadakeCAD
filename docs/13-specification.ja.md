@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3507仕様項目**。
+全6領域・**3537仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -41,6 +41,33 @@
 - 配線と注記だけのシートでは何も変わらない。 <sub>`a_sheet_without_symbols_changes_nothing`</sub>
 - 2.5mmグリッドから外れた部品も2.5mm刻みで動き、ずれを保ったまま接続も保つ。 <sub>`off_grid_symbols_keep_their_offset_and_stay_connected`</sub>
 - 並べ直した後のシートをもう一度並べ直しても、それ以上は動かない。 <sub>`arranging_twice_does_not_move_more`</sub>
+- 配線もつながるピンの上に置いたネットラベルは、部品が動いてもそのピンの上に残り、ネットの名前は変わらない。 <sub>`a_label_on_a_wired_pin_moves_with_the_part`</sub>
+- 配線なしでピンの上に直接置いた接地の印は部品と一緒に動き、ネットの名前を保つ。 <sub>`a_ground_mark_on_a_pin_moves_with_the_part`</sub>
+- 配線の無いピンの上のネットラベルは、部品と一緒に動く。 <sub>`a_label_on_a_bare_pin_moves_with_the_part`</sub>
+- 引けないかたまりが名前の違う2つのラベルを持つときは、ネット名を挙げて断り、計画は作らない。 <sub>`an_unroutable_cluster_with_two_label_names_is_refused`</sub>
+- 引けるかたまりでも、名前の違う2つのラベルを持てば、引き直す前に断る。 <sub>`a_routable_cluster_with_two_label_names_is_refused`</sub>
+- 2つの部品がそれぞれ自分の接地の印を持つとき、同じネット名でも印はそれぞれの部品の衛星になる。 <sub>`ground_marks_of_two_parts_are_each_a_satellite`</sub>
+- 2つの部品に同じ名前のタグのラベルがあっても、それぞれ自分の部品の衛星になる。 <sub>`same_named_tags_on_two_parts_are_each_a_satellite`</sub>
+- 端が動かないかたまりは、引き直せない場合でも元の配線をそのまま残す。 <sub>`an_unmoved_cluster_keeps_its_wire`</sub>
+- 検算は、ピンのつながりが同じでも、ネットがラベルの名前を失った結果を断る。 <sub>`the_self_check_refuses_a_lost_net_name`</sub>
+- 検算が数えないのは計画が作った新しいARRの名前だけで、それ以外の名前がネットに増えれば断る。 <sub>`the_self_check_ignores_only_fresh_names`</sub>
+- 検算は、ピンの上にあったラベルがピンから離れた結果を断る。 <sub>`the_self_check_refuses_a_label_moved_off_its_pin`</sub>
+- ラベルでつなぐ短い線が他のネットの配線に触れれば断り、何にも触れなければ通す。 <sub>`a_label_stub_touching_another_wire_is_refused`</sub>
+- 表題欄の範囲は図枠テンプレートの隅に従う。左上なら図枠の左上に、表題欄の幅と高さで置く。 <sub>`the_title_block_area_follows_the_template_corner`</sub>
+- 表題欄の上に描く改訂欄の行も、避ける範囲に入る。 <sub>`the_title_block_area_includes_the_revision_rows`</sub>
+- ずれたピン・印・ラベルのある生成した図面では、並べ直しはピンのつながりと全てのネットの名前を保つか、断るかのどちらかになる。 <sub>`generated_sheets_keep_connections_and_names_or_refuse`</sub>
+- 関係のない2つの引けないかたまりは別々の新しい名前になり、ラベルで1つのネットにつながることはない。 <sub>`two_unroutable_clusters_get_different_names`</sub>
+- ラベルでつなぐかたまりは自分のラベルの名前を使い、古いラベルは置き換わる。 <sub>`the_fallback_uses_the_cluster_label_name`</sub>
+- ラベルでつなぐかたまりに接地の印があれば、その印のネット名を使う。 <sub>`the_fallback_uses_a_net_name_symbol`</sub>
+- 整列の移動で、今まで重なっていなかった2つの単位が重なるなら、その移動はしない。 <sub>`an_alignment_that_would_overlap_is_skipped`</sub>
+- 通常の空きの上限では図枠に収まらないときは、空きを通り道の幅まで詰めて並べ直す。 <sub>`a_tight_frame_reduces_the_gaps_and_fits`</sub>
+- 元の図面が表題欄を避けていたのに、並べると表題欄に掛かるときは断る。 <sub>`a_layout_into_the_title_block_is_refused`</sub>
+- 注記が指す配線や、FreeCADと対応付けた配線があれば、並べ直しはネット名を挙げて断る。 <sub>`pointed_wires_are_refused`</sub>
+- 1つのかたまりの配線の長さの出所がまちまちなら、並べ直しは断る。 <sub>`mixed_length_sources_are_refused`</sub>
+- 整列の組は整列の距離より広がらないので、近い座標が鎖のように続いても遠くへは動かさず、組を分ける。 <sub>`alignment_groups_do_not_chain`</sub>
+- 2.5mmへの丸めで2つの部品の順が入れ替わる整列はしない。 <sub>`alignment_never_swaps_order`</sub>
+- かたまりのために作る新しいラベルは、置き換えるラベルの向きと属性を引き継ぐ。 <sub>`new_labels_copy_the_old_label_style`</sub>
+- 注記が指すラベルは、かたまりをラベルでつなぐときも消さず、ネットの名前も変わらない。 <sub>`a_label_pointed_at_by_a_note_is_kept`</sub>
 
 ### block
 
@@ -1708,6 +1735,8 @@
 - 並べ直しのツールが公開され、説明にundo一発で戻ることが書いてある。 <sub>`the_arrange_tool_is_advertised`</sub>
 - MCPで詰まった2つの部品を並べ直すと離れて配線が引き直され、undo一発で全てのエンティティが元に戻る。 <sub>`arranging_over_mcp_moves_reroutes_and_undoes_in_one_step`</sub>
 - Link APIの並べ直しは同じ形の返り値を返し、使えない設定は400で断って何も変えない。 <sub>`the_link_api_arranges_and_refuses_bad_options`</sub>
+- ケーブルのあるシートはMCPでもLink APIでも断られ、図面も版番号も変わらない。 <sub>`a_refused_arrange_changes_nothing`</sub>
+- 並べ直し済みのシートをもう一度並べ直しても編集は1つも当てず、undoの履歴も版番号も増えない。 <sub>`arranging_an_arranged_sheet_applies_no_edit`</sub>
 
 ### drawing_tools
 
@@ -2315,6 +2344,7 @@
 
 ### Link APIクライアント
 
+- 並べ直しの本文は通り道の幅があるときだけ設定を送り、幅が既定の20mmを超えれば空きの上限もその幅に広げる。 <sub>`arrange_body_widens_the_maximum_gap_for_wide_channels`</sub>
 - CLIは http://127.0.0.1:<ポート>/api/v1(ループバックのみ)へ接続する。 <sub>`base_url_uses_loopback_and_api_v1`</sub>
 - endpoint()はベースURLに相対パスを連結する。 <sub>`endpoint_appends_path`</sub>
 - シート未指定のときnetlist URLにクエリは付かない。 <sub>`netlist_url_omits_query_without_sheet`</sub>

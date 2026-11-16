@@ -126,3 +126,53 @@ async fn the_link_api_arranges_and_refuses_bad_options() {
         assert!(reply.get(key).is_some(), "返り値に「{key}」が無い: {reply}");
     }
 }
+
+/// Adds a cable entity to the first sheet, which the arrange refuses.
+fn add_cable(doc: &SharedDoc) {
+    let sheet_id = first_sheet(doc);
+    let id = Uuid::new_v4();
+    let cable: madake_core::Cable = serde_json::from_value(json!({
+        "id": id, "reference": "W1", "part_no": "SAMPLE-CBL", "core_count": 2, "sq": 1.25,
+        "points": [{"x": 50.0, "y": 200.0}, {"x": 90.0, "y": 200.0}],
+    }))
+    .expect("cable");
+    doc.engine
+        .lock()
+        .unwrap()
+        .execute(madake_core::Command::AddEntity { sheet_id, entity: madake_core::Entity::Cable(cable) })
+        .expect("ケーブルを足せる");
+}
+
+/// A sheet with a cable is refused over MCP and over the Link API, and the drawing and its revision stay as they were.
+/// ケーブルのあるシートはMCPでもLink APIでも断られ、図面も版番号も変わらない。
+#[tokio::test]
+async fn a_refused_arrange_changes_nothing() {
+    let (doc, bridge, router) = fixture();
+    let sheet = two_squeezed_parts(&doc, &bridge).await;
+    add_cable(&doc);
+    let revision = doc.engine.lock().unwrap().revision();
+    let original = entities_json(&doc);
+    let outcome = bridge.call("arrange_sheet", json!({"sheet_id": sheet})).await;
+    assert!(outcome.is_error, "断られるはず: {}", outcome.content);
+    assert!(outcome.content.contains("ケーブル"), "{}", outcome.content);
+    let (status, body) = post(&router, "/api/v1/route/arrange", json!({"sheet_id": sheet})).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(doc.engine.lock().unwrap().revision(), revision);
+    assert_eq!(entities_json(&doc), original);
+}
+
+/// Arranging a sheet that is already arranged applies no edit at all: no new undo step and no change of revision.
+/// 並べ直し済みのシートをもう一度並べ直しても編集は1つも当てず、undoの履歴も版番号も増えない。
+#[tokio::test]
+async fn arranging_an_arranged_sheet_applies_no_edit() {
+    let (doc, bridge, _) = fixture();
+    let sheet = two_squeezed_parts(&doc, &bridge).await;
+    call(&bridge, "arrange_sheet", json!({"sheet_id": sheet})).await;
+    let revision = doc.engine.lock().unwrap().revision();
+    let depth = doc.engine.lock().unwrap().undo_depth();
+    let reply = call(&bridge, "arrange_sheet", json!({"sheet_id": sheet})).await;
+    assert_eq!(reply["moved"], json!(0), "{reply}");
+    assert_eq!(reply["labelled"], json!([]), "{reply}");
+    assert_eq!(doc.engine.lock().unwrap().revision(), revision);
+    assert_eq!(doc.engine.lock().unwrap().undo_depth(), depth);
+}

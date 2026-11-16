@@ -47,6 +47,10 @@ passed through. All options are validated before the engine lock is taken.
   - satellite symbols: net-name marks (ground, power) and other one-pin symbols whose only wire goes to a
     pin of this symbol;
   - net labels whose only wire goes to a pin of this symbol;
+  - labels and one-pin symbols placed directly on a pin of this symbol (no wire needed).
+  "Only wire goes to a pin of this symbol" is decided on the physically connected wire cluster: every pin
+  on it other than the candidate's own belongs to this symbol. Same-named labels or marks elsewhere on the
+  sheet do not matter.
   - free texts and leader lines whose anchor lies within 3 mm of the symbol's bounds (and not closer to
     another symbol).
 - A unit moves rigidly (translation only). Every move is a multiple of 2.5 mm so pins stay on the grid.
@@ -74,7 +78,11 @@ passed through. All options are validated before the engine lock is taken.
 
 - Before moving, the wire clusters of the sheet are recorded with their terminals (pins by symbol id and
   pin number, net labels by id, net-name symbol pins) and their wire attributes, exactly as reroute does.
-- After moving, every cluster is routed on the new geometry with the reroute engine.
+- After moving, every cluster is routed on the new geometry with the reroute engine, except clusters whose
+  terminals all keep their position (and whose wire points the maps leave in place): they keep their old
+  wires untouched, as fixed obstacles.
+- A cluster whose labels and net-name symbols carry more than one name is refused before routing, whether
+  it would be routed or kept.
 - A cluster that cannot be routed is **connected by labels** instead of being left broken: each terminal
   gets a short lead and a net label with the cluster's net name, so connectivity is kept. When that name
   is not unique to the cluster across the project (for example automatic N001 names or names shared by
@@ -93,7 +101,11 @@ passed through. All options are validated before the engine lock is taken.
   `ARR_<n>` not used by any label or net-name symbol in the project.
 - Sheets that hold cables (`Cable`) or panel-layout entities are refused.
 - Before returning, the plan is applied to a copy of the sheet and the pin partition (which pins share a
-  net) is compared with the original; any difference refuses with nothing changed.
+  net) is compared with the original; so are, per net, the names its labels and net-name symbols give it
+  (ignoring only fresh `ARR_<n>` names), the labels and net-name symbols sitting directly on pins, and
+  that every new label stub touches nothing but its own pin; any difference refuses with nothing changed.
+- The title block area is taken from the frame template's corner (`title_block.origin`), its width and
+  height, plus the revision rows stacked above it.
 
 ### Reply
 

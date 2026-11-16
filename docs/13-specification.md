@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3507 specification clauses** across 6 areas.
+**3537 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -41,6 +41,33 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A sheet with only wires and notes changes nothing. <sub>`a_sheet_without_symbols_changes_nothing`</sub>
 - Parts off the 2.5 mm grid move in 2.5 mm steps, keep their offset and stay connected. <sub>`off_grid_symbols_keep_their_offset_and_stay_connected`</sub>
 - Arranging an already arranged sheet moves nothing more. <sub>`arranging_twice_does_not_move_more`</sub>
+- A net label sitting on a pin that also has a wire stays on that pin when the part moves, so the net keeps its name. <sub>`a_label_on_a_wired_pin_moves_with_the_part`</sub>
+- A ground mark placed directly on a pin, with no wire, moves with the part and keeps naming the net. <sub>`a_ground_mark_on_a_pin_moves_with_the_part`</sub>
+- A net label on a pin with no wire at all moves with the part. <sub>`a_label_on_a_bare_pin_moves_with_the_part`</sub>
+- An unroutable cluster holding two labels with different names is refused, naming the net, and nothing is planned. <sub>`an_unroutable_cluster_with_two_label_names_is_refused`</sub>
+- A routable cluster holding two labels with different names is refused as well, before any routing. <sub>`a_routable_cluster_with_two_label_names_is_refused`</sub>
+- Two parts that each have their own ground mark keep their marks as satellites, although both marks name the same net. <sub>`ground_marks_of_two_parts_are_each_a_satellite`</sub>
+- Tag labels with the same name on two parts are each a satellite of their own part. <sub>`same_named_tags_on_two_parts_are_each_a_satellite`</sub>
+- A cluster whose ends do not move keeps its old wire untouched, even when the router could not draw it again. <sub>`an_unmoved_cluster_keeps_its_wire`</sub>
+- The self-check refuses a result in which a net lost the name its label gave it, although the pins still share the net. <sub>`the_self_check_refuses_a_lost_net_name`</sub>
+- The self-check ignores only the fresh ARR names the plan made; any other new name on a net is refused. <sub>`the_self_check_ignores_only_fresh_names`</sub>
+- The self-check refuses a result in which a label that sat on a pin no longer does. <sub>`the_self_check_refuses_a_label_moved_off_its_pin`</sub>
+- A label stub that touches a wire of another net is refused; the same stub standing free passes. <sub>`a_label_stub_touching_another_wire_is_refused`</sub>
+- The title block area follows the template's corner: top-left puts it in the top-left corner of the frame, with its own width and height. <sub>`the_title_block_area_follows_the_template_corner`</sub>
+- Revision rows drawn above the title block are part of the area to avoid. <sub>`the_title_block_area_includes_the_revision_rows`</sub>
+- On generated sheets with off-grid pins, marks and labels, every arrange either keeps which pins share a net and the names of every net, or refuses. <sub>`generated_sheets_keep_connections_and_names_or_refuse`</sub>
+- Two unrelated unroutable clusters get two different fresh names, so the labels never join them into one net. <sub>`two_unroutable_clusters_get_different_names`</sub>
+- A cluster that is joined by labels takes the name of its own label, and the old label is replaced. <sub>`the_fallback_uses_the_cluster_label_name`</sub>
+- A cluster that is joined by labels and holds a ground mark takes the mark's net name. <sub>`the_fallback_uses_a_net_name_symbol`</sub>
+- An alignment move that would make two units overlap where they did not before is skipped. <sub>`an_alignment_that_would_overlap_is_skipped`</sub>
+- When the layout with the normal maximum gap does not fit, the gaps are reduced towards the channel width and the arrange succeeds. <sub>`a_tight_frame_reduces_the_gaps_and_fits`</sub>
+- A layout that would run into the title block is refused when the drawing kept out of it before. <sub>`a_layout_into_the_title_block_is_refused`</sub>
+- A wire that a note points at, or that is linked to FreeCAD, makes the arrange refuse and name the net. <sub>`pointed_wires_are_refused`</sub>
+- Wires of one cluster whose lengths come from different sources make the arrange refuse. <sub>`mixed_length_sources_are_refused`</sub>
+- Alignment groups never span more than the alignment distance, so a chain of nearby keys is split instead of moving far. <sub>`alignment_groups_do_not_chain`</sub>
+- An alignment whose 2.5 mm rounding would swap the order of two parts is not done. <sub>`alignment_never_swaps_order`</sub>
+- New labels made for a cluster copy the rotation and attributes of the label they replace. <sub>`new_labels_copy_the_old_label_style`</sub>
+- A label that a note points at is not deleted when its cluster is joined by labels, and the net keeps its name. <sub>`a_label_pointed_at_by_a_note_is_kept`</sub>
 
 ### block
 
@@ -1708,6 +1735,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The arrange tool is advertised and its description says that one undo restores the drawing. <sub>`the_arrange_tool_is_advertised`</sub>
 - Arranging two squeezed parts over MCP moves them apart, reroutes the wire and one undo restores every entity. <sub>`arranging_over_mcp_moves_reroutes_and_undoes_in_one_step`</sub>
 - The Link API arrange endpoint gives the same reply shape and refuses bad options with 400 and no change. <sub>`the_link_api_arranges_and_refuses_bad_options`</sub>
+- A sheet with a cable is refused over MCP and over the Link API, and the drawing and its revision stay as they were. <sub>`a_refused_arrange_changes_nothing`</sub>
+- Arranging a sheet that is already arranged applies no edit at all: no new undo step and no change of revision. <sub>`arranging_an_arranged_sheet_applies_no_edit`</sub>
 
 ### drawing_tools
 
@@ -2315,6 +2344,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### Link API client
 
+- The arrange body sends options only with a channel width, and widens the maximum gap to the channel when the channel is above the default 20 mm. <sub>`arrange_body_widens_the_maximum_gap_for_wide_channels`</sub>
 - The CLI talks to http://127.0.0.1:<port>/api/v1 (loopback only). <sub>`base_url_uses_loopback_and_api_v1`</sub>
 - endpoint() joins the base URL with a relative path. <sub>`endpoint_appends_path`</sub>
 - The netlist URL has no query string when no sheet is specified. <sub>`netlist_url_omits_query_without_sheet`</sub>

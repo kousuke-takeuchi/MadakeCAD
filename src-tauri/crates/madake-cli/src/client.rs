@@ -302,6 +302,16 @@ pub fn terminals_url(port: u16, sheet_id: Option<&str>) -> String {
     }
 }
 
+/// `POST /api/v1/route/arrange` の本文。通り道の幅があるときだけ設定を送る。空きの上限は通り道の幅以上で
+/// なければならないので、既定の20mmと幅の大きい方を送る。
+pub fn arrange_body(sheet_id: Option<&str>, channel_mm: Option<f64>) -> Value {
+    let mut body = json!({ "sheet_id": sheet_id });
+    if let Some(channel) = channel_mm {
+        body["options"] = json!({ "channel_mm": channel, "max_gap_mm": channel.max(20.0) });
+    }
+    body
+}
+
 /// 8-4-4-4-12桁の16進 = UUID表記か。`--terminal` が参照記号かentity idかの判別に使う。
 pub fn looks_like_uuid(s: &str) -> bool {
     let groups = [8usize, 4, 4, 4, 12];
@@ -330,7 +340,7 @@ pub trait LinkApi {
     fn simulate_op(&self, sheet_id: Option<&str>, options: Value) -> Result<Value, CliError>;
     /// `POST /api/v1/route/reroute` (`{"sheet_id": ..., "nets": [...]}`)
     fn reroute(&self, sheet_id: Option<&str>, nets: &[String]) -> Result<Value, CliError>;
-    /// `POST /api/v1/route/arrange` (`{"sheet_id": ..., "options": {"channel_mm": ...}}`。`options`は幅の指定があるときだけ)
+    /// `POST /api/v1/route/arrange` (`{"sheet_id": ..., "options": {"channel_mm": ...}}`。`options`は幅の指定があるときだけで、`max_gap_mm`は20と幅の大きい方)
     fn arrange(&self, sheet_id: Option<&str>, channel_mm: Option<f64>) -> Result<Value, CliError>;
     /// `POST /api/v1/commands` (Command配列 → Patch配列)
     fn exec(&self, commands: Value) -> Result<Value, CliError>;
@@ -449,11 +459,7 @@ impl LinkApi for HttpClient {
         self.post("/route/reroute", json!({ "sheet_id": sheet_id, "nets": nets }))
     }
     fn arrange(&self, sheet_id: Option<&str>, channel_mm: Option<f64>) -> Result<Value, CliError> {
-        let mut body = json!({ "sheet_id": sheet_id });
-        if let Some(channel) = channel_mm {
-            body["options"] = json!({ "channel_mm": channel });
-        }
-        self.post("/route/arrange", body)
+        self.post("/route/arrange", arrange_body(sheet_id, channel_mm))
     }
 
     fn parts(&self, query: Option<&str>, category: Option<&str>) -> Result<Value, CliError> {
@@ -550,6 +556,15 @@ impl LinkApi for HttpClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The arrange body sends options only with a channel width, and widens the maximum gap to the channel when the channel is above the default 20 mm.
+    /// 並べ直しの本文は通り道の幅があるときだけ設定を送り、幅が既定の20mmを超えれば空きの上限もその幅に広げる。
+    #[test]
+    fn arrange_body_widens_the_maximum_gap_for_wide_channels() {
+        assert_eq!(arrange_body(None, None), json!({"sheet_id": null}));
+        assert_eq!(arrange_body(Some("S"), Some(10.0)), json!({"sheet_id": "S", "options": {"channel_mm": 10.0, "max_gap_mm": 20.0}}));
+        assert_eq!(arrange_body(None, Some(30.0)), json!({"sheet_id": null, "options": {"channel_mm": 30.0, "max_gap_mm": 30.0}}));
+    }
 
     /// The CLI talks to http://127.0.0.1:<port>/api/v1 (loopback only).
     /// CLIは http://127.0.0.1:<ポート>/api/v1(ループバックのみ)へ接続する。

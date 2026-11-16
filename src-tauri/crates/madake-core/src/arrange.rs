@@ -2489,4 +2489,41 @@ mod tests {
         let new: Vec<f64> = keys.iter().zip(&m).map(|(k, d)| k + d).collect();
         assert!(new.windows(2).all(|w| w[0] <= w[1]), "{new:?}");
     }
+
+    /// New labels made for a cluster copy the rotation and attributes of the label they replace.
+    /// かたまりのために作る新しいラベルは、置き換えるラベルの向きと属性を引き継ぐ。
+    #[test]
+    fn new_labels_copy_the_old_label_style() {
+        let (mut sh, _, _) = walled_sheet();
+        let old = label(&mut sh, (120.0, 50.0), "FEED");
+        if let Some(Entity::NetLabel(l)) = sh.entities.get_mut(&old) {
+            l.rotation = 90;
+            l.attrs.insert("note".into(), "kept".into());
+        }
+        let plan = arrange(&sh);
+        let new: Vec<&NetLabel> = plan.add.iter().filter_map(|e| if let Entity::NetLabel(l) = e { Some(l) } else { None }).collect();
+        assert_eq!(new.len(), 2);
+        for l in new {
+            assert_eq!(l.rotation, 90);
+            assert_eq!(l.attrs.get("note").map(String::as_str), Some("kept"));
+        }
+    }
+
+    /// A label that a note points at is not deleted when its cluster is joined by labels, and the net keeps its name.
+    /// 注記が指すラベルは、かたまりをラベルでつなぐときも消さず、ネットの名前も変わらない。
+    #[test]
+    fn a_label_pointed_at_by_a_note_is_kept() {
+        let (mut sh, _, _) = walled_sheet();
+        let old = label(&mut sh, (120.0, 50.0), "FEED");
+        let t = note(&mut sh, (120.0, 60.0));
+        if let Some(Entity::Text(text)) = sh.entities.get_mut(&t) {
+            text.leader_to = Some(old);
+        }
+        let plan = arrange(&sh);
+        assert_eq!(plan.labelled.len(), 1);
+        assert!(!plan.remove.contains(&old));
+        let after = apply(&sh, &plan);
+        assert!(after.entities.contains_key(&old));
+        assert_eq!(pin_partition(&sh, &defs()), pin_partition(&after, &defs()));
+    }
 }
