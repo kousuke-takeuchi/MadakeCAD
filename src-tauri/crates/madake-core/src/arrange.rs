@@ -12,7 +12,7 @@ use crate::leader::entity_bounds;
 use crate::model::{Entity, EntityId, NetLabel, Sheet, SheetKind, Wire};
 use crate::netlist::{extract_netlist, on_wire, CONNECT_EPS};
 use crate::route::{
-    collect_route_units, emit, make_lead, pin_points, route_units, simplify, Collected, Dir, KeepReason, KeptCluster, PinPt,
+    collect_route_units, emit, make_lead, pin_points, route_units, simplify, Collected, Dir, KeepReason, KeptCluster, PinPt, RouteUnit,
     RerouteOptions, RouteGrid, RouteOptions,
 };
 use crate::symbol::{DefIndex, SymbolDef};
@@ -92,81 +92,158 @@ fn dist_to_rect(p: &Point, b: &(f64, f64, f64, f64)) -> f64 {
     dx.hypot(dy)
 }
 
+/// 名前では結ばない、配線で物理的につながったまとまり (ピンとネットラベル)。
+#[derive(Debug, Default, Clone)]
+struct PhysGroup {
+    /// (シンボルid, ピン番号)
+    pins: BTreeSet<(EntityId, String)>,
+    labels: BTreeSet<EntityId>,
+}
+
+/// シートを、名前では結ばない物理的なまとまりに分ける。つなぎ方はネットリストと同じで、同名のラベルどうし
+/// (ネット名シンボルどうしも) だけは結ばない。ネット名シンボルのピンは、同じ位置の他のピンとつながる
+/// (ネットリストの暗黙のラベルと同じ働き)。
+fn phys_groups(sheet: &Sheet, defs: &[SymbolDef]) -> Vec<PhysGroup> {
+    let idx = DefIndex::new(defs);
+    let pp = pin_points(sheet, defs);
+    let named: BTreeSet<EntityId> = sheet
+        .entities
+        .values()
+        .filter_map(|e| match e {
+            Entity::Symbol(s) if idx.get(s).is_some_and(|d| d.net_name().is_some()) => Some(s.id),
+            _ => None,
+        })
+        .collect();
+    let wires: Vec<&Wire> = sheet.entities.values().filter_map(|e| if let Entity::Wire(w) = e { Some(w) } else { None }).collect();
+    let juncs: Vec<Point> = sheet.entities.values().filter_map(|e| if let Entity::Junction(j) = e { Some(j.at) } else { None }).collect();
+    let labels: Vec<&NetLabel> = sheet.entities.values().filter_map(|e| if let Entity::NetLabel(l) = e { Some(l) } else { None }).collect();
+    // 節点の番号: [配線][ピン][ジャンクション][ラベル]
+    let (pi, ji) = (wires.len(), wires.len() + pp.len());
+    let li = ji + juncs.len();
+    let mut parent: Vec<usize> = (0..li + labels.len()).collect();
+    fn find(parent: &mut [usize], mut i: usize) -> usize {
+        while parent[i] != i {
+            parent[i] = parent[parent[i]];
+            i = parent[i];
+        }
+        i
+    }
+    let mut union = |a: usize, b: usize| {
+        let (ra, rb) = (find(&mut parent, a), find(&mut parent, b));
+        if ra != rb {
+            parent[ra.max(rb)] = ra.min(rb);
+        }
+    };
+    let ends = |w: &Wire| -> Vec<Point> { [w.points.first(), w.points.last()].into_iter().flatten().copied().collect() };
+    for a in 0..wires.len() {
+        for b in a + 1..wires.len() {
+            if ends(wires[a]).iter().any(|x| ends(wires[b]).iter().any(|y| near(*x, *y))) {
+                union(a, b);
+            }
+        }
+        for (j, q) in juncs.iter().enumerate() {
+            if on_wire(wires[a], q) {
+                union(a, ji + j);
+            }
+        }
+        for (p, q) in pp.iter().enumerate() {
+            if on_wire(wires[a], &q.pos) {
+                union(a, pi + p);
+            }
+        }
+        for (l, q) in labels.iter().enumerate() {
+            if on_wire(wires[a], &q.at) {
+                union(a, li + l);
+            }
+        }
+    }
+    for (p, a) in pp.iter().enumerate() {
+        for (p2, b) in pp.iter().enumerate().skip(p + 1) {
+            let same_pin = a.entity == b.entity && a.number == b.number;
+            let implicit = (named.contains(&a.entity) || named.contains(&b.entity)) && near(a.pos, b.pos);
+            if same_pin || implicit {
+                union(pi + p, pi + p2);
+            }
+        }
+        for (l, q) in labels.iter().enumerate() {
+            if near(a.pos, q.at) {
+                union(pi + p, li + l);
+            }
+        }
+    }
+    let mut groups: BTreeMap<usize, PhysGroup> = BTreeMap::new();
+    for (p, q) in pp.iter().enumerate() {
+        let r = find(&mut parent, pi + p);
+        groups.entry(r).or_default().pins.insert((q.entity, q.number.clone()));
+    }
+    for (l, q) in labels.iter().enumerate() {
+        let r = find(&mut parent, li + l);
+        groups.entry(r).or_default().labels.insert(q.id);
+    }
+    groups.into_values().collect()
+}
+
 /// シートの単位を、主のid順に返す。
 pub fn units(sheet: &Sheet, defs: &[SymbolDef]) -> Vec<Unit> {
     let idx = DefIndex::new(defs);
 
     // シンボルごとのピン数。
+    let pp = pin_points(sheet, defs);
     let mut pin_count: BTreeMap<EntityId, usize> = BTreeMap::new();
-    for pp in pin_points(sheet, defs) {
-        *pin_count.entry(pp.entity).or_insert(0) += 1;
+    for q in &pp {
+        *pin_count.entry(q.entity).or_insert(0) += 1;
     }
-    let one_pin = |id: &EntityId| pin_count.get(id) == Some(&1);
+    let multi = |id: &EntityId| pin_count.get(id).copied().unwrap_or(0) >= 2;
+    let groups = phys_groups(sheet, defs);
 
-    // ネットごとの (ピンの持ち主, ラベル) を集める。
-    struct NetFacts {
-        owners: BTreeSet<EntityId>,
-        labels: BTreeSet<EntityId>,
-    }
-    let nets = extract_netlist(sheet, defs);
-    let mut facts: Vec<NetFacts> = Vec::new();
-    for net in &nets {
-        let owners: BTreeSet<EntityId> = net.pins.iter().map(|p| p.entity_id).collect();
-        let mut labels = BTreeSet::new();
-        for e in sheet.entities.values() {
-            let Entity::NetLabel(l) = e else { continue };
-            let hit = net.wire_ids.iter().any(|wid| match sheet.entities.get(wid) {
-                Some(Entity::Wire(w)) => on_wire(w, &l.at),
-                _ => false,
-            });
-            if hit {
-                labels.insert(l.id);
-            }
+    // 位置に重なる他のシンボルのピンから親を選ぶ。複数ピンのシンボルが先で、同じならid順。
+    // 1ピンのシンボルどうしは、自分よりidの小さい方だけを親にする (親子が輪にならない)。
+    let coincident = |at: Point, me: Option<EntityId>| -> Option<EntityId> {
+        let mut cands: Vec<EntityId> = pp.iter().filter(|q| Some(q.entity) != me && near(q.pos, at)).map(|q| q.entity).collect();
+        cands.sort();
+        cands.dedup();
+        if let Some(m) = cands.iter().find(|c| multi(c)) {
+            return Some(*m);
         }
-        facts.push(NetFacts { owners, labels });
-    }
+        cands.into_iter().find(|c| me.map_or(true, |m| *c < m))
+    };
+    // まとまりの、自分以外の全てのピンが1つのシンボル S のものなら S。1ピンのシンボルの親は複数ピンのシンボルだけ。
+    let group_parent = |g: &PhysGroup, me: Option<EntityId>| -> Option<EntityId> {
+        let others: BTreeSet<EntityId> = g.pins.iter().map(|p| p.0).filter(|o| Some(*o) != me).collect();
+        let s = *others.iter().next()?;
+        (others.len() == 1 && (me.is_none() || multi(&s))).then_some(s)
+    };
 
     // 衛星の判定: 衛星の候補 (1ピンのシンボル・ラベル) -> 親のシンボル。
+    // ピンの上に直接あれば、そのピンのシンボルの衛星。そうでなければ配線のまとまりで決める。
     let mut parent_of: BTreeMap<EntityId, EntityId> = BTreeMap::new();
     for e in sheet.entities.values() {
-        let (id, is_label) = match e {
-            Entity::Symbol(s) if one_pin(&s.id) => (s.id, false),
-            Entity::NetLabel(l) => (l.id, true),
+        let found = match e {
+            Entity::Symbol(s) if pin_count.get(&s.id) == Some(&1) => {
+                let Some(q) = pp.iter().find(|q| q.entity == s.id) else { continue };
+                coincident(q.pos, Some(s.id)).or_else(|| {
+                    groups.iter().find(|g| g.pins.contains(&(s.id, q.number.clone()))).and_then(|g| group_parent(g, Some(s.id)))
+                })
+            }
+            Entity::NetLabel(l) => coincident(l.at, None)
+                .or_else(|| groups.iter().find(|g| g.labels.contains(&l.id)).and_then(|g| group_parent(g, None))),
             _ => continue,
         };
-        let mut found: Option<EntityId> = None;
-        let mut ok = true;
-        let mut touched = false;
-        for f in &facts {
-            let on_net = if is_label { f.labels.contains(&id) } else { f.owners.contains(&id) };
-            if !on_net {
-                continue;
-            }
-            touched = true;
-            // 他のラベル・他の1ピンのシンボルがあれば衛星ではない。
-            let other_label = f.labels.iter().any(|l| *l != id);
-            let other_one_pin = f.owners.iter().any(|o| *o != id && one_pin(o));
-            // 衛星のシンボル自身がラベルの付いたネットにいるのも、ラベルが別にあるので衛星ではない。
-            let others: Vec<EntityId> = f.owners.iter().copied().filter(|o| *o != id).collect();
-            if other_label || other_one_pin || others.len() != 1 {
-                ok = false;
-                break;
-            }
-            match found {
-                None => found = Some(others[0]),
-                Some(p) if p == others[0] => {}
-                _ => {
-                    ok = false;
-                    break;
-                }
-            }
-        }
-        if ok && touched {
-            if let Some(p) = found {
-                parent_of.insert(id, p);
-            }
+        if let Some(p) = found {
+            parent_of.insert(e.id(), p);
         }
     }
+    // 親が衛星なら、その親へたどる (輪にならないので必ず主で止まる)
+    let root = |mut id: EntityId| -> EntityId {
+        for _ in 0..=parent_of.len() {
+            match parent_of.get(&id) {
+                Some(p) => id = *p,
+                None => break,
+            }
+        }
+        id
+    };
+    let parent_of: BTreeMap<EntityId, EntityId> = parent_of.keys().map(|k| (*k, root(*k))).collect();
 
     // 主の一覧 (id順)。
     let mut mains: Vec<EntityId> = Vec::new();
@@ -451,6 +528,8 @@ struct Fallback {
     net: String,
     name: String,
     terms: Vec<(Point, Option<Dir>, Wire)>,
+    /// 新しいラベルの向きと属性の手本。
+    template: Option<NetLabel>,
 }
 
 fn near(a: Point, b: Point) -> bool {
@@ -602,22 +681,55 @@ fn cluster_labels(sheet: &Sheet, wires: &[EntityId]) -> Vec<(EntityId, String)> 
         .collect()
 }
 
-/// 動かさずに残したかたまりを、端子の持ち主で分ける。名前の違うラベルを持つかたまりは断る。
-fn classify_kept(sheet: &Sheet, kept: &[KeptCluster], owners: &Owners) -> Result<Vec<Fate>, String> {
+/// 動かさずに残したかたまりを、端子の持ち主で分ける。
+fn classify_kept(kept: &[KeptCluster], owners: &Owners) -> Result<Vec<Fate>, String> {
     let mut fates = Vec::new();
     for k in kept {
         let set: BTreeSet<usize> = term_units(&k.net, &k.terms, owners)?.into_iter().collect();
         if set.len() <= 1 {
             fates.push(Fate::Rigid(set.iter().next().copied()));
-            continue;
+        } else {
+            fates.push(Fate::Labels);
         }
-        let names: BTreeSet<String> = cluster_labels(sheet, &k.wires).into_iter().map(|l| l.1).collect();
-        if names.len() > 1 {
-            return Err(format!("ネット {} は名前の違うラベルを持つため、並べ直せません", k.net));
-        }
-        fates.push(Fate::Labels);
     }
     Ok(fates)
+}
+
+/// 端子の位置にピンがあるネット名シンボルの名前。
+fn term_symbol_names(sheet: &Sheet, idx: &DefIndex, pins: &[PinPt], terms: &[Point]) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for t in terms {
+        for pin in pins.iter().filter(|p| near(p.pos, *t)) {
+            let Some(Entity::Symbol(s)) = sheet.entities.get(&pin.entity) else { continue };
+            if let Some(n) = idx.get(s).and_then(|d| d.net_name().map(str::to_string)) {
+                out.insert(n);
+            }
+        }
+    }
+    out
+}
+
+/// 名前の違うラベル (ネット名シンボルを含む) を持つかたまりがあれば、ネット名を挙げて断る。
+/// 引き直すかたまりも残すかたまりも、引き直す前に調べる (ラベルでつなぐときに名前を1つしか残せないため)。
+fn refuse_mixed_names(sheet: &Sheet, idx: &DefIndex, pins: &[PinPt], c: &Collected) -> Result<(), String> {
+    let mut bad: BTreeSet<String> = BTreeSet::new();
+    let clusters = c
+        .units
+        .iter()
+        .map(|u| (&u.net, &u.wires, &u.terms))
+        .chain(c.kept.iter().map(|k| (&k.net, &k.wires, &k.terms)));
+    for (net, wires, terms) in clusters {
+        let at: Vec<Point> = terms.iter().map(|t| t.0).collect();
+        let mut names: BTreeSet<String> = cluster_labels(sheet, wires).into_iter().map(|l| l.1).collect();
+        names.extend(term_symbol_names(sheet, idx, pins, &at));
+        if names.len() > 1 {
+            bad.insert(format!("{net} ({})", names.into_iter().collect::<Vec<_>>().join("/")));
+        }
+    }
+    if bad.is_empty() {
+        return Ok(());
+    }
+    Err(format!("名前の違うラベルを持つネットがあるため、並べ直せません: {}", bad.into_iter().collect::<Vec<_>>().join(", ")))
 }
 
 fn span(b: &Bounds, ax: Axis) -> (f64, f64) {
@@ -814,37 +926,49 @@ fn taken_set(sheet: &Sheet, defs: &[SymbolDef], ctx: &ArrangeContext) -> BTreeSe
     t
 }
 
+/// ラベルでつなぐときの名前・消すラベル・新しいラベルの手本。
+struct FallbackName {
+    name: String,
+    /// 消すラベルのid。
+    delete: Vec<EntityId>,
+    /// 新しいラベルの向きと属性の手本 (消すラベルの先頭)。
+    template: Option<NetLabel>,
+    /// 新しく作った `ARR_<n>` の名前か。
+    fresh: bool,
+}
+
 /// ラベルでつなぐときの名前と、消すラベルのid。
 /// かたまりのラベルの名前 (ラベルは消す)、なければネット名シンボルのピンの名前、なければ未使用の `ARR_<n>`。
+/// 他から指されているラベル (`pointed`) と、ピンの端子が無いかたまりのラベル (代わりのラベルが作られない) は消さない。
 fn fallback_name(
     sheet: &Sheet,
     idx: &DefIndex,
     pins: &[PinPt],
     wires: &[EntityId],
-    terms: &[Point],
+    terms: &[(Point, Option<Dir>)],
+    pointed: &BTreeSet<EntityId>,
     taken: &mut BTreeSet<String>,
-) -> (String, Vec<EntityId>) {
+) -> FallbackName {
     let labels = cluster_labels(sheet, wires);
     if let Some(first) = labels.first() {
-        return (first.1.clone(), labels.iter().map(|l| l.0).collect());
+        let has_pin = terms.iter().any(|t| t.1.is_some());
+        let delete: Vec<EntityId> = if has_pin { labels.iter().map(|l| l.0).filter(|id| !pointed.contains(id)).collect() } else { vec![] };
+        let template = match sheet.entities.get(&labels[0].0) {
+            Some(Entity::NetLabel(l)) => Some(l.clone()),
+            _ => None,
+        };
+        return FallbackName { name: first.1.clone(), delete, template, fresh: false };
     }
-    for t in terms {
-        for pin in pins.iter().filter(|p| near(p.pos, *t)) {
-            let Some(Entity::Symbol(s)) = sheet.entities.get(&pin.entity) else { continue };
-            if let Some(n) = idx.get(s).and_then(|d| d.net.clone()) {
-                let n = n.trim().to_string();
-                if !n.is_empty() {
-                    return (n, vec![]);
-                }
-            }
-        }
+    let at: Vec<Point> = terms.iter().map(|t| t.0).collect();
+    if let Some(n) = term_symbol_names(sheet, idx, pins, &at).into_iter().next() {
+        return FallbackName { name: n, delete: vec![], template: None, fresh: false };
     }
     let mut n = 1;
     loop {
         let name = format!("ARR_{n}");
         if !taken.contains(&name) {
             taken.insert(name.clone());
-            return (name, vec![]);
+            return FallbackName { name, delete: vec![], template: None, fresh: true };
         }
         n += 1;
     }
@@ -879,9 +1003,19 @@ fn dir_step(d: Dir) -> (f64, f64) {
     }
 }
 
+/// ラベルでつなぐ短い線1本と、その先のラベル (検算で、他の物に触れていないかを調べる)。
+#[derive(Debug, Clone)]
+struct Stub {
+    wire: EntityId,
+    label: EntityId,
+    name: String,
+}
+
 /// ラベルでつなぐ短い線とラベル。ピンから引き出し線の先 (なければ向きへ2.5mm) まで線を引き、その先にラベルを置く。
-fn stub_entities(grid: &RouteGrid, fb: &Fallback) -> Vec<Entity> {
+/// ラベルの向きと属性は、消したラベルがあればその先頭に倣う。
+fn stub_entities(grid: &RouteGrid, fb: &Fallback) -> (Vec<Entity>, Vec<Stub>) {
     let mut out = Vec::new();
+    let mut stubs = Vec::new();
     for (pos, dir, attrs) in &fb.terms {
         let Some(dir) = dir else { continue };
         let pts = match make_lead(grid, *pos, Some(*dir)) {
@@ -892,10 +1026,13 @@ fn stub_entities(grid: &RouteGrid, fb: &Fallback) -> Vec<Entity> {
             }
         };
         let end = *pts.last().expect("2点以上");
-        out.push(Entity::Wire(Wire { id: uuid::Uuid::new_v4(), points: pts, ..attrs.clone() }));
-        out.push(Entity::NetLabel(NetLabel { id: uuid::Uuid::new_v4(), at: end, name: fb.name.clone(), rotation: 0, attrs: Default::default() }));
+        let (wire, label) = (uuid::Uuid::new_v4(), uuid::Uuid::new_v4());
+        let (rotation, label_attrs) = fb.template.as_ref().map_or((0, Default::default()), |t| (t.rotation, t.attrs.clone()));
+        out.push(Entity::Wire(Wire { id: wire, points: pts, ..attrs.clone() }));
+        out.push(Entity::NetLabel(NetLabel { id: label, at: end, name: fb.name.clone(), rotation, attrs: label_attrs }));
+        stubs.push(Stub { wire, label, name: fb.name.clone() });
     }
-    out
+    (out, stubs)
 }
 
 /// ピンの分け方: ピンを持つネットごとの (シンボルid, ピン番号) の集合の集合。
@@ -905,6 +1042,107 @@ fn pin_partition(sheet: &Sheet, defs: &[SymbolDef]) -> BTreeSet<BTreeSet<(Entity
         .filter(|n| !n.pins.is_empty())
         .map(|n| n.pins.iter().map(|p| (p.entity_id, p.pin.clone())).collect())
         .collect()
+}
+
+/// ネットごとの (ピンの集合, 名前の集合) の並び (ピンの無いネットも含む、整列済み)。
+/// 名前は、ネットの配線の上かピンの上にあるネットラベルの名前と、ネット名シンボルの名前。`fresh`の名前は数えない。
+fn name_key(sheet: &Sheet, defs: &[SymbolDef], fresh: &BTreeSet<String>) -> Vec<(BTreeSet<(EntityId, String)>, BTreeSet<String>)> {
+    let idx = DefIndex::new(defs);
+    let pp = pin_points(sheet, defs);
+    let labels: Vec<&NetLabel> = sheet.entities.values().filter_map(|e| if let Entity::NetLabel(l) = e { Some(l) } else { None }).collect();
+    let mut out = Vec::new();
+    for n in extract_netlist(sheet, defs) {
+        let pins: BTreeSet<(EntityId, String)> = n.pins.iter().map(|q| (q.entity_id, q.pin.clone())).collect();
+        let pos: Vec<Point> = pp.iter().filter(|q| pins.contains(&(q.entity, q.number.clone()))).map(|q| q.pos).collect();
+        let ws: Vec<&Wire> =
+            n.wire_ids.iter().filter_map(|id| if let Some(Entity::Wire(w)) = sheet.entities.get(id) { Some(w) } else { None }).collect();
+        let mut names: BTreeSet<String> = labels
+            .iter()
+            .filter(|l| ws.iter().any(|w| on_wire(w, &l.at)) || pos.iter().any(|p| near(*p, l.at)))
+            .map(|l| l.name.clone())
+            .collect();
+        for (sym, _) in &pins {
+            if let Some(Entity::Symbol(s)) = sheet.entities.get(sym) {
+                if let Some(nm) = idx.get(s).and_then(|d| d.net_name().map(str::to_string)) {
+                    names.insert(nm);
+                }
+            }
+        }
+        names.retain(|nm| !fresh.contains(nm));
+        out.push((pins, names));
+    }
+    out.sort();
+    out
+}
+
+/// ラベルでつなぐ短い線が、自分のピンと、同じ名前の短い線・ラベルのほかに何にも触れていないか。
+fn check_stubs(after: &Sheet, defs: &[SymbolDef], stubs: &[Stub]) -> Result<(), String> {
+    let pp = pin_points(after, defs);
+    for s in stubs {
+        let Some(Entity::Wire(w)) = after.entities.get(&s.wire) else { continue };
+        let Some(start) = w.points.first().copied() else { continue };
+        let own: BTreeSet<EntityId> = stubs.iter().filter(|o| o.name == s.name).flat_map(|o| [o.wire, o.label]).collect();
+        let ends = |x: &Wire| -> Vec<Point> { [x.points.first(), x.points.last()].into_iter().flatten().copied().collect() };
+        let touched = after.entities.values().any(|e| match e {
+            _ if own.contains(&e.id()) => false,
+            Entity::Wire(o) => ends(o).iter().any(|q| on_wire(w, q)) || ends(w).iter().any(|q| on_wire(o, q)),
+            Entity::Junction(j) => on_wire(w, &j.at),
+            Entity::NetLabel(l) => on_wire(w, &l.at),
+            _ => false,
+        }) || pp.iter().any(|q| on_wire(w, &q.pos) && !near(q.pos, start));
+        if touched {
+            return Err(format!("並べ直しの検算で、ラベル {} の引き出し線が他の配線やピンに触れたため、何も変えませんでした", s.name));
+        }
+    }
+    Ok(())
+}
+
+/// 検算: 計画を当てた写しで、ピンの分け方・ネットごとの名前 (新しい `ARR_<n>` を除く)・ラベルでつなぐ短い線の孤立を確かめる。
+fn verify_after(before: &Sheet, after: &Sheet, defs: &[SymbolDef], fresh: &BTreeSet<String>, stubs: &[Stub]) -> Result<(), String> {
+    if pin_partition(before, defs) != pin_partition(after, defs) {
+        return Err("並べ直しの検算で接続が変わったため、何も変えませんでした".into());
+    }
+    if name_key(before, defs, fresh) != name_key(after, defs, fresh) {
+        return Err("並べ直しの検算でネットの名前 (ラベル・ネット名シンボル) が変わったため、何も変えませんでした".into());
+    }
+    // 配線の無いピンの上のラベル・ネット名シンボルはネットリストに出ないので、位置の重なりで比べる
+    let (pb, pa) = (pin_contacts(before, defs), pin_contacts(after, defs));
+    let both = |set: &BTreeSet<(EntityId, EntityId, String)>, other: &Sheet| -> BTreeSet<(EntityId, EntityId, String)> {
+        set.iter().filter(|c| other.entities.contains_key(&c.0) && other.entities.contains_key(&c.1)).cloned().collect()
+    };
+    if both(&pb, after) != both(&pa, before) {
+        return Err("並べ直しの検算で、ピンの上のラベルやネット名シンボルが離れたため、何も変えませんでした".into());
+    }
+    check_stubs(after, defs, stubs)
+}
+
+/// ピンの上に直接あるネットラベルとネット名シンボルのピン: (ラベルかシンボルのid, ピンのシンボルid, ピン番号)。
+fn pin_contacts(sheet: &Sheet, defs: &[SymbolDef]) -> BTreeSet<(EntityId, EntityId, String)> {
+    let idx = DefIndex::new(defs);
+    let pp = pin_points(sheet, defs);
+    let mut out = BTreeSet::new();
+    for e in sheet.entities.values() {
+        let at: Vec<Point> = match e {
+            Entity::NetLabel(l) => vec![l.at],
+            Entity::Symbol(s) if idx.get(s).is_some_and(|d| d.net_name().is_some()) => {
+                pp.iter().filter(|q| q.entity == s.id).map(|q| q.pos).collect()
+            }
+            _ => continue,
+        };
+        for q in pp.iter().filter(|q| q.entity != e.id() && at.iter().any(|a| near(*a, q.pos))) {
+            out.insert((e.id(), q.entity, q.number.clone()));
+        }
+    }
+    out
+}
+
+/// 端子の単位が全て動かず、配線とジャンクションの全ての点が写像で動かないか (それなら元の配線をそのまま残せる)。
+fn unit_stays(sheet: &Sheet, wires: &[EntityId], junctions: &[EntityId], owns: &[usize], lay: &Layout) -> bool {
+    if owns.is_empty() || owns.iter().any(|&o| lay.dx[o].abs() > EPS || lay.dy[o].abs() > EPS) {
+        return false;
+    }
+    let fixed = |p: &Point| (lay.wx.map(p.x) - p.x).abs() < EPS && (lay.wy.map(p.y) - p.y).abs() < EPS;
+    wires.iter().chain(junctions).all(|id| sheet.entities.get(id).map_or(true, |e| shape_points(e).iter().all(fixed)))
 }
 
 /// 計画をシートの写しに当てる (消す → 動かす → 置き換える → 足す)。
@@ -934,11 +1172,12 @@ fn apply_plan(sheet: &Sheet, plan: &ArrangePlan) -> Sheet {
 /// 部品を並べ直し、配線を引き直す計画を作る。図面は書き換えない。
 ///
 /// 整列と通り道の確保で部品を動かし、動かした後の形で全ての配線を引き直す。引けないかたまりはラベルでつなぐ。
-/// 接続が変わる計画は作らない (計画を写しに当ててピンの分け方を比べる)。
+/// 接続が変わる計画は作らない (計画を写しに当てて、ピンの分け方とネットごとの名前を比べる)。
+/// 端子の単位が動かないかたまりは、元の配線をそのまま残す。
 pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ctx: &ArrangeContext) -> Result<ArrangePlan, String> {
     opts.validate()?;
     refuse_unsupported(sheet)?;
-    let mut c = collect(sheet, defs, opts, ctx)?;
+    let c = collect(sheet, defs, opts, ctx)?;
     let us = units(sheet, defs);
     let idx = DefIndex::new(defs);
     let before = content_bounds(sheet, &idx);
@@ -947,10 +1186,15 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
         return Ok(ArrangePlan { size_before: size, size_after: size, after: Some(sheet.clone()), ..Default::default() });
     }
     let owners = Owners::new(sheet, defs, &us);
-    let fates = classify_kept(sheet, &c.kept, &owners)?;
-    let unit_terms: Vec<Vec<usize>> = c.units.iter().map(|u| term_units(&u.net, &u.terms, &owners)).collect::<Result<_, _>>()?;
     let pins = pin_points(sheet, defs);
+    refuse_mixed_names(sheet, &idx, &pins, &c)?;
+    let fates = classify_kept(&c.kept, &owners)?;
+    let unit_terms: Vec<Vec<usize>> = c.units.iter().map(|u| term_units(&u.net, &u.terms, &owners)).collect::<Result<_, _>>()?;
     let mut taken = taken_set(sheet, defs, ctx);
+    // 他から指されているid (消さない)
+    let pointed: BTreeSet<EntityId> = sheet.entities.values().flat_map(|e| e.refs()).chain(ctx.protected.iter().copied()).collect();
+    // この計画で新しく作った `ARR_<n>` の名前 (検算で数えない)
+    let mut fresh: BTreeSet<String> = BTreeSet::new();
 
     // 取り除くもの・剛体のかたまり・ラベルでつなぐかたまりの名前
     let mut dropped: BTreeSet<EntityId> = BTreeSet::new();
@@ -959,7 +1203,7 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
     for u in &c.units {
         dropped.extend(u.wires.iter().chain(&u.junctions).copied());
     }
-    let mut kept_fallbacks: Vec<(usize, String)> = Vec::new();
+    let mut kept_fallbacks: Vec<(usize, FallbackName)> = Vec::new();
     for (ci, (k, fate)) in c.kept.iter().zip(&fates).enumerate() {
         match fate {
             Fate::Rigid(Some(i)) => {
@@ -970,22 +1214,41 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
             Fate::Rigid(None) => {}
             Fate::Labels => {
                 dropped.extend(k.wires.iter().chain(&k.junctions).copied());
-                let at: Vec<Point> = k.terms.iter().map(|t| t.0).collect();
-                let (name, del) = fallback_name(sheet, &idx, &pins, &k.wires, &at, &mut taken);
-                deleted.extend(del);
-                kept_fallbacks.push((ci, name));
+                let fb = fallback_name(sheet, &idx, &pins, &k.wires, &k.terms, &pointed, &mut taken);
+                deleted.extend(fb.delete.iter().copied());
+                if fb.fresh {
+                    fresh.insert(fb.name.clone());
+                }
+                kept_fallbacks.push((ci, fb));
             }
         }
     }
     dropped.extend(deleted.iter().copied());
 
-    // 列・行の配置と、図枠への収まり
+    // 列・行の配置。端子の単位が動かないかたまりは、元の配線をそのまま残す (動かない障害物)
+    let arrange_with = |max_gap: f64| {
+        let lay = layout(&us, opts, max_gap);
+        let stays: Vec<bool> =
+            c.units.iter().zip(&unit_terms).map(|(u, owns)| unit_stays(sheet, &u.wires, &u.junctions, owns, &lay)).collect();
+        let mut rigid = rigid.clone();
+        let mut dropped = dropped.clone();
+        for ((u, owns), s) in c.units.iter().zip(&unit_terms).zip(&stays) {
+            if *s {
+                for id in u.wires.iter().chain(&u.junctions) {
+                    dropped.remove(id);
+                    rigid.insert(*id, owns[0]);
+                }
+            }
+        }
+        let moved = build_moved(sheet, &lay, &owners.unit_of, &rigid, &dropped);
+        (lay, stays, rigid, moved)
+    };
+
+    // 図枠への収まり
     let hit_title = before.is_some_and(|b| rects_hit(b, ctx.title_block));
-    let mut lay = layout(&us, opts, opts.max_gap_mm);
-    let mut moved = build_moved(sheet, &lay, &owners.unit_of, &rigid, &dropped);
+    let (mut lay, mut stays, mut rigid, mut moved) = arrange_with(opts.max_gap_mm);
     if !fits(content_bounds(&moved, &idx), ctx, hit_title) {
-        lay = layout(&us, opts, opts.channel_mm);
-        moved = build_moved(sheet, &lay, &owners.unit_of, &rigid, &dropped);
+        (lay, stays, rigid, moved) = arrange_with(opts.channel_mm);
         let b = content_bounds(&moved, &idx);
         if !fits(b, ctx, hit_title) {
             let (w, h) = size_of(b);
@@ -993,9 +1256,13 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
         }
     }
 
-    // 引き直しの単位の端子を、移動後の位置へ
+    // 引き直す単位 (動かないかたまりを除く) の端子を、移動後の位置へ
+    let mut route: Vec<RouteUnit> = Vec::new();
     let mut trips: Vec<Vec<(Point, Point, Option<Dir>)>> = Vec::new();
-    for (u, owns) in c.units.iter_mut().zip(&unit_terms) {
+    for ((mut u, owns), s) in c.units.into_iter().zip(&unit_terms).zip(&stays) {
+        if *s {
+            continue;
+        }
         let trip: Vec<(Point, Point, Option<Dir>)> =
             u.terms.iter().zip(owns).map(|(t, &o)| (t.0, t.0.translated(lay.dx[o], lay.dy[o]), t.1)).collect();
         u.terms = trip.iter().map(|t| (t.1, t.2)).collect();
@@ -1004,6 +1271,7 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
         u.old_junctions.clear();
         u.leads.clear();
         trips.push(trip);
+        route.push(u);
     }
 
     // 格子と動かない配線。ラベルでつなぐ短い線も動かない配線として先に置く
@@ -1013,6 +1281,7 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
     let fixed_spots: Vec<Point> =
         moved.entities.values().filter_map(|e| if let Entity::Junction(j) = e { Some(j.at) } else { None }).collect();
     let mut add: Vec<Entity> = Vec::new();
+    let mut stubs: Vec<Stub> = Vec::new();
     let mut remove: BTreeSet<EntityId> = deleted.clone();
     let mut labelled: Vec<(String, String)> = Vec::new();
     for (ci, name) in kept_fallbacks {
@@ -1024,38 +1293,45 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
             .zip(&owns)
             .map(|(t, &o)| (t.0.translated(lay.dx[o], lay.dy[o]), t.1, old_wire_at(sheet, &k.wires, t.0)))
             .collect();
-        let fb = Fallback { net: k.net.clone(), name, terms };
-        for e in stub_entities(&grid, &fb) {
+        let fb = Fallback { net: k.net.clone(), name: name.name, terms, template: name.template };
+        let (es, ss) = stub_entities(&grid, &fb);
+        for e in es {
             if let Entity::Wire(w) = &e {
                 fixed_lines.push(w.points.clone());
             }
             add.push(e);
         }
+        stubs.extend(ss);
         remove.extend(k.wires.iter().chain(&k.junctions).copied());
         labelled.push((fb.net, fb.name));
     }
 
     // 配線の引き直し。引けなかった単位はラベルでつなぐ
-    let results = route_units(&grid, &mut c.units, fixed_lines, fixed_spots);
+    let results = route_units(&grid, &mut route, fixed_lines, fixed_spots);
     let mut routed: BTreeSet<String> = BTreeSet::new();
-    for ((u, r), trip) in c.units.iter().zip(results).zip(&trips) {
+    for ((u, r), trip) in route.iter().zip(results).zip(&trips) {
         remove.extend(u.wires.iter().chain(&u.junctions).copied());
         match r {
-            Ok(route) => {
-                add.extend(emit(u, &route));
+            Ok(r) => {
+                add.extend(emit(u, &r));
                 routed.insert(u.net.clone());
             }
             Err(_) => {
-                let at: Vec<Point> = trip.iter().map(|t| t.0).collect();
-                let (name, del) = fallback_name(sheet, &idx, &pins, &u.wires, &at, &mut taken);
-                deleted.extend(del.iter().copied());
-                remove.extend(del);
+                let old_terms: Vec<(Point, Option<Dir>)> = trip.iter().map(|t| (t.0, t.2)).collect();
+                let name = fallback_name(sheet, &idx, &pins, &u.wires, &old_terms, &pointed, &mut taken);
+                if name.fresh {
+                    fresh.insert(name.name.clone());
+                }
+                deleted.extend(name.delete.iter().copied());
+                remove.extend(name.delete.iter().copied());
                 let mut attrs = u.template.clone();
                 attrs.length_m = None;
                 attrs.length_source = Default::default();
                 let terms = trip.iter().map(|t| (t.1, t.2, attrs.clone())).collect();
-                let fb = Fallback { net: u.net.clone(), name, terms };
-                add.extend(stub_entities(&grid, &fb));
+                let fb = Fallback { net: u.net.clone(), name: name.name, terms, template: name.template };
+                let (es, ss) = stub_entities(&grid, &fb);
+                add.extend(es);
+                stubs.extend(ss);
                 labelled.push((fb.net, fb.name));
             }
         }
@@ -1107,12 +1383,15 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
         ..Default::default()
     };
 
-    // 検算: 計画を写しに当てて、ピンの分け方が変わっていないことを確かめる
+    // 検算: 計画を写しに当てて、接続と名前が変わっていないこと、引いた後も図枠に収まることを確かめる
     let after = apply_plan(sheet, &plan);
-    if pin_partition(sheet, defs) != pin_partition(&after, defs) {
-        return Err("並べ直しの検算で接続が変わったため、何も変えませんでした".into());
+    verify_after(sheet, &after, defs, &fresh, &stubs)?;
+    let b = content_bounds(&after, &idx);
+    if !fits(b, ctx, hit_title) {
+        let (w, h) = size_of(b);
+        return Err(format!("並べ直して配線を引くと図枠に収まりません (幅 {w:.1} mm, 高さ {h:.1} mm)"));
     }
-    plan.size_after = size_of(content_bounds(&after, &idx));
+    plan.size_after = size_of(b);
     plan.after = Some(after);
     Ok(plan)
 }
@@ -1184,8 +1463,15 @@ mod tests {
         d
     }
 
+    /// A ground mark: a one-pin mark that names its net GND.
+    fn gnd() -> SymbolDef {
+        let mut d = def("gnd", vec![rect(-2.0, -2.0, 2.0, 2.0)], vec![pin("1", 0.0, -5.0, PinDir::Up)]);
+        d.net = Some("GND".into());
+        d
+    }
+
     fn defs() -> Vec<SymbolDef> {
-        vec![box2(), mark(), cap(), wall("wall_h", 70.0, 5.0), wall("wall_v", 5.0, 40.0), freebox()]
+        vec![box2(), mark(), cap(), wall("wall_h", 70.0, 5.0), wall("wall_v", 5.0, 40.0), freebox(), gnd()]
     }
 
     fn place(sheet: &mut Sheet, symbol_id: &str, at: (f64, f64), reference: &str) -> EntityId {
@@ -1688,5 +1974,152 @@ mod tests {
         let first = apply(&sh, &arrange(&sh));
         let second = arrange(&first);
         assert!(second.moves.is_empty(), "{:?}", second.moves);
+        assert!(second.labelled.is_empty(), "{:?}", second.labelled);
+        assert!(second.remove.is_empty() && second.add.is_empty(), "wires were redrawn: {:?}", second.remove);
+    }
+
+    // ------------------------------------------------------------------
+    // 総合レビューの指摘 (C1・C2・I1・I4) の確かめ
+    // ------------------------------------------------------------------
+
+    /// ネットリストで、シンボルのピンが入るネットのラベル名。
+    fn net_label_of(sheet: &Sheet, sym: EntityId, pin_no: &str) -> Option<String> {
+        extract_netlist(sheet, &defs())
+            .into_iter()
+            .find(|n| n.pins.iter().any(|q| q.entity_id == sym && q.pin == pin_no))
+            .and_then(|n| n.label)
+    }
+
+    /// シンボルのピンの今の位置。
+    fn pin_at(sheet: &Sheet, sym: EntityId, pin_no: &str) -> Point {
+        pin_points(sheet, &defs()).into_iter().find(|q| q.entity == sym && q.number == pin_no).expect("pin").pos
+    }
+
+    /// A net label sitting on a pin that also has a wire stays on that pin when the part moves, so the net keeps its name.
+    /// 配線もつながるピンの上に置いたネットラベルは、部品が動いてもそのピンの上に残り、ネットの名前は変わらない。
+    #[test]
+    fn a_label_on_a_wired_pin_moves_with_the_part() {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (25.0, 50.0), "B1");
+        let a1 = place(&mut sh, "box2", (50.0, 50.0), "A1");
+        place(&mut sh, "cap", (100.0, 90.0), "C2");
+        old_wire(&mut sh, &[(60.0, 50.0), (60.0, 80.0), (100.0, 80.0)]);
+        let l = label(&mut sh, (60.0, 50.0), "X");
+        let plan = arrange(&sh);
+        let after = apply(&sh, &plan);
+        assert!(at_of(&after, a1).x > 50.0, "A1 must move");
+        assert_eq!(at_of(&after, l), pin_at(&after, a1, "2"));
+        assert_eq!(net_label_of(&after, a1, "2").as_deref(), Some("X"));
+    }
+
+    /// A ground mark placed directly on a pin, with no wire, moves with the part and keeps naming the net.
+    /// 配線なしでピンの上に直接置いた接地の印は部品と一緒に動き、ネットの名前を保つ。
+    #[test]
+    fn a_ground_mark_on_a_pin_moves_with_the_part() {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (25.0, 50.0), "B1");
+        let a1 = place(&mut sh, "box2", (50.0, 50.0), "A1");
+        let g = place(&mut sh, "gnd", (60.0, 55.0), "");
+        let plan = arrange(&sh);
+        let after = apply(&sh, &plan);
+        assert!(at_of(&after, a1).x > 50.0, "A1 must move");
+        assert_eq!(pin_at(&after, g, "1"), pin_at(&after, a1, "2"));
+    }
+
+    /// A net label on a pin with no wire at all moves with the part.
+    /// 配線の無いピンの上のネットラベルは、部品と一緒に動く。
+    #[test]
+    fn a_label_on_a_bare_pin_moves_with_the_part() {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (25.0, 50.0), "B1");
+        let a1 = place(&mut sh, "box2", (50.0, 50.0), "A1");
+        let l = label(&mut sh, (60.0, 50.0), "Y");
+        let us = units(&sh, &defs());
+        assert!(us.iter().any(|u| u.main == a1 && u.members.contains(&l)), "the label belongs to A1");
+        let after = apply(&sh, &arrange(&sh));
+        assert_eq!(at_of(&after, l), pin_at(&after, a1, "2"));
+    }
+
+    /// An unroutable cluster holding two labels with different names is refused, naming the net, and nothing is planned.
+    /// 引けないかたまりが名前の違う2つのラベルを持つときは、ネット名を挙げて断り、計画は作らない。
+    #[test]
+    fn an_unroutable_cluster_with_two_label_names_is_refused() {
+        let (mut sh, _, _) = walled_sheet();
+        label(&mut sh, (100.0, 50.0), "P");
+        label(&mut sh, (120.0, 50.0), "Q");
+        let err = plan_arrange(&sh, &defs(), &ArrangeOptions::default(), &ctx()).expect_err("must refuse");
+        assert!(err.contains("名前の違うラベル"), "{err}");
+        assert!(err.contains('P') || err.contains('Q'), "{err}");
+    }
+
+    /// A routable cluster holding two labels with different names is refused as well, before any routing.
+    /// 引けるかたまりでも、名前の違う2つのラベルを持てば、引き直す前に断る。
+    #[test]
+    fn a_routable_cluster_with_two_label_names_is_refused() {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (50.0, 50.0), "A1");
+        place(&mut sh, "box2", (100.0, 50.0), "A2");
+        old_wire(&mut sh, &[(60.0, 50.0), (90.0, 50.0)]);
+        label(&mut sh, (70.0, 50.0), "P");
+        label(&mut sh, (80.0, 50.0), "Q");
+        let err = plan_arrange(&sh, &defs(), &ArrangeOptions::default(), &ctx()).expect_err("must refuse");
+        assert!(err.contains("名前の違うラベル"), "{err}");
+    }
+
+    /// Two parts that each have their own ground mark keep their marks as satellites, although both marks name the same net.
+    /// 2つの部品がそれぞれ自分の接地の印を持つとき、同じネット名でも印はそれぞれの部品の衛星になる。
+    #[test]
+    fn ground_marks_of_two_parts_are_each_a_satellite() {
+        let mut sh = new_sheet();
+        let a1 = place(&mut sh, "box2", (50.0, 50.0), "A1");
+        let g1 = place(&mut sh, "gnd", (40.0, 60.0), "");
+        old_wire(&mut sh, &[(40.0, 50.0), (40.0, 55.0)]);
+        let a2 = place(&mut sh, "box2", (100.0, 50.0), "A2");
+        let g2 = place(&mut sh, "gnd", (90.0, 60.0), "");
+        old_wire(&mut sh, &[(90.0, 50.0), (90.0, 55.0)]);
+        let us = units(&sh, &defs());
+        assert_eq!(us.len(), 2, "{us:?}");
+        assert!(us.iter().any(|u| u.main == a1 && u.members.contains(&g1)));
+        assert!(us.iter().any(|u| u.main == a2 && u.members.contains(&g2)));
+    }
+
+    /// Tag labels with the same name on two parts are each a satellite of their own part.
+    /// 2つの部品に同じ名前のタグのラベルがあっても、それぞれ自分の部品の衛星になる。
+    #[test]
+    fn same_named_tags_on_two_parts_are_each_a_satellite() {
+        let mut sh = new_sheet();
+        let a1 = place(&mut sh, "box2", (50.0, 50.0), "A1");
+        old_wire(&mut sh, &[(60.0, 50.0), (65.0, 50.0)]);
+        let t1 = label(&mut sh, (65.0, 50.0), "TAG");
+        let a2 = place(&mut sh, "box2", (100.0, 50.0), "A2");
+        old_wire(&mut sh, &[(110.0, 50.0), (115.0, 50.0)]);
+        let t2 = label(&mut sh, (115.0, 50.0), "TAG");
+        let us = units(&sh, &defs());
+        assert!(us.iter().any(|u| u.main == a1 && u.members.contains(&t1)));
+        assert!(us.iter().any(|u| u.main == a2 && u.members.contains(&t2)));
+    }
+
+    /// A box closed in by walls whose spacing already fits, wired to a part beside it, so nothing has to move.
+    fn walled_tidy_sheet() -> Sheet {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (50.0, 50.0), "A1");
+        place(&mut sh, "wall_h", (50.0, 30.0), "");
+        place(&mut sh, "wall_h", (50.0, 70.0), "");
+        place(&mut sh, "wall_v", (17.5, 50.0), "");
+        place(&mut sh, "wall_v", (82.5, 50.0), "");
+        place(&mut sh, "box2", (110.0, 50.0), "A2");
+        old_wire(&mut sh, &[(60.0, 50.0), (100.0, 50.0)]);
+        sh
+    }
+
+    /// A cluster whose ends do not move keeps its old wire untouched, even when the router could not draw it again.
+    /// 端が動かないかたまりは、引き直せない場合でも元の配線をそのまま残す。
+    #[test]
+    fn an_unmoved_cluster_keeps_its_wire() {
+        let sh = walled_tidy_sheet();
+        let plan = arrange(&sh);
+        assert!(plan.moves.is_empty(), "{:?}", plan.moves);
+        assert!(plan.labelled.is_empty(), "{:?}", plan.labelled);
+        assert!(plan.remove.is_empty() && plan.add.is_empty() && plan.updates.is_empty());
     }
 }
