@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3462仕様項目**。
+全6領域・**3468仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -2916,6 +2916,15 @@
 - 用紙は表示中のシートに合わせる (盤シートだけA4になってしまわない)。 <sub>`sheet kind (schematic / panel)`</sub>
 - 種別を書いていない古いシートは回路図シートとして扱う。 <sub>`sheet kind (schematic / panel)`</sub>
 - 図面タブの「シート種別」の表示は種別ごとの文言になる。 <sub>`sheet kind (schematic / panel)`</sub>
+
+### simOverlay
+
+- 負荷率 0.8 未満と限度の無いものは色なし、0.8〜1.0 は注意 (橙)、1.0 を超えると超過 (赤) <sub>`simulation overlay`</sub>
+- 超過の札は「電流 (小数1桁) A / 限度 A」 <sub>`simulation overlay`</sub>
+- 重ねる表示には注意と超過だけが入り、超過にだけ札が付く <sub>`simulation overlay`</sub>
+- 計算の後で消された電線・部品は重ねる表示から外れる <sub>`simulation overlay`</sub>
+- 古い結果 (loads の無い結果) でも空の表示になり、落ちない <sub>`simulation overlay`</sub>
+- プローブは電流・電圧・限度・負荷率を読める文字にし、限度が無ければ限度と負荷率は出さない <sub>`simulation overlay`</sub>
 
 ### strokeFont
 

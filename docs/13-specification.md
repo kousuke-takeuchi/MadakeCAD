@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3462 specification clauses** across 6 areas.
+**3468 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -2916,6 +2916,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - keeps the paper size and orientation of the sheet in front <sub>`sheet kind (schematic / panel)`</sub>
 - treats a sheet with no kind as a schematic sheet <sub>`sheet kind (schematic / panel)`</sub>
 - labels the sheet kind shown next to the drawing tabs <sub>`sheet kind (schematic / panel)`</sub>
+
+### simOverlay
+
+- levels: below 0.8 or no limit is none, 0.8 to 1.0 is near, above 1.0 is over <sub>`simulation overlay`</sub>
+- an over label reads current with one decimal over the limit <sub>`simulation overlay`</sub>
+- the overlay holds only near and over items, and only over items get a label <sub>`simulation overlay`</sub>
+- entities deleted after the run are left out <sub>`simulation overlay`</sub>
+- a result without loads gives an empty overlay <sub>`simulation overlay`</sub>
+- the probe text shows current, voltages, limit and ratio, without limit and ratio when there is none <sub>`simulation overlay`</sub>
 
 ### strokeFont
 
