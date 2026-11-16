@@ -3,6 +3,7 @@
 
 import type { Point, Shape, Sheet, SymbolDef, SymbolInstance, WireLegend as WireLegendEntity, WirePart } from "../ipc";
 import type { Region } from "./agentOverlay";
+import type { OverlayItem } from "./simOverlay";
 import { frameImage } from "./frameImages";
 import { withLatin } from "./strokeFont";
 import {
@@ -208,6 +209,103 @@ export interface RenderOptions {
   wireParts?: WirePart[];
   /** 参照記号 → 回路図の説明 (盤の銘板の1行目を追従させる。`deviceDescriptions()`の戻り)。 */
   deviceDescriptions?: ReadonlyMap<string, string>;
+  /** シミュレーション結果の重ね表示。省略時は描かない。 */
+  sim?: SimPaint;
+}
+
+
+/** シミュレーション結果の重ね表示 (spec 2026-11-17-sim-overlay-design §2)。 */
+export interface SimPaint {
+  items: ReadonlyMap<string, OverlayItem>;
+  /** 図面が計算の後に変わった (薄く塗り、札は出さない)。 */
+  stale: boolean;
+}
+
+const SIM_STALE_ALPHA = 0.35;
+const SIM_ALPHA = 0.55;
+/** 下敷き線の太さ (画面 px)。 */
+const SIM_UNDERLAY_PX = 7;
+
+function simColor(level: OverlayItem["level"]): string {
+  return level === "over" ? theme.simOver : theme.simNear;
+}
+
+/** 注意・超過の電線と部品を図面の下に塗る (電線は太い下敷き線、部品は外形の枠)。 */
+export function drawSimUnderlay(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  sheet: Sheet,
+  defs: Map<string, SymbolDef>,
+  paint: SimPaint,
+): void {
+  ctx.save();
+  ctx.globalAlpha = paint.stale ? SIM_STALE_ALPHA * 0.5 : SIM_ALPHA;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const item of paint.items.values()) {
+    const e = sheet.entities[item.entityId];
+    if (!e) continue;
+    ctx.strokeStyle = simColor(item.level);
+    if (e.kind === "wire" && e.points.length >= 2) {
+      ctx.lineWidth = SIM_UNDERLAY_PX;
+      ctx.beginPath();
+      const p0 = vp.toScreen(e.points[0]);
+      ctx.moveTo(p0.x, p0.y);
+      for (const p of e.points.slice(1)) {
+        const s = vp.toScreen(p);
+        ctx.lineTo(s.x, s.y);
+      }
+      ctx.stroke();
+    } else if (e.kind === "symbol") {
+      const def = defs.get(e.symbol_id);
+      if (!def) continue;
+      const { min, max } = symbolBounds(e, def);
+      const a = vp.toScreen({ x: min.x - 1, y: min.y - 1 });
+      const b = vp.toScreen({ x: max.x + 1, y: max.y + 1 });
+      ctx.lineWidth = 3;
+      ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
+    }
+  }
+  ctx.restore();
+}
+
+/** 超過の札 (画面上で一定の大きさ)。古い結果では描かない。 */
+export function drawSimLabels(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  sheet: Sheet,
+  defs: Map<string, SymbolDef>,
+  paint: SimPaint,
+): void {
+  if (paint.stale) return;
+  ctx.save();
+  ctx.font = CHIP_FONT; // キャンバスの font は CSS 変数を読めないので、操作チップと同じ指定を使う
+  ctx.textBaseline = "middle";
+  for (const item of paint.items.values()) {
+    if (!item.label) continue;
+    const e = sheet.entities[item.entityId];
+    if (!e) continue;
+    let anchor: { x: number; y: number } | null = null;
+    if (e.kind === "wire" && e.points.length >= 2) {
+      const mid = Math.floor((e.points.length - 1) / 2);
+      const a = e.points[mid];
+      const b = e.points[mid + 1];
+      anchor = vp.toScreen({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    } else if (e.kind === "symbol") {
+      const def = defs.get(e.symbol_id);
+      if (def) {
+        const { max, min } = symbolBounds(e, def);
+        anchor = vp.toScreen({ x: max.x + 1, y: min.y });
+      }
+    }
+    if (!anchor) continue;
+    const w = ctx.measureText(item.label).width + 8;
+    ctx.fillStyle = theme.simLabelBg;
+    ctx.fillRect(anchor.x + 4, anchor.y - 8, w, 16);
+    ctx.fillStyle = theme.simLabelText;
+    ctx.fillText(item.label, anchor.x + 8, anchor.y);
+  }
+  ctx.restore();
 }
 
 /** エージェント編集オーバーレイの描画入力。 */
@@ -1436,6 +1534,8 @@ export function renderSheet(
     if (e.kind !== "harness") continue;
     drawHarness(ctx, vp, e.points, e.name, opts.selection.has(e.id));
   }
+  // シミュレーション結果の重ね表示は配線・シンボルの下に塗る (線と文字を隠さない)
+  if (opts.sim) drawSimUnderlay(ctx, vp, sheet, defs, opts.sim);
   // 多芯ケーブルの定義線は配線の上に重ねて描く (配線を横切る斜線なので後で描く)
   const cables = entities.filter(isCable);
   // 嵌合コネクタ対 (G14) の破線も配線・シンボルの背面。シンボルどうしを結ぶ線なので
@@ -1596,6 +1696,9 @@ export function renderSheet(
   if (!hidden.has("wire_numbers")) drawWireNumbers(ctx, vp, sheet);
   // 配線注記 (表示クラス "wire_notes")。画面では消せるが、SVG/PDF出力には必ず出る
   if (!hidden.has("wire_notes")) drawWireNotes(ctx, vp, sheet);
+
+  // 超過の札は図面の上
+  if (opts.sim) drawSimLabels(ctx, vp, sheet, defs, opts.sim);
 
   // エージェント編集オーバーレイ(図面の上、クロスヘアの下)
   if (opts.agent) drawAgentOverlay(ctx, vp, opts.agent);

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3473仕様項目**。
+全6領域・**3476仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -2852,6 +2852,9 @@
 - hide_reference="true" のシンボルは参照記号を画面に描かない (嵌合の組の片方が同じ記号を二重に描かない。svg.rsと同ルール) <sub>`hidden designator`</sub>
 - 太字の注記はキャンバスでも SVG と同じ bold の太さで描き、ストロークフォントでは線が通常の注記の1.5倍の太さになる <sub>`note weight`</sub>
 - 90・180・270度回した注記は、キャンバスでも基準点を中心に時計回りへ回して描く。回していない注記は回さない <sub>`note weight`</sub>
+- 超過の電線は赤、注意の電線は橙の太い下敷き線で塗り、超過にだけ札を描く <sub>`simulation overlay painting`</sub>
+- 古い結果は薄く塗り、札は描かない <sub>`simulation overlay painting`</sub>
+- 結果にあっても図面から消えた物は描かずに飛ばす <sub>`simulation overlay painting`</sub>
 
 ### search
 

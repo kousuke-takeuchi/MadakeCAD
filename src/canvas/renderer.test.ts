@@ -8,6 +8,8 @@ import {
   REV_COL_W,
   REV_HEADERS,
   drawDeviceBlock,
+  drawSimLabels,
+  drawSimUnderlay,
   drawSymbol,
   effectiveRev,
   revisionLayout,
@@ -1190,5 +1192,62 @@ describe("note weight", () => {
       renderSheet(rec.ctx, sheet, [], vp, { selection: new Set(), cursor: null, hidden });
       expect(rec.turns.map((a) => Number(a.toFixed(9))), `${deg}度`).toEqual([Number(((deg * Math.PI) / 180).toFixed(9))]);
     }
+  });
+});
+
+
+describe("simulation overlay painting", () => {
+  function rec() {
+    const strokes: { style: string; width: number; alpha: number }[] = [];
+    const rects: { style: string }[] = [];
+    const texts: string[] = [];
+    const ctx = {
+      strokeStyle: "", fillStyle: "", lineWidth: 0, globalAlpha: 1, font: "", textAlign: "left", textBaseline: "alphabetic",
+      lineCap: "butt", lineJoin: "miter",
+      save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, closePath() {}, fill() {},
+      stroke() { strokes.push({ style: String(ctx.strokeStyle), width: ctx.lineWidth, alpha: ctx.globalAlpha }); },
+      strokeRect() { rects.push({ style: String(ctx.strokeStyle) }); },
+      fillRect() {},
+      fillText(t: string) { texts.push(t); },
+      measureText(t: string) { return { width: t.length * 6 }; },
+    };
+    return { ctx: ctx as unknown as CanvasRenderingContext2D, strokes, rects, texts };
+  }
+  const wire = { kind: "wire", id: "w1", points: [{ x: 0, y: 0 }, { x: 20, y: 0 }], color: "", sq: 0.75 };
+  const sheetOf = (entities: Record<string, unknown>) => ({ id: "s", entities }) as unknown as Sheet;
+
+  // ja: 超過の電線は赤、注意の電線は橙の太い下敷き線で塗り、超過にだけ札を描く
+  it("paints over wires red and near wires amber under the ink, and labels only over items", () => {
+    const vp = new Viewport();
+    const { ctx, strokes, texts } = rec();
+    const sheet = sheetOf({ w1: wire, w2: { ...wire, id: "w2" } });
+    const items = new Map([
+      ["w1", { entityId: "w1", kind: "wire" as const, level: "over" as const, label: "12.0A / 10A" }],
+      ["w2", { entityId: "w2", kind: "wire" as const, level: "near" as const, label: null }],
+    ]);
+    drawSimUnderlay(ctx, vp, sheet, new Map(), { items, stale: false });
+    expect(strokes.map((s) => s.style)).toEqual([theme.simOver, theme.simNear]);
+    drawSimLabels(ctx, vp, sheet, new Map(), { items, stale: false });
+    expect(texts).toEqual(["12.0A / 10A"]);
+  });
+
+  // ja: 古い結果は薄く塗り、札は描かない
+  it("a stale result is painted faintly and without labels", () => {
+    const vp = new Viewport();
+    const { ctx, strokes, texts } = rec();
+    const sheet = sheetOf({ w1: wire });
+    const items = new Map([["w1", { entityId: "w1", kind: "wire" as const, level: "over" as const, label: "12.0A / 10A" }]]);
+    drawSimUnderlay(ctx, vp, sheet, new Map(), { items, stale: true });
+    drawSimLabels(ctx, vp, sheet, new Map(), { items, stale: true });
+    expect(strokes[0].alpha).toBeLessThan(0.5);
+    expect(texts).toEqual([]);
+  });
+
+  // ja: 結果にあっても図面から消えた物は描かずに飛ばす
+  it("items no longer on the sheet are skipped", () => {
+    const { ctx, strokes } = rec();
+    const items = new Map([["gone", { entityId: "gone", kind: "wire" as const, level: "over" as const, label: "x" }]]);
+    drawSimUnderlay(ctx, new Viewport(), sheetOf({}), new Map(), { items, stale: false });
+    expect(strokes).toEqual([]);
   });
 });

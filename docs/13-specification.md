@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3473 specification clauses** across 6 areas.
+**3476 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -2852,6 +2852,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - does not draw the designator when hide_reference is true <sub>`hidden designator`</sub>
 - draws a bold note with the bold weight, and with a stroke font 1.5 times as thick <sub>`note weight`</sub>
 - turns a rotated note clockwise about its anchor, and leaves an unrotated note alone <sub>`note weight`</sub>
+- paints over wires red and near wires amber under the ink, and labels only over items <sub>`simulation overlay painting`</sub>
+- a stale result is painted faintly and without labels <sub>`simulation overlay painting`</sub>
+- items no longer on the sheet are skipped <sub>`simulation overlay painting`</sub>
 
 ### search
 

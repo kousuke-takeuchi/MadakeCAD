@@ -87,6 +87,10 @@ onBeforeUnmount(() => {
   --icon-wire: #c0392b;
   --icon-edit: #b7791f;
   --mono-font: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  /* 作図領域に浮かぶ吹き出し (theme.ts の chipBg / chipBorder / chipText と同じ色。作図領域は常に暗い) */
+  --canvas-chip-bg: rgba(46, 51, 59, 0.9);
+  --canvas-chip-border: #1f6fbf;
+  --canvas-chip-text: #e8eaec;
   --shadow-popup: 0 6px 18px #00000028;
   --shadow-panel: 0 6px 22px #00000030;
   --shadow-panel-lg: 0 8px 28px #00000038;

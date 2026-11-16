@@ -14,12 +14,42 @@ import ChatPanel from "./chat/ChatPanel.vue";
 import SearchBar from "./SearchBar.vue";
 import SurferPopup from "./SurferPopup.vue";
 import { useSurferStore } from "../stores/surfer";
+import { useSimulationStore } from "../stores/simulation";
+import { formatProbe } from "../canvas/simOverlay";
+import { useI18n } from "vue-i18n";
 
 const store = useDocumentStore();
 const chat = useChatStore();
 const ui = useUiStore();
 const surfer = useSurferStore();
 const variants = useVariantsStore();
+const sim = useSimulationStore();
+const { t } = useI18n();
+
+// シミュレーション結果のプローブ (マウスを乗せた電線・部品の値)。
+const probe = ref<{ x: number; y: number; text: ReturnType<typeof formatProbe>; name: string } | null>(null);
+
+function updateProbe(p: { x: number; y: number }) {
+  if (!sim.overlay) {
+    probe.value = null;
+    return;
+  }
+  const id = controller.hitTest(controller.vp.toWorld(p));
+  const load = id ? sim.loadOf(id) : null;
+  if (!id || !load) {
+    probe.value = null;
+    return;
+  }
+  const e = store.activeSheet?.entities[id];
+  const name = e && e.kind === "symbol" ? e.reference || e.symbol_id : t("simulation.wire");
+  probe.value = { x: p.x + 14, y: p.y + 14, text: formatProbe(load), name };
+}
+
+function onCanvasPointerMove(e: PointerEvent) {
+  const p = toLocal(e);
+  controller.onPointerMove(p);
+  updateProbe(p);
+}
 
 // 左ドックのエージェントタブが開いている間は入力欄が二重になるので浮きカードを出さない。
 const dockChatOpen = computed(() => chat.panelOpen === "expanded" || ui.leftPanelTab === "chat");
@@ -64,6 +94,8 @@ function draw() {
     wireParts: store.project?.wire_parts,
     // 盤の銘板の1行目を回路図の説明に追従させる
     deviceDescriptions: annotations?.deviceDescriptions,
+    // シミュレーション結果の重ね表示 (パネルが開いていて、計算したシートを見ているときだけ)
+    sim: sim.overlay ?? undefined,
   });
   controller.renderPreview(ctx);
 }
@@ -254,6 +286,8 @@ watch(
   },
   { immediate: true, deep: true },
 );
+watch(() => [sim.overlay, sim.showOnDrawing], () => scheduleDraw());
+
 watch(() => store.activeSheetId, () => {
   const canvas = canvasRef.value;
   if (canvas && store.activeSheet) {
@@ -270,15 +304,21 @@ watch(() => store.activeSheetId, () => {
       ref="canvasRef"
       tabindex="0"
       @pointerdown="onPointerDown"
-      @pointermove="(e) => controller.onPointerMove(toLocal(e))"
+      @pointermove="onCanvasPointerMove"
       @pointerup="() => controller.onPointerUp()"
-      @pointerleave="() => { controller.cursorScreen = null; controller.requestRedraw(); }"
+      @pointerleave="() => { controller.cursorScreen = null; probe = null; controller.requestRedraw(); }"
       @wheel.prevent="(e) => controller.onWheel(toLocal(e), e.deltaY)"
       @dblclick="() => controller.onDoubleClick()"
       @contextmenu.prevent
       @dragover.prevent
       @drop.prevent="(e) => void controller.dropPlacement(toLocal(e))"
     />
+    <div v-if="probe" class="sim-probe" :style="{ left: probe.x + 'px', top: probe.y + 'px' }">
+      <div class="sim-probe-name">{{ probe.name }}</div>
+      <div>{{ t("simulation.current") }} <b>{{ probe.text.amps }}</b></div>
+      <div>{{ t("simulation.voltages") }} {{ probe.text.volts }}</div>
+      <div v-if="probe.text.limit">{{ t("simulation.limit") }} {{ probe.text.limit }} ({{ probe.text.ratio }})</div>
+    </div>
     <SearchBar />
     <SurferPopup />
     <ChatPanel v-if="!dockChatOpen" />
@@ -292,6 +332,23 @@ watch(() => store.activeSheetId, () => {
   min-height: 0;
   overflow: hidden;
   position: relative;
+}
+.sim-probe {
+  position: absolute;
+  pointer-events: none;
+  z-index: 5;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+  color: var(--canvas-chip-text);
+  background: var(--canvas-chip-bg);
+  border: 1px solid var(--canvas-chip-border);
+}
+.sim-probe-name {
+  font-family: var(--mono-font);
+  font-weight: 600;
 }
 canvas {
   display: block;

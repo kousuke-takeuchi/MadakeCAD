@@ -36,6 +36,13 @@ export const theme = {
   chipBorder: "#1f6fbf",
   chipText: "#e8eaec",
   chipHint: "#9aa2ab",
+
+  /** シミュレーション結果の重ね表示: 注意 (負荷率 0.8〜1.0) と超過 (1.0 超)。暗い背景で読める橙・赤。 */
+  simNear: "#f5a524",
+  simOver: "#ff5a4f",
+  /** 超過の札の地と文字。 */
+  simLabelBg: "rgba(120, 20, 16, 0.9)",
+  simLabelText: "#ffe9e7",
 } as const;
 
 /**
