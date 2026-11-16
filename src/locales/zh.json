@@ -1735,7 +1735,16 @@
     "open": "断开: {switches}",
     "rerun": "重新运行",
     "netVoltages": "网络电压",
-    "componentCurrents": "元件电流"
+    "componentCurrents": "元件电流",
+    "conditions": "条件",
+    "shortChip": "短路 {net}",
+    "removeCondition": "移除此条件",
+    "conditionHint": "例: M1.current_a=40 / short P24",
+    "addCondition": "添加",
+    "conditionInvalid": "请写成 参考号.属性=值 或 short 网络名",
+    "clearConditions": "移除所有条件",
+    "findings": "超出额定 (按严重程度排序，点击显示部件)",
+    "noFindings": "没有超出额定的地方"
   },
   "verification": {
     "title": "校验",

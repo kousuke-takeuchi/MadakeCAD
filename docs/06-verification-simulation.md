@@ -28,7 +28,7 @@ Catch wiring mistakes before they leave the drawing office. MadakeCAD extracts a
 - **Simulation roles for any symbol**: a symbol definition may carry `sim` (`source`, `load`, `fuse`, `conductor`, `converter`, `none`, with the pins each role uses), so user symbols take part. Values come from the placed part's attributes: `voltage` / `r_int_ohm` / `i_max_a` (source), `current_a` / `v_min` (load, a constant current), `rating_a` (fuse), `v_out` / `eta` / `i_out_a` / `i_limit_a` / `v_in_min` (DC/DC converter: a second supply voltage whose input draws output power ÷ efficiency; optional current limit and input undervoltage lockout), `pin_rating_a` (current per pin, e.g. a connector)
 - **Scenarios**: override attributes for one run (`--set M1.current_a=40`, e.g. a stalled motor) and short nets to ground (`--short P24`) to see fault currents
 - **Rating findings**: fuse, connector pin, source, converter, load terminal voltage and wire ampacity are compared with the solved values and listed most severe first (a wire thicker than the ampacity table is noted as unchecked). Built-in loads keep the resistor model; only loads with a role are constant current. An isolated converter output is referenced to ground at its minus
-- Ribbon button with results panel; CLI `madake sim`; MCP `simulate_op`. ngspice is located via `MADAKE_NGSPICE` → PATH → OS default paths (macOS/Linux/Windows)
+- Ribbon button with results panel (net voltages, component currents and the rating findings column with counts; click a finding to select and center the part; a conditions bar takes `REF.ATTR=VALUE` and `short NET`); CLI `madake sim`; MCP `simulate_op`. ngspice is located via `MADAKE_NGSPICE` → PATH → OS default paths (macOS/Linux/Windows)
 
 ## Planned
 

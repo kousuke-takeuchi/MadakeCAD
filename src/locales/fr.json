@@ -1735,7 +1735,16 @@
     "open": "Ouverts : {switches}",
     "rerun": "Relancer",
     "netVoltages": "Tensions des réseaux",
-    "componentCurrents": "Courants des composants"
+    "componentCurrents": "Courants des composants",
+    "conditions": "Conditions",
+    "shortChip": "Court-circuit {net}",
+    "removeCondition": "Retirer cette condition",
+    "conditionHint": "ex. M1.current_a=40 / short P24",
+    "addCondition": "Ajouter",
+    "conditionInvalid": "Écrivez REF.ATTR=VALEUR ou short RÉSEAU",
+    "clearConditions": "Retirer toutes les conditions",
+    "findings": "Dépassements de calibre (les plus graves d’abord, cliquer pour voir la pièce)",
+    "noFindings": "Rien ne dépasse son calibre"
   },
   "verification": {
     "title": "Vérification",

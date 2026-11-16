@@ -1735,7 +1735,16 @@
     "open": "Offen: {switches}",
     "rerun": "Erneut ausführen",
     "netVoltages": "Netzspannungen",
-    "componentCurrents": "Bauteilströme"
+    "componentCurrents": "Bauteilströme",
+    "conditions": "Bedingungen",
+    "shortChip": "Kurzschluss {net}",
+    "removeCondition": "Diese Bedingung entfernen",
+    "conditionHint": "z. B. M1.current_a=40 / short P24",
+    "addCondition": "Hinzufügen",
+    "conditionInvalid": "Schreiben Sie REF.ATTR=WERT oder short NETZ",
+    "clearConditions": "Alle Bedingungen entfernen",
+    "findings": "Bemessungsüberschreitungen (schwerste zuerst, Klick zeigt das Bauteil)",
+    "noFindings": "Nichts überschreitet seine Bemessung"
   },
   "verification": {
     "title": "Prüfung",

@@ -31,10 +31,10 @@ describe("simulation store", () => {
     const spy = vi.spyOn(ipc, "simulateOp").mockResolvedValue(result);
     store.toggleOpen("SW1");
     await store.run(null);
-    expect(spy).toHaveBeenCalledWith(null, ["SW1"]);
+    expect(spy).toHaveBeenCalledWith(null, ["SW1"], { overrides: {}, shorts: [] });
     store.toggleOpen("SW1");
     await store.run(null);
-    expect(spy).toHaveBeenLastCalledWith(null, []);
+    expect(spy).toHaveBeenLastCalledWith(null, [], { overrides: {}, shorts: [] });
   });
 
   // ja: 失敗時(ngspice未導入等)はエラーメッセージを保持したままパネルを開く
@@ -45,5 +45,57 @@ describe("simulation store", () => {
     expect(store.panelOpen).toBe(true);
     expect(store.result).toBeNull();
     expect(store.error).toContain("ngspice");
+  });
+
+  // ja: 条件の入力を足すと、次の実行で属性の置き換えと短絡が送られる。同じ属性は上書き、同じネットは1回だけ
+  it("added conditions are sent as overrides and shorts on the next run", async () => {
+    const store = useSimulationStore();
+    const spy = vi.spyOn(ipc, "simulateOp").mockResolvedValue(result);
+    expect(store.addCondition("M1.current_a=40")).toBe(true);
+    expect(store.addCondition("M1.v_min=20")).toBe(true);
+    expect(store.addCondition("M1.current_a=31")).toBe(true);
+    expect(store.addCondition("短絡 P24")).toBe(true);
+    expect(store.addCondition("short P24")).toBe(true);
+    await store.run(null);
+    expect(spy).toHaveBeenLastCalledWith(null, [], {
+      overrides: { M1: { current_a: "31", v_min: "20" } },
+      shorts: ["P24"],
+    });
+    expect(store.conditions.map((c) => c.label)).toEqual(["M1.current_a=31", "M1.v_min=20", "P24"]);
+  });
+
+  // ja: 読めない条件の入力は断られ、条件は変わらない
+  it("an unreadable condition is refused and changes nothing", () => {
+    const store = useSimulationStore();
+    expect(store.addCondition("M1=40")).toBe(false);
+    expect(store.conditions).toEqual([]);
+  });
+
+  // ja: 条件は1つずつ外せ (部品の最後の属性を外すとその部品も消える)、まとめて全部外せる
+  it("conditions can be removed one by one or all at once", () => {
+    const store = useSimulationStore();
+    store.addCondition("M1.current_a=40");
+    store.addCondition("短絡 P24");
+    store.removeCondition("set:M1.current_a");
+    expect(store.overrides).toEqual({});
+    expect(store.shorts).toEqual(["P24"]);
+    store.removeCondition("short:P24");
+    expect(store.shorts).toEqual([]);
+    store.addCondition("M1.current_a=40");
+    store.addCondition("短絡 P24");
+    store.clearConditions();
+    expect(store.conditions).toEqual([]);
+  });
+
+  // ja: 定格超過は重さごとに数えられ、結果に定格超過が無ければ空になる
+  it("rating findings are counted by severity and empty when the result has none", async () => {
+    const store = useSimulationStore();
+    expect(store.findings).toEqual([]);
+    const f = (severity: "error" | "warning" | "info") => ({
+      code: "sim.fuse_rating", severity, reference: "F1", entity_ids: ["e1"], value: 8, limit: 5, message: "F1",
+    });
+    vi.spyOn(ipc, "simulateOp").mockResolvedValue({ ...result, findings: [f("error"), f("warning"), f("warning")] });
+    await store.run(null);
+    expect(store.counts).toEqual({ error: 1, warning: 2, info: 0 });
   });
 });

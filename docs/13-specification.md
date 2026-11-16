@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3385 specification clauses** across 6 areas.
+**3392 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -3694,11 +3694,21 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - sends one set_sheet_paper command with the new size and orientation <sub>`sheet paper dialog store`</sub>
 - discards the draft and sends nothing on cancel <sub>`sheet paper dialog store`</sub>
 
+### simConditions
+
+- reads REF.ATTR=VALUE as an attribute override, ignoring spaces <sub>`simulation condition input`</sub>
+- reads 短絡 NET and short NET as a short of that net <sub>`simulation condition input`</sub>
+- refuses input that is neither form <sub>`simulation condition input`</sub>
+
 ### simulation
 
 - run fetches the DC result and opens the panel <sub>`simulation store`</sub>
 - toggled switches are passed as open_switches on the next run <sub>`simulation store`</sub>
 - failures (e.g. ngspice missing) keep the error message and still open the panel <sub>`simulation store`</sub>
+- added conditions are sent as overrides and shorts on the next run <sub>`simulation store`</sub>
+- an unreadable condition is refused and changes nothing <sub>`simulation store`</sub>
+- conditions can be removed one by one or all at once <sub>`simulation store`</sub>
+- rating findings are counted by severity and empty when the result has none <sub>`simulation store`</sub>
 
 ### Start templates
 

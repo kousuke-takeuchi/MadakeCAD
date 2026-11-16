@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3385仕様項目**。
+全6領域・**3392仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -3694,11 +3694,21 @@
 - サイズ・向きを変えて保存すると、set_sheet_paperコマンドが1回送られる <sub>`sheet paper dialog store`</sub>
 - キャンセルすると下書きが捨てられ、コマンドは送られない <sub>`sheet paper dialog store`</sub>
 
+### simConditions
+
+- 「参照記号.属性=値」は部品の属性の置き換えとして読む (空白は無視) <sub>`simulation condition input`</sub>
+- 「短絡 ネット名」と「short ネット名」はネットの短絡として読む <sub>`simulation condition input`</sub>
+- どちらの形でもない入力 (値の無い置き換え・ネット名の無い短絡・ただの文字) は読めないと返す <sub>`simulation condition input`</sub>
+
 ### simulation
 
 - runでDC解析結果を取得してパネルを開く <sub>`simulation store`</sub>
 - 開閉トグルは再実行時にopen_switchesとして渡される <sub>`simulation store`</sub>
 - 失敗時(ngspice未導入等)はエラーメッセージを保持したままパネルを開く <sub>`simulation store`</sub>
+- 条件の入力を足すと、次の実行で属性の置き換えと短絡が送られる。同じ属性は上書き、同じネットは1回だけ <sub>`simulation store`</sub>
+- 読めない条件の入力は断られ、条件は変わらない <sub>`simulation store`</sub>
+- 条件は1つずつ外せ (部品の最後の属性を外すとその部品も消える)、まとめて全部外せる <sub>`simulation store`</sub>
+- 定格超過は重さごとに数えられ、結果に定格超過が無ければ空になる <sub>`simulation store`</sub>
 
 ### 開始テンプレート
 

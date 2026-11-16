@@ -1735,7 +1735,16 @@
     "open": "Open: {switches}",
     "rerun": "Run again",
     "netVoltages": "Net voltages",
-    "componentCurrents": "Component currents"
+    "componentCurrents": "Component currents",
+    "conditions": "Conditions",
+    "shortChip": "Short {net}",
+    "removeCondition": "Remove this condition",
+    "conditionHint": "e.g. M1.current_a=40 / short P24",
+    "addCondition": "Add",
+    "conditionInvalid": "Write REF.ATTR=VALUE or short NET",
+    "clearConditions": "Remove all conditions",
+    "findings": "Rating findings (most severe first, click to show the part)",
+    "noFindings": "Nothing exceeds its rating"
   },
   "verification": {
     "title": "Verification",

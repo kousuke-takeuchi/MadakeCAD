@@ -1735,7 +1735,16 @@
     "open": "Abiertos: {switches}",
     "rerun": "Ejecutar de nuevo",
     "netVoltages": "Tensiones de red",
-    "componentCurrents": "Corrientes de componentes"
+    "componentCurrents": "Corrientes de componentes",
+    "conditions": "Condiciones",
+    "shortChip": "Cortocircuito {net}",
+    "removeCondition": "Quitar esta condición",
+    "conditionHint": "p. ej. M1.current_a=40 / short P24",
+    "addCondition": "Añadir",
+    "conditionInvalid": "Escriba REF.ATRIB=VALOR o short RED",
+    "clearConditions": "Quitar todas las condiciones",
+    "findings": "Excesos de valores nominales (más graves primero, clic para ver la pieza)",
+    "noFindings": "Nada supera su valor nominal"
   },
   "verification": {
     "title": "Verificación",

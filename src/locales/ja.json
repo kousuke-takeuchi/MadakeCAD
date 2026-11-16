@@ -1735,7 +1735,16 @@
     "open": "開路: {switches}",
     "rerun": "再実行",
     "netVoltages": "ネット電圧",
-    "componentCurrents": "部品電流"
+    "componentCurrents": "部品電流",
+    "conditions": "条件",
+    "shortChip": "短絡 {net}",
+    "removeCondition": "この条件を外す",
+    "conditionHint": "例: M1.current_a=40 / 短絡 P24",
+    "addCondition": "追加",
+    "conditionInvalid": "「参照記号.属性=値」か「短絡 ネット名」で書いてください",
+    "clearConditions": "条件をすべて外す",
+    "findings": "定格超過 (重い順・クリックで部品へ)",
+    "noFindings": "定格を超えた所はありません"
   },
   "verification": {
     "title": "検証結果",

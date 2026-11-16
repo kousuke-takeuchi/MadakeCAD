@@ -1,5 +1,5 @@
 {
-  "version": "2.17",
+  "version": "2.22",
   "children": [
     {
       "type": "frame",
@@ -24174,7 +24174,7 @@
       "x": 960,
       "y": 2500,
       "name": "シミュレーション結果パネル",
-      "width": 900,
+      "width": 1100,
       "fill": "$palette-bg",
       "stroke": "$ribbon-line",
       "strokeWidth": 1,
@@ -24229,7 +24229,10 @@
             {
               "type": "frame",
               "id": "jJBBY",
+              "x": 237,
+              "y": 6.5,
               "name": "SIM開路チップ",
+              "enabled": false,
               "fill": "#FFF7ED",
               "cornerRadius": 8,
               "padding": [
@@ -24242,8 +24245,83 @@
                   "id": "OQGDr",
                   "name": "SIM開路値",
                   "fill": "#D97706",
-                  "content": "開路: SW1",
+                  "content": "開路: —",
                   "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "COIFI",
+              "name": "SIMバッジ エラー",
+              "fill": "#FEF2F2",
+              "cornerRadius": 8,
+              "gap": 4,
+              "padding": [
+                1,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "y5gm7",
+                  "name": "SIMバッジ エラー 文字",
+                  "fill": "#DC2626",
+                  "content": "✗ 1",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "ffV7R",
+              "name": "SIMバッジ 警告",
+              "fill": "#FFF7ED",
+              "cornerRadius": 8,
+              "gap": 4,
+              "padding": [
+                1,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "duDJT",
+                  "name": "SIMバッジ 警告 文字",
+                  "fill": "#D97706",
+                  "content": "⚠ 6",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "VaWMq",
+              "name": "SIMバッジ 情報",
+              "fill": "#EFF6FF",
+              "cornerRadius": 8,
+              "gap": 4,
+              "padding": [
+                1,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "M4Bgg",
+                  "name": "SIMバッジ 情報 文字",
+                  "fill": "#1D4ED8",
+                  "content": "ℹ 2",
+                  "fontFamily": "Noto Sans JP",
                   "fontSize": 10,
                   "fontWeight": "600"
                 }
@@ -24280,6 +24358,199 @@
         },
         {
           "type": "frame",
+          "id": "EFyuK",
+          "name": "SIM条件バー",
+          "width": "fill_container",
+          "stroke": "$ribbon-line",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "gap": 6,
+          "padding": [
+            4,
+            10
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "l39NIs",
+              "name": "SIM条件見出し",
+              "fill": "$ui-muted",
+              "content": "条件",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 10,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "cDUn3",
+              "name": "SIM条件チップ DRV01.current_a=31",
+              "fill": "$pw-chip",
+              "cornerRadius": 8,
+              "gap": 4,
+              "padding": [
+                1,
+                6,
+                1,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "w0hZy1",
+                  "name": "SIM条件チップ文字",
+                  "fill": "$ui-text",
+                  "content": "DRV01.current_a=31",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "icon",
+                  "id": "JPWdi",
+                  "name": "SIM条件チップ削除",
+                  "width": 10,
+                  "height": 10,
+                  "icon": "x",
+                  "library": "lucide",
+                  "fill": "$ui-muted"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "e4Pus",
+              "name": "SIM条件チップ DRV02.current_a=31",
+              "fill": "$pw-chip",
+              "cornerRadius": 8,
+              "gap": 4,
+              "padding": [
+                1,
+                6,
+                1,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "D4xlz",
+                  "name": "SIM条件チップ文字",
+                  "fill": "$ui-text",
+                  "content": "DRV02.current_a=31",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "icon",
+                  "id": "R52iL",
+                  "name": "SIM条件チップ削除",
+                  "width": 10,
+                  "height": 10,
+                  "icon": "x",
+                  "library": "lucide",
+                  "fill": "$ui-muted"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "R0weMb",
+              "name": "SIM条件チップ 短絡 N048",
+              "fill": "#FEF2F2",
+              "cornerRadius": 8,
+              "gap": 4,
+              "padding": [
+                1,
+                6,
+                1,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "a52zn",
+                  "name": "SIM条件チップ文字",
+                  "fill": "#DC2626",
+                  "content": "短絡 N048",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "icon",
+                  "id": "vjhtl",
+                  "name": "SIM条件チップ削除",
+                  "width": 10,
+                  "height": 10,
+                  "icon": "x",
+                  "library": "lucide",
+                  "fill": "$ui-muted"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "XCPYw",
+              "name": "SIM条件入力",
+              "width": 240,
+              "fill": "#FFFFFF",
+              "cornerRadius": 3,
+              "stroke": "$ribbon-line",
+              "strokeWidth": 1,
+              "padding": [
+                2,
+                6
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "K9dUH",
+                  "name": "SIM条件入力ヒント",
+                  "fill": "$ui-muted",
+                  "content": "例: M1.current_a=40 / 短絡 P24",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "u6Lp8",
+              "name": "SIM条件追加",
+              "fill": "$acad-blue",
+              "content": "追加",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 10,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "V06uo",
+              "name": "SIM条件sp",
+              "width": "fill_container",
+              "height": 1
+            },
+            {
+              "type": "text",
+              "id": "MFyQN",
+              "name": "SIM条件クリア",
+              "fill": "$ui-muted",
+              "content": "条件をすべて外す",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
           "id": "JPtmF",
           "name": "SIM本体",
           "width": "fill_container",
@@ -24288,7 +24559,7 @@
               "type": "frame",
               "id": "dVppj",
               "name": "SIMネット列",
-              "width": "fill_container",
+              "width": 210,
               "layout": "vertical",
               "gap": 3,
               "padding": [
@@ -24423,7 +24694,7 @@
               "type": "frame",
               "id": "hJ2pp",
               "name": "SIM部品列",
-              "width": "fill_container",
+              "width": 230,
               "stroke": "$ribbon-line",
               "strokeWidth": {
                 "left": 1
@@ -24582,6 +24853,316 @@
                       "content": "0.00 W",
                       "fontFamily": "JetBrains Mono",
                       "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "ftcde",
+              "name": "SIM定格超過列",
+              "width": "fill_container",
+              "stroke": "$ribbon-line",
+              "strokeWidth": {
+                "left": 1
+              },
+              "layout": "vertical",
+              "padding": [
+                6,
+                0
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "LkGkB",
+                  "name": "SIM定格見出し枠",
+                  "padding": [
+                    0,
+                    10,
+                    3,
+                    10
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "EFuY0",
+                      "name": "SIM定格見出し",
+                      "fill": "$ui-muted",
+                      "content": "定格超過 (重い順・クリックで部品へ)",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "G7eg3N",
+                  "name": "SIM定格行 1",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "gap": 8,
+                  "padding": [
+                    3,
+                    10
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "vzQBv",
+                      "name": "SIM定格マーク",
+                      "fill": "#DC2626",
+                      "content": "✗",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "l90Xu",
+                      "name": "SIM定格コード",
+                      "fill": "$ui-muted",
+                      "content": "sim.wire_ampacity",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Oe4OU",
+                      "name": "SIM定格文",
+                      "fill": "$ui-text",
+                      "content": "ワイヤ 2sq の許容電流 22A を電流 25.11A が超えています",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "CLmL9",
+                  "name": "SIM定格行 2",
+                  "width": "fill_container",
+                  "fill": "#E4E8EC",
+                  "gap": 8,
+                  "padding": [
+                    3,
+                    10
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "PpOXX",
+                      "name": "SIM定格マーク",
+                      "fill": "#D97706",
+                      "content": "⚠",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "j0s8b",
+                      "name": "SIM定格コード",
+                      "fill": "$ui-muted",
+                      "content": "sim.pin_rating",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Rs3WK",
+                      "name": "SIM定格文",
+                      "fill": "$ui-text",
+                      "content": "CN301 ピン1: 電流 70.96A がピン定格 50A を超えています",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "clXOM",
+                  "name": "SIM定格行 3",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "gap": 8,
+                  "padding": [
+                    3,
+                    10
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "z6Eu2N",
+                      "name": "SIM定格マーク",
+                      "fill": "#D97706",
+                      "content": "⚠",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "t8mWiv",
+                      "name": "SIM定格コード",
+                      "fill": "$ui-muted",
+                      "content": "sim.fuse_rating",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "t7a6Qy",
+                      "name": "SIM定格文",
+                      "fill": "$ui-text",
+                      "content": "MCB01: 電流 70.96A がヒューズ定格 50A を超えています",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "DvCkm",
+                  "name": "SIM定格行 4",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "gap": 8,
+                  "padding": [
+                    3,
+                    10
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "VRENQ",
+                      "name": "SIM定格マーク",
+                      "fill": "#D97706",
+                      "content": "⚠",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "DHkZz",
+                      "name": "SIM定格コード",
+                      "fill": "$ui-muted",
+                      "content": "sim.fuse_rating",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "q5pTBf",
+                      "name": "SIM定格文",
+                      "fill": "$ui-text",
+                      "content": "FUSE01: 電流 31.00A がヒューズ定格 30A を超えています",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "NuRV4",
+                  "name": "SIM定格行 5",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "gap": 8,
+                  "padding": [
+                    3,
+                    10
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "KKBcX",
+                      "name": "SIM定格マーク",
+                      "fill": "#D97706",
+                      "content": "⚠",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "HFbU1",
+                      "name": "SIM定格コード",
+                      "fill": "$ui-muted",
+                      "content": "sim.converter_overload",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "pgvQ7",
+                      "name": "SIM定格文",
+                      "fill": "$ui-text",
+                      "content": "CNV01: 変換器の出力電流 18.45A が定格 16.7A を超えています",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "hWvHe",
+                  "name": "SIM定格行 6",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "gap": 8,
+                  "padding": [
+                    3,
+                    10
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "j1Flc",
+                      "name": "SIM定格マーク",
+                      "fill": "#1D4ED8",
+                      "content": "ℹ",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "RtzHS",
+                      "name": "SIM定格コード",
+                      "fill": "$ui-muted",
+                      "content": "sim.wire_unchecked",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "mxX2R",
+                      "name": "SIM定格文",
+                      "fill": "$ui-text",
+                      "content": "ワイヤ 8sq の電流 71.0A: 許容電流の表は 3.5sq までのため判定していません",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 11,
                       "fontWeight": "normal"
                     }
                   ]
