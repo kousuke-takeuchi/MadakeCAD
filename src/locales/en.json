@@ -1743,8 +1743,27 @@
     "addCondition": "Add",
     "conditionInvalid": "Write REF.ATTR=VALUE or short NET",
     "clearConditions": "Remove all conditions",
-    "findings": "Rating findings (most severe first, click to show the part)",
-    "noFindings": "Nothing exceeds its rating"
+    "findings": "Rating findings",
+    "noFindings": "Nothing exceeds its rating",
+    "showOnDrawing": "Show on drawing",
+    "stale": "The drawing changed. Run again to update",
+    "details": "Selected",
+    "selectHint": "Select a wire or part on the drawing to see its values",
+    "showAll": "Show all values (net voltages {nets}, component currents {parts})",
+    "hideAll": "Hide all values",
+    "wire": "Wire",
+    "current": "Current",
+    "voltages": "Voltages",
+    "limit": "Limit",
+    "ratio": "Load",
+    "overBadge": "Over {ratio}",
+    "limitKinds": {
+      "wire_ampacity": "wire ampacity",
+      "fuse_rating": "fuse rating",
+      "pin_rating": "pin rating",
+      "source_max": "source maximum",
+      "converter_out": "converter rated output"
+    }
   },
   "verification": {
     "title": "Verification",

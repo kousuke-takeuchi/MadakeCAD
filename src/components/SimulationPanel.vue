@@ -1,13 +1,15 @@
 <script setup lang="ts">
 // シミュレーション結果パネル (デザイン: MadakeCAD.pen「シミュレーション結果パネル」)。
-// 見出し: 定格超過の件数。条件バー: 属性の置き換え・短絡のチップと入力。本体: ネット電圧・部品電流・定格超過 (行クリックで選択+ズーム)。
-import { X } from "lucide-vue-next";
-import { inject, ref } from "vue";
+// 見出し: 定格超過の件数と「図面に重ねる」。条件バー: 属性の置き換え・短絡のチップと入力。古い結果の注意。
+// 本体: 定格超過 (重さで絞り込み、行クリックで選択+ズーム) と選択中の詳細。下端: すべての値 (ネット電圧・部品電流) の折りたたみ。
+import { ChevronDown, ChevronRight, Layers, RefreshCw, X } from "lucide-vue-next";
+import { computed, inject, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import type { SimFinding } from "../ipc";
 import type { EditorController } from "../tools/controller";
 import { useDocumentStore } from "../stores/document";
 import { useSimulationStore } from "../stores/simulation";
+import { formatProbe } from "../canvas/simOverlay";
 
 const sim = useSimulationStore();
 const store = useDocumentStore();
@@ -18,6 +20,29 @@ const draft = ref("");
 const invalid = ref(false);
 
 const marks: Record<SimFinding["severity"], string> = { error: "✗", warning: "⚠", info: "ℹ" };
+const severities: SimFinding["severity"][] = ["error", "warning", "info"];
+
+/** 定格超過の絞り込み (表示する重さ)。 */
+const shown = ref(new Set<SimFinding["severity"]>(severities));
+function toggleSeverity(sv: SimFinding["severity"]) {
+  const next = new Set(shown.value);
+  if (next.has(sv)) next.delete(sv);
+  else next.add(sv);
+  shown.value = next;
+}
+const visibleFindings = computed(() => sim.findings.filter((f) => shown.value.has(f.severity)));
+
+/** すべての値 (ネット電圧・部品電流) を開いているか。 */
+const showAll = ref(false);
+
+/** 選択中の電線・部品の値。 */
+const selected = computed(() => {
+  const load = sim.selectedLoad;
+  if (!load) return null;
+  const e = store.activeSheet?.entities[load.entity_id];
+  const name = e && e.kind === "symbol" ? e.reference || e.symbol_id : t("simulation.wire");
+  return { load, name, text: formatProbe(load) };
+});
 
 function volts(n: { volts_min: number; volts_max: number }): string {
   if (Math.abs(n.volts_max - n.volts_min) < 0.005) return `${n.volts_max.toFixed(2)} V`;
@@ -44,6 +69,9 @@ function pick(f: SimFinding) {
       <span v-if="sim.counts.error" class="badge error">✗ {{ sim.counts.error }}</span>
       <span v-if="sim.counts.warning" class="badge warning">⚠ {{ sim.counts.warning }}</span>
       <span v-if="sim.counts.info" class="badge info">ℹ {{ sim.counts.info }}</span>
+      <button class="toggle" :class="{ on: sim.showOnDrawing }" @click="sim.toggleShowOnDrawing()">
+        <Layers :size="11" />{{ t("simulation.showOnDrawing") }}
+      </button>
       <span v-if="sim.openSwitches.length" class="chip open">{{ t("simulation.open", { switches: sim.openSwitches.join(", ") }) }}</span>
       <span class="spacer" />
       <button class="rerun" :disabled="sim.running" @click="sim.run(store.activeSheetId)">{{ t("simulation.rerun") }}</button>
@@ -68,8 +96,50 @@ function pick(f: SimFinding) {
       <span class="spacer" />
       <button v-if="sim.conditions.length" class="link muted" @click="sim.clearConditions()">{{ t("simulation.clearConditions") }}</button>
     </div>
+    <div v-if="sim.stale && !sim.error" class="stale"><RefreshCw :size="11" />{{ t("simulation.stale") }}</div>
     <div v-if="sim.error" class="error">{{ sim.error }}</div>
     <div v-else-if="sim.result" class="body">
+      <div class="col findings">
+        <div class="col-head pad">
+          {{ t("simulation.findings") }}
+          <button
+            v-for="sv in severities"
+            :key="sv"
+            class="filter"
+            :class="[sv, { off: !shown.has(sv) }]"
+            @click="toggleSeverity(sv)"
+          >{{ marks[sv] }} {{ sim.counts[sv] }}</button>
+        </div>
+        <div v-if="sim.findings.length === 0" class="ok-note pad">{{ t("simulation.noFindings") }}</div>
+        <button v-for="(f, i) in visibleFindings" :key="f.code + ':' + f.reference + ':' + f.entity_ids.join(',') + ':' + i" class="finding" @click="pick(f)">
+          <span class="mark" :class="f.severity">{{ marks[f.severity] }}</span>
+          <span class="code">{{ f.code }}</span>
+          <span class="msg">{{ f.message }}</span>
+        </button>
+      </div>
+      <div class="col details left-border">
+        <div class="col-head">{{ t("simulation.details") }}</div>
+        <template v-if="selected">
+          <div class="row">
+            <span class="mono name">{{ selected.name }}</span>
+            <span v-if="(selected.load.ratio ?? 0) > 1" class="badge error">{{ t("simulation.overBadge", { ratio: selected.text.ratio }) }}</span>
+          </div>
+          <div class="row"><span class="label">{{ t("simulation.current") }}</span><span class="spacer" /><span class="mono strong">{{ selected.text.amps }}</span></div>
+          <div class="row"><span class="label">{{ t("simulation.voltages") }}</span><span class="spacer" /><span class="mono strong">{{ selected.text.volts }}</span></div>
+          <div v-if="selected.text.limit" class="row">
+            <span class="label">{{ t("simulation.limit") }}</span><span class="spacer" />
+            <span class="mono strong">{{ selected.text.limit }} ({{ t("simulation.limitKinds." + selected.load.limit_kind) }})</span>
+          </div>
+          <div v-if="selected.text.ratio" class="row"><span class="label">{{ t("simulation.ratio") }}</span><span class="spacer" /><span class="mono strong">{{ selected.text.ratio }}</span></div>
+        </template>
+        <div v-else class="hint">{{ t("simulation.selectHint") }}</div>
+      </div>
+    </div>
+    <button v-if="sim.result && !sim.error" class="all-bar" @click="showAll = !showAll">
+      <component :is="showAll ? ChevronDown : ChevronRight" :size="11" />
+      {{ showAll ? t("simulation.hideAll") : t("simulation.showAll", { nets: sim.result.nets.length, parts: sim.result.components.length }) }}
+    </button>
+    <div v-if="showAll && sim.result && !sim.error" class="body all">
       <div class="col nets">
         <div class="col-head">{{ t("simulation.netVoltages") }}</div>
         <div v-for="n in sim.result.nets" :key="n.name" class="row">
@@ -87,15 +157,6 @@ function pick(f: SimFinding) {
           <span class="mono dim">{{ c.watts.toFixed(2) }} W</span>
         </div>
       </div>
-      <div class="col findings left-border">
-        <div class="col-head pad">{{ t("simulation.findings") }}</div>
-        <div v-if="sim.findings.length === 0" class="ok-note pad">{{ t("simulation.noFindings") }}</div>
-        <button v-for="(f, i) in sim.findings" :key="f.code + ':' + f.reference + ':' + f.entity_ids.join(',') + ':' + i" class="finding" @click="pick(f)">
-          <span class="mark" :class="f.severity">{{ marks[f.severity] }}</span>
-          <span class="code">{{ f.code }}</span>
-          <span class="msg">{{ f.message }}</span>
-        </button>
-      </div>
     </div>
   </div>
 </template>
@@ -103,7 +164,7 @@ function pick(f: SimFinding) {
 <style scoped>
 .panel {
   flex: none;
-  max-height: 240px;
+  max-height: 320px;
   display: flex;
   flex-direction: column;
   background: var(--palette-bg);
@@ -182,6 +243,55 @@ function pick(f: SimFinding) {
 .col.nets { flex: none; width: 210px; }
 .col.parts { flex: none; width: 230px; }
 .col.findings { flex: 1; padding: 6px 0; gap: 0; min-width: 0; }
+.col.details { flex: none; width: 300px; }
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--ui-muted);
+  background: var(--hover-bg);
+}
+.toggle.on { color: var(--acad-blue); background: var(--info-bg); }
+.stale {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--warn-fg);
+  background: var(--warn-bg);
+}
+.filter { border: none; border-radius: 999px; padding: 0 6px; margin-left: 6px; font-size: 9px; font-weight: 600; cursor: pointer; }
+.filter.error { color: var(--err-fg); background: var(--err-bg); }
+.filter.warning { color: var(--warn-fg); background: var(--warn-bg); }
+.filter.info { color: var(--info-fg); background: var(--info-bg); }
+.filter.off { opacity: 0.4; }
+.name { font-size: 12px; font-weight: 600; }
+.label { font-size: 10px; color: var(--ui-muted); }
+.hint { font-size: 10px; color: var(--ui-muted); }
+.all-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: none;
+  border-top: 1px solid var(--ribbon-line);
+  background: transparent;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--acad-blue);
+  cursor: pointer;
+  text-align: left;
+}
+.body.all { border-top: 1px solid var(--ribbon-line); }
 .col.left-border { border-left: 1px solid var(--ribbon-line); }
 .col-head { font-size: 10px; font-weight: 600; color: var(--ui-muted); }
 .pad { padding: 0 10px 3px; }

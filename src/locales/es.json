@@ -1743,8 +1743,27 @@
     "addCondition": "Añadir",
     "conditionInvalid": "Escriba REF.ATRIB=VALOR o short RED",
     "clearConditions": "Quitar todas las condiciones",
-    "findings": "Excesos de valores nominales (más graves primero, clic para ver la pieza)",
-    "noFindings": "Nada supera su valor nominal"
+    "findings": "Excesos de valores nominales",
+    "noFindings": "Nada supera su valor nominal",
+    "showOnDrawing": "Mostrar en el plano",
+    "stale": "El plano ha cambiado. Vuelva a ejecutar para actualizar",
+    "details": "Seleccionado",
+    "selectHint": "Seleccione un cable o una pieza en el plano para ver sus valores",
+    "showAll": "Mostrar todos los valores (tensiones de red {nets}, corrientes {parts})",
+    "hideAll": "Ocultar valores",
+    "wire": "Cable",
+    "current": "Corriente",
+    "voltages": "Tensiones",
+    "limit": "Límite",
+    "ratio": "Carga",
+    "overBadge": "Excede {ratio}",
+    "limitKinds": {
+      "wire_ampacity": "ampacidad del cable",
+      "fuse_rating": "valor del fusible",
+      "pin_rating": "valor del contacto",
+      "source_max": "máximo de la fuente",
+      "converter_out": "salida nominal del convertidor"
+    }
   },
   "verification": {
     "title": "Verificación",

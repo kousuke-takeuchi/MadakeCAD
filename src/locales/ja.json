@@ -1743,8 +1743,27 @@
     "addCondition": "追加",
     "conditionInvalid": "「参照記号.属性=値」か「短絡 ネット名」で書いてください",
     "clearConditions": "条件をすべて外す",
-    "findings": "定格超過 (重い順・クリックで部品へ)",
-    "noFindings": "定格を超えた所はありません"
+    "findings": "定格超過",
+    "noFindings": "定格を超えた所はありません",
+    "showOnDrawing": "図面に重ねる",
+    "stale": "図面が変わりました。再実行で更新してください",
+    "details": "選択中",
+    "selectHint": "図面で電線か部品を選ぶと値が出ます",
+    "showAll": "すべての値を表示 (ネット電圧 {nets}・部品電流 {parts})",
+    "hideAll": "値の一覧を閉じる",
+    "wire": "電線",
+    "current": "電流",
+    "voltages": "電圧",
+    "limit": "限度",
+    "ratio": "負荷率",
+    "overBadge": "超過 {ratio}",
+    "limitKinds": {
+      "wire_ampacity": "電線の許容電流",
+      "fuse_rating": "ヒューズ定格",
+      "pin_rating": "ピン定格",
+      "source_max": "電源の許容電流",
+      "converter_out": "変換器の定格出力"
+    }
   },
   "verification": {
     "title": "検証結果",

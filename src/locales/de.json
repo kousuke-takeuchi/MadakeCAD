@@ -1743,8 +1743,27 @@
     "addCondition": "Hinzufügen",
     "conditionInvalid": "Schreiben Sie REF.ATTR=WERT oder short NETZ",
     "clearConditions": "Alle Bedingungen entfernen",
-    "findings": "Bemessungsüberschreitungen (schwerste zuerst, Klick zeigt das Bauteil)",
-    "noFindings": "Nichts überschreitet seine Bemessung"
+    "findings": "Bemessungsüberschreitungen",
+    "noFindings": "Nichts überschreitet seine Bemessung",
+    "showOnDrawing": "Im Plan anzeigen",
+    "stale": "Der Plan hat sich geändert. Zum Aktualisieren erneut ausführen",
+    "details": "Auswahl",
+    "selectHint": "Wählen Sie eine Leitung oder ein Bauteil im Plan, um die Werte zu sehen",
+    "showAll": "Alle Werte anzeigen (Netzspannungen {nets}, Bauteilströme {parts})",
+    "hideAll": "Werte ausblenden",
+    "wire": "Leitung",
+    "current": "Strom",
+    "voltages": "Spannungen",
+    "limit": "Grenze",
+    "ratio": "Auslastung",
+    "overBadge": "Über {ratio}",
+    "limitKinds": {
+      "wire_ampacity": "Strombelastbarkeit der Leitung",
+      "fuse_rating": "Sicherungsnennstrom",
+      "pin_rating": "Kontaktnennstrom",
+      "source_max": "Höchststrom der Quelle",
+      "converter_out": "Nennausgang des Wandlers"
+    }
   },
   "verification": {
     "title": "Prüfung",

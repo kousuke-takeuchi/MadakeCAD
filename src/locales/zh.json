@@ -1743,8 +1743,27 @@
     "addCondition": "添加",
     "conditionInvalid": "请写成 参考号.属性=值 或 short 网络名",
     "clearConditions": "移除所有条件",
-    "findings": "超出额定 (按严重程度排序，点击显示部件)",
-    "noFindings": "没有超出额定的地方"
+    "findings": "超出额定",
+    "noFindings": "没有超出额定的地方",
+    "showOnDrawing": "在图纸上显示",
+    "stale": "图纸已更改。请重新运行以更新",
+    "details": "选中项",
+    "selectHint": "在图纸上选择导线或部件以查看其数值",
+    "showAll": "显示所有数值 (网络电压 {nets}、部件电流 {parts})",
+    "hideAll": "隐藏数值",
+    "wire": "导线",
+    "current": "电流",
+    "voltages": "电压",
+    "limit": "限值",
+    "ratio": "负载率",
+    "overBadge": "超出 {ratio}",
+    "limitKinds": {
+      "wire_ampacity": "导线载流量",
+      "fuse_rating": "熔断器额定",
+      "pin_rating": "引脚额定",
+      "source_max": "电源最大电流",
+      "converter_out": "变换器额定输出"
+    }
   },
   "verification": {
     "title": "校验",

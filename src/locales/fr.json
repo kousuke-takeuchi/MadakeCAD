@@ -1743,8 +1743,27 @@
     "addCondition": "Ajouter",
     "conditionInvalid": "Écrivez REF.ATTR=VALEUR ou short RÉSEAU",
     "clearConditions": "Retirer toutes les conditions",
-    "findings": "Dépassements de calibre (les plus graves d’abord, cliquer pour voir la pièce)",
-    "noFindings": "Rien ne dépasse son calibre"
+    "findings": "Dépassements de calibre",
+    "noFindings": "Rien ne dépasse son calibre",
+    "showOnDrawing": "Afficher sur le plan",
+    "stale": "Le plan a changé. Relancez pour mettre à jour",
+    "details": "Sélection",
+    "selectHint": "Sélectionnez un fil ou une pièce sur le plan pour voir ses valeurs",
+    "showAll": "Afficher toutes les valeurs (tensions des réseaux {nets}, courants {parts})",
+    "hideAll": "Masquer les valeurs",
+    "wire": "Fil",
+    "current": "Courant",
+    "voltages": "Tensions",
+    "limit": "Limite",
+    "ratio": "Charge",
+    "overBadge": "Dépasse {ratio}",
+    "limitKinds": {
+      "wire_ampacity": "courant admissible du fil",
+      "fuse_rating": "calibre du fusible",
+      "pin_rating": "calibre du contact",
+      "source_max": "maximum de la source",
+      "converter_out": "sortie nominale du convertisseur"
+    }
   },
   "verification": {
     "title": "Vérification",
