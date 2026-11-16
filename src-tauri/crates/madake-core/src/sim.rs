@@ -3,13 +3,18 @@
 //!
 //! 検証エンジン(verify)と違い近似フォールバックはしない: シミュレーションは
 //! 「実解を見る」機能なので、ngspice未導入は明示エラーで導入を案内する。
+//!
+//! 条件 ([`SimOptions`]): スイッチの開路、部品の属性の置き換え (例: モーターの拘束電流)、
+//! ネットの地絡。結果の [`SimFinding`] は定格を超えた所 (ヒューズ・ピン・電源・変換器・電線・負荷の電圧)。
 
 use std::collections::BTreeMap;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::model::{Entity, Sheet};
-use crate::symbol::SymbolDef;
+use crate::spice::ElementKind;
+use crate::symbol::{SimRole, SymbolDef};
+use crate::verify::Severity;
 use crate::EntityId;
 
 #[derive(Debug, thiserror::Error)]
@@ -22,6 +27,20 @@ pub enum SimError {
     Deck(#[from] crate::spice::SpiceError),
     #[error("ngspiceの実行に失敗しました: {0}")]
     Ngspice(#[from] crate::ngspice::NgspiceError),
+}
+
+/// シミュレーションの条件。全項目が省略可 (省略 = 図面のまま)。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct SimOptions {
+    /// 開路として扱う導通部品の参照記号。
+    #[serde(default)]
+    pub open_switches: Vec<String>,
+    /// 部品の属性の置き換え (参照記号 → {属性: 値})。例: {"M1": {"current_a": "40"}}。
+    #[serde(default)]
+    pub overrides: BTreeMap<String, BTreeMap<String, String>>,
+    /// 接地へ短絡させるネットの名前。
+    #[serde(default)]
+    pub shorts: Vec<String>,
 }
 
 /// ネット1つの電圧。配線抵抗でノードが分かれるため範囲(min/max)で報告する。
@@ -42,13 +61,31 @@ pub struct ComponentCurrent {
     pub watts: f64,
 }
 
+/// 定格を超えた所1件。
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
+pub struct SimFinding {
+    /// 安定コード (`sim.fuse_rating` など)。
+    pub code: String,
+    pub severity: Severity,
+    /// 部品の参照記号 (電線なら空)。
+    pub reference: String,
+    pub entity_ids: Vec<EntityId>,
+    /// 測った値 (A または V)。
+    pub value: f64,
+    /// 比べた限度 (A または V)。
+    pub limit: f64,
+    pub message: String,
+}
+
 #[derive(Debug, Serialize, schemars::JsonSchema)]
 pub struct SimOpResult {
-    /// 電源電圧 (V)。
+    /// 電源電圧 (V)。最初の電源の電圧。
     pub voltage: f64,
     pub nets: Vec<NetVoltage>,
     pub components: Vec<ComponentCurrent>,
     pub warnings: Vec<String>,
+    /// 定格を超えた所 (重い順: エラー → 警告 → 情報)。
+    pub findings: Vec<SimFinding>,
 }
 
 /// DC動作点を解く。`open_switches`の参照記号の導通部品は開路として扱う。
@@ -57,8 +94,14 @@ pub fn simulate_op(
     symbols: &[SymbolDef],
     open_switches: &[String],
 ) -> Result<SimOpResult, SimError> {
+    let opts = SimOptions { open_switches: open_switches.to_vec(), ..Default::default() };
+    simulate_op_opts(sheet, symbols, &opts)
+}
+
+/// 条件付きで DC 動作点を解く。
+pub fn simulate_op_opts(sheet: &Sheet, symbols: &[SymbolDef], opts: &SimOptions) -> Result<SimOpResult, SimError> {
     let exe = crate::ngspice::find_ngspice().ok_or(SimError::NgspiceNotFound)?;
-    simulate_op_with(&exe, sheet, symbols, open_switches)
+    simulate_op_opts_with(&exe, sheet, symbols, opts)
 }
 
 /// 実行ファイルを指定して解く (テスト・カスタムパス用)。
@@ -68,10 +111,24 @@ pub fn simulate_op_with(
     symbols: &[SymbolDef],
     open_switches: &[String],
 ) -> Result<SimOpResult, SimError> {
-    let opts = crate::spice::DeckOptions {
-        open_switches: open_switches.to_vec(),
+    let opts = SimOptions { open_switches: open_switches.to_vec(), ..Default::default() };
+    simulate_op_opts_with(exe, sheet, symbols, &opts)
+}
+
+/// 実行ファイルと条件を指定して解く。
+pub fn simulate_op_opts_with(
+    exe: &std::path::Path,
+    sheet: &Sheet,
+    symbols: &[SymbolDef],
+    opts: &SimOptions,
+) -> Result<SimOpResult, SimError> {
+    let open_switches = &opts.open_switches;
+    let deck_opts = crate::spice::DeckOptions {
+        open_switches: opts.open_switches.clone(),
+        overrides: opts.overrides.clone(),
+        shorts: opts.shorts.clone(),
     };
-    let deck = crate::spice::build_deck_with(sheet, symbols, &opts)?;
+    let deck = crate::spice::build_deck_with(sheet, symbols, &deck_opts)?;
     let volts = crate::ngspice::run_op(exe, &deck.deck)?;
     let volt_of = |node: &str| -> f64 {
         if node == "0" {
@@ -85,6 +142,11 @@ pub fn simulate_op_with(
     if !open_switches.is_empty() {
         warnings.push(format!("開路指定: {}", open_switches.join(", ")));
     }
+    for (r, attrs) in &opts.overrides {
+        let list: Vec<String> = attrs.iter().map(|(k, v)| format!("{k}={v}")).collect();
+        warnings.push(format!("置き換え: {r} {}", list.join(" ")));
+    }
+    warnings.extend(deck.warnings.iter().cloned());
 
     // ネット電圧: ネットの配線に対応するSPICE素子の両端ノード電圧のmin/max
     // SPICE はポートを知らないので、描いた配線のまとまりごと (接点に分けない)
@@ -112,14 +174,28 @@ pub fn simulate_op_with(
         }
     }
 
+    let amps_of = |el: &crate::spice::SpiceElement| -> f64 {
+        let dv = (volt_of(&el.node_a) - volt_of(&el.node_b)).abs();
+        if el.ohms > 0.0 { dv / el.ohms } else { 0.0 }
+    };
+
     // 部品電流・電力: 部品由来の橋/負荷素子から算出
     let mut per_component: BTreeMap<EntityId, (f64, f64)> = BTreeMap::new();
     for el in &deck.component_elements {
+        if matches!(el.kind, ElementKind::Label | ElementKind::Short(_)) {
+            continue;
+        }
         let dv = (volt_of(&el.node_a) - volt_of(&el.node_b)).abs();
-        let amps = if el.ohms > 0.0 { dv / el.ohms } else { 0.0 };
+        let amps = amps_of(el);
         let e = per_component.entry(el.entity_id).or_insert((0.0, 0.0));
         e.0 = e.0.max(amps);
         e.1 += dv * amps;
+    }
+    // 役割が負荷の部品の電力は端子電圧 × 電流 (定電流源の電力は検出抵抗に出ないため)
+    for t in &deck.load_terminals {
+        if let Some(e) = per_component.get_mut(&t.entity_id) {
+            e.1 = (volt_of(&t.plus) - volt_of(&t.minus)).abs() * e.0;
+        }
     }
     let mut components = Vec::new();
     for (entity_id, (amps, watts)) in per_component {
@@ -138,12 +214,161 @@ pub fn simulate_op_with(
     }
     components.sort_by(|a, b| a.reference.cmp(&b.reference));
 
+    let findings = findings(sheet, symbols, &deck_opts, &deck, &volt_of, &amps_of);
+
     Ok(SimOpResult {
         voltage: deck.voltage,
         nets: net_voltages,
         components,
         warnings,
+        findings,
     })
+}
+
+/// 定格の判定。属性 (置き換え後) の限度と、シミュレーションの電流・電圧を比べる。
+fn findings(
+    sheet: &Sheet,
+    symbols: &[SymbolDef],
+    opts: &crate::spice::DeckOptions,
+    deck: &crate::spice::SpiceDeck,
+    volt_of: &dyn Fn(&str) -> f64,
+    amps_of: &dyn Fn(&crate::spice::SpiceElement) -> f64,
+) -> Vec<SimFinding> {
+    use crate::verify::{ampacity, parse_number, AMPACITY};
+    let defs: BTreeMap<&str, &SymbolDef> = symbols.iter().map(|d| (d.id.as_str(), d)).collect();
+    let mut out: Vec<SimFinding> = Vec::new();
+    // 部品ごとの素子
+    let mut by_symbol: BTreeMap<EntityId, Vec<&crate::spice::SpiceElement>> = BTreeMap::new();
+    for el in &deck.component_elements {
+        by_symbol.entry(el.entity_id).or_default().push(el);
+    }
+    let max_of = |els: &[&crate::spice::SpiceElement], pred: &dyn Fn(&ElementKind) -> bool| -> f64 {
+        els.iter().filter(|e| pred(&e.kind)).map(|e| amps_of(e)).fold(0.0, f64::max)
+    };
+    for e in sheet.entities.values() {
+        let Entity::Symbol(s) = e else { continue };
+        let Some(def) = defs.get(s.symbol_id.as_str()) else { continue };
+        let els = by_symbol.get(&s.id).map(Vec::as_slice).unwrap_or(&[]);
+        let label = if s.reference.is_empty() { def.id.as_str() } else { s.reference.as_str() };
+        let role = def.sim.as_ref().map(|r| r.role);
+        let mut push = |code: &str, severity: Severity, value: f64, limit: f64, message: String| {
+            out.push(SimFinding {
+                code: code.into(),
+                severity,
+                reference: s.reference.clone(),
+                entity_ids: vec![s.id],
+                value,
+                limit,
+                message,
+            });
+        };
+        // ヒューズ: 役割 fuse か同梱の fuse。定格は rating_a、無ければ値の文字
+        if role == Some(SimRole::Fuse) || (role.is_none() && def.id == "fuse") {
+            let rating = opts.number(s, "rating_a").or_else(|| parse_number(&s.value));
+            if let Some(rating) = rating {
+                let amps = max_of(els, &|k| matches!(k, ElementKind::Bridge));
+                if amps > rating + 1e-9 {
+                    push("sim.fuse_rating", Severity::Warning, amps, rating,
+                        format!("{label}: 電流 {amps:.2}A がヒューズ定格 {rating}A を超えています"));
+                }
+            }
+        }
+        // ピン定格: 同じ番号の貫通・導通の橋を流れる電流
+        if let Some(limit) = opts.number(s, "pin_rating_a") {
+            for el in els.iter().filter(|e| matches!(e.kind, ElementKind::Pin(_) | ElementKind::Bridge)) {
+                let amps = amps_of(el);
+                if amps > limit + 1e-9 {
+                    let pin = match &el.kind {
+                        ElementKind::Pin(no) => format!("ピン{no}"),
+                        _ => "接点".into(),
+                    };
+                    push("sim.pin_rating", Severity::Warning, amps, limit,
+                        format!("{label} {pin}: 電流 {amps:.2}A がピン定格 {limit}A を超えています"));
+                }
+            }
+        }
+        match role {
+            Some(SimRole::Source) => {
+                if let Some(limit) = opts.number(s, "i_max_a") {
+                    let amps = max_of(els, &|k| matches!(k, ElementKind::Source));
+                    if amps > limit + 1e-9 {
+                        push("sim.source_overload", Severity::Warning, amps, limit,
+                            format!("{label}: 電源の電流 {amps:.2}A が許容 {limit}A を超えています"));
+                    }
+                }
+            }
+            Some(SimRole::Converter) => {
+                if let Some(limit) = opts.number(s, "i_out_a") {
+                    let amps = max_of(els, &|k| matches!(k, ElementKind::ConverterOut));
+                    if amps > limit + 1e-9 {
+                        push("sim.converter_overload", Severity::Warning, amps, limit,
+                            format!("{label}: 変換器の出力電流 {amps:.2}A が定格 {limit}A を超えています"));
+                    }
+                }
+            }
+            Some(SimRole::Load) => {
+                if let (Some(v_min), Some(t)) =
+                    (opts.number(s, "v_min"), deck.load_terminals.iter().find(|t| t.entity_id == s.id))
+                {
+                    let v = volt_of(&t.plus) - volt_of(&t.minus);
+                    if v < v_min - 1e-9 {
+                        push("sim.load_voltage", Severity::Warning, v, v_min,
+                            format!("{label}: 端子電圧 {v:.2}V が下限 {v_min}V を下回っています"));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    // 電線の許容電流 (sq の表)。表より太い電線は判定できないので、表の最大を超えたときだけ情報で知らせる
+    let table_max = AMPACITY.last().map(|&(sq, amps)| (sq, amps)).unwrap_or((0.0, 0.0));
+    let mut per_wire: BTreeMap<EntityId, f64> = BTreeMap::new();
+    for el in &deck.wire_elements {
+        let e = per_wire.entry(el.entity_id).or_insert(0.0);
+        *e = e.max(amps_of(el));
+    }
+    for (wid, amps) in per_wire {
+        let Some(Entity::Wire(w)) = sheet.entities.get(&wid) else { continue };
+        if w.sq <= 0.0 {
+            continue;
+        }
+        if w.sq > table_max.0 + 1e-9 {
+            if amps > table_max.1 + 1e-9 {
+                out.push(SimFinding {
+                    code: "sim.wire_unchecked".into(),
+                    severity: Severity::Info,
+                    reference: String::new(),
+                    entity_ids: vec![w.id],
+                    value: amps,
+                    limit: table_max.1,
+                    message: format!(
+                        "ワイヤ {}sq の電流 {amps:.2}A: 許容電流の表は {}sq までのため判定していません",
+                        w.sq, table_max.0
+                    ),
+                });
+            }
+            continue;
+        }
+        let cap = ampacity(w.sq);
+        if amps > cap + 1e-9 {
+            out.push(SimFinding {
+                code: "sim.wire_ampacity".into(),
+                severity: Severity::Error,
+                reference: String::new(),
+                entity_ids: vec![w.id],
+                value: amps,
+                limit: cap,
+                message: format!("ワイヤ {}sq の許容電流 {cap}A を電流 {amps:.2}A が超えています", w.sq),
+            });
+        }
+    }
+    let rank = |s: &Severity| match s {
+        Severity::Error => 0,
+        Severity::Warning => 1,
+        Severity::Info => 2,
+    };
+    out.sort_by(|a, b| rank(&a.severity).cmp(&rank(&b.severity)).then(a.reference.cmp(&b.reference)));
+    out
 }
 
 #[cfg(test)]
@@ -284,5 +509,304 @@ mod tests {
         let r = simulate_op_with(&exe, &sheet, &sheet_symbol_defs(&sheet), &[]).unwrap();
         let on_port: Vec<&NetVoltage> = r.nets.iter().filter(|n| n.wire_ids.contains(&w)).collect();
         assert_eq!(on_port.len(), 1, "{on_port:?}");
+    }
+
+    // ---- 役割付きシンボル (ユーザーシンボルのシミュレーション) ----
+
+    use crate::symbol::{PinDef, PinDir, Primitive, SimRole, SimSpec, TextSlot};
+
+    /// 役割付きのテスト用シンボル。ピンは (番号, x, y)。
+    fn role_def(id: &str, role: SimRole, pins: &[(&str, f64, f64)], sim_pins: &[&str]) -> SymbolDef {
+        SymbolDef {
+            id: id.into(),
+            name: id.into(),
+            name_ja: id.into(),
+            category: "user".into(),
+            ref_prefix: "X".into(),
+            keywords: vec![],
+            primitives: vec![Primitive::Rect { p1: Point::new(-1.0, -1.0), p2: Point::new(1.0, 1.0), filled: false }],
+            pins: pins
+                .iter()
+                .map(|(n, x, y)| PinDef {
+                    number: (*n).into(),
+                    name: String::new(),
+                    at: Point::new(*x, *y),
+                    dir: PinDir::default(),
+                    contacts: vec![],
+                })
+                .collect(),
+            text_slots: vec![TextSlot { key: crate::symbol::SLOT_TAG.into(), at: Point::new(0.0, -3.0), height: 2.5 }],
+            free_pins: true,
+            net: None,
+            sim: Some(SimSpec { role, pins: sim_pins.iter().map(|p| (*p).into()).collect() }),
+        }
+    }
+
+    /// テスト用のシンボル定義一式: 電源・負荷・ヒューズ・変換器・貫通コネクタ (役割なし)。
+    fn role_defs() -> Vec<SymbolDef> {
+        vec![
+            role_def("t_src", SimRole::Source, &[("+", 0.0, 0.0), ("-", 0.0, 10.0)], &["+", "-"]),
+            role_def("t_load", SimRole::Load, &[("+", 0.0, 0.0), ("-", 0.0, 10.0)], &["+", "-"]),
+            role_def("t_fuse", SimRole::Fuse, &[("1", 0.0, 0.0), ("2", 10.0, 0.0)], &[]),
+            role_def(
+                "t_conv",
+                SimRole::Converter,
+                &[("i+", 0.0, 0.0), ("i-", 0.0, 10.0), ("o+", 20.0, 0.0), ("o-", 20.0, 10.0)],
+                &["i+", "i-", "o+", "o-"],
+            ),
+            role_def("t_cn", SimRole::None, &[("1", 0.0, 0.0), ("1", 10.0, 0.0)], &[]),
+        ]
+    }
+
+    fn place(sheet: &mut Sheet, symbol_id: &str, reference: &str, x: f64, y: f64, attrs: &[(&str, &str)]) -> EntityId {
+        let e = Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: symbol_id.into(),
+            at: Point::new(x, y),
+            rotation: 0,
+            mirror: false,
+            reference: reference.into(),
+            value: String::new(),
+            attrs: attrs.iter().map(|(k, v)| ((*k).into(), (*v).into())).collect(),
+        });
+        let id = e.id();
+        sheet.entities.insert(id, e);
+        id
+    }
+
+    fn add_wire(sheet: &mut Sheet, pts: &[(f64, f64)], sq: f64, length_m: Option<f64>) -> EntityId {
+        let e = Entity::Wire(Wire {
+            id: Uuid::new_v4(),
+            points: pts.iter().map(|(x, y)| Point::new(*x, *y)).collect(),
+            color: String::new(),
+            sq,
+            length_m,
+            length_source: Default::default(),
+            part_no: None,
+            net: None,
+            dashed: false,
+            weight_mm: None,
+        });
+        let id = e.id();
+        sheet.entities.insert(id, e);
+        id
+    }
+
+    /// 電源 BT1 → ヒューズ F1 → 負荷 LD1 の直列回路 (電線は 0.75sq、長さなし)。
+    fn role_series(src: &[(&str, &str)], fuse: &[(&str, &str)], load: &[(&str, &str)]) -> Sheet {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        place(&mut sheet, "t_src", "BT1", 0.0, 100.0, src);
+        place(&mut sheet, "t_fuse", "F1", 20.0, 100.0, fuse);
+        place(&mut sheet, "t_load", "LD1", 50.0, 100.0, load);
+        add_wire(&mut sheet, &[(0.0, 100.0), (20.0, 100.0)], 0.75, None);
+        add_wire(&mut sheet, &[(30.0, 100.0), (50.0, 100.0)], 0.75, None);
+        add_wire(&mut sheet, &[(50.0, 110.0), (0.0, 110.0)], 0.75, None);
+        sheet
+    }
+
+    fn run(sheet: &Sheet, opts: &SimOptions) -> Option<SimOpResult> {
+        let exe = crate::ngspice::find_ngspice()?;
+        Some(simulate_op_opts_with(&exe, sheet, &role_defs(), opts).unwrap())
+    }
+
+    fn amps(r: &SimOpResult, reference: &str) -> f64 {
+        r.components.iter().find(|c| c.reference == reference).map(|c| c.amps).unwrap_or(0.0)
+    }
+
+    /// A user symbol marked as a source drives a user symbol marked as a load: the load draws exactly its current_a (2 A) and the source and fuse carry the same current.
+    /// 電源の役割を付けたユーザーシンボルが、負荷の役割を付けたユーザーシンボルに電流を流す: 負荷は属性 current_a どおり 2A を流し、電源とヒューズも同じ電流になる。
+    #[test]
+    fn a_user_source_feeds_a_user_load_at_its_current() {
+        let sheet = role_series(&[("voltage", "24")], &[("rating_a", "10")], &[("current_a", "2")]);
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        assert!((r.voltage - 24.0).abs() < 1e-9);
+        for reference in ["LD1", "F1", "BT1"] {
+            assert!((amps(&r, reference) - 2.0).abs() < 0.01, "{reference}: {:?}", r.components);
+        }
+        let ld = r.components.iter().find(|c| c.reference == "LD1").unwrap();
+        assert!((ld.watts - 48.0).abs() < 0.5, "{ld:?}");
+        assert!(r.findings.is_empty(), "{:?}", r.findings);
+    }
+
+    /// A load without current_a only marks its presence (a tiny placeholder current), as before.
+    /// current_a の無い負荷は、これまでどおり存在を示すだけ (ごく小さい電流) になる。
+    #[test]
+    fn a_user_load_without_current_draws_almost_nothing() {
+        let sheet = role_series(&[("voltage", "24")], &[], &[]);
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        assert!(amps(&r, "LD1") < 1e-3, "{:?}", r.components);
+    }
+
+    /// A current above the fuse's rating_a is reported as a fuse finding with the measured current and the rating.
+    /// ヒューズの属性 rating_a を超える電流は、測った電流と定格を添えたヒューズの指摘になる。
+    #[test]
+    fn a_current_above_the_fuse_rating_is_a_finding() {
+        let sheet = role_series(&[("voltage", "24")], &[("rating_a", "5")], &[("current_a", "8")]);
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        let f = r.findings.iter().find(|f| f.code == "sim.fuse_rating").expect("fuse finding");
+        assert_eq!(f.reference, "F1");
+        assert!((f.value - 8.0).abs() < 0.01 && (f.limit - 5.0).abs() < 1e-9, "{f:?}");
+    }
+
+    /// A fuse without rating_a takes its rating from the value text (for example "5A").
+    /// rating_a の無いヒューズは、値の文字 (例 "5A") を定格として使う。
+    #[test]
+    fn a_fuse_without_rating_uses_its_value_text() {
+        let mut sheet = role_series(&[("voltage", "24")], &[], &[("current_a", "8")]);
+        for e in sheet.entities.values_mut() {
+            if let Entity::Symbol(s) = e {
+                if s.reference == "F1" {
+                    s.value = "5A".into();
+                }
+            }
+        }
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        assert!(r.findings.iter().any(|f| f.code == "sim.fuse_rating" && (f.limit - 5.0).abs() < 1e-9), "{:?}", r.findings);
+    }
+
+    /// An override replaces a part's attribute for one run only (here a stalled load drawing 9 A), the result names the override, and the fuse finding follows the new current.
+    /// 置き換えは部品の属性をその1回だけ差し替える (ここでは拘束で 9A 流れる負荷)。結果に置き換えが書かれ、ヒューズの指摘は新しい電流で出る。
+    #[test]
+    fn an_override_changes_a_load_for_one_run() {
+        let sheet = role_series(&[("voltage", "24")], &[("rating_a", "5")], &[("current_a", "2")]);
+        let mut opts = SimOptions::default();
+        opts.overrides.insert("LD1".into(), [("current_a".to_string(), "9".to_string())].into_iter().collect());
+        let Some(r) = run(&sheet, &opts) else { return };
+        assert!((amps(&r, "LD1") - 9.0).abs() < 0.01, "{:?}", r.components);
+        assert!(r.warnings.iter().any(|w| w.contains("LD1") && w.contains("current_a=9")), "{:?}", r.warnings);
+        assert!(r.findings.iter().any(|f| f.code == "sim.fuse_rating"));
+        // 図面そのものは変わらない
+        let Some(again) = run(&sheet, &SimOptions::default()) else { return };
+        assert!((amps(&again, "LD1") - 2.0).abs() < 0.01);
+    }
+
+    /// An override for a reference that is not on the sheet is reported as a warning instead of being silently ignored.
+    /// 図面に無い参照記号への置き換えは、黙って無視せず注意として知らせる。
+    #[test]
+    fn an_override_for_an_unknown_reference_is_a_warning() {
+        let sheet = role_series(&[("voltage", "24")], &[], &[("current_a", "2")]);
+        let mut opts = SimOptions::default();
+        opts.overrides.insert("M99".into(), [("current_a".to_string(), "1".to_string())].into_iter().collect());
+        let Some(r) = run(&sheet, &opts) else { return };
+        assert!(r.warnings.iter().any(|w| w.contains("M99") && w.contains("ありません")), "{:?}", r.warnings);
+    }
+
+    /// Shorting the load's supply net to ground makes the source's internal resistance limit the current, so the fuse sees the fault current; an unknown net name is a warning.
+    /// 負荷の電源側のネットを接地へ短絡させると、電流は電源の内部抵抗で決まり、ヒューズは事故電流を見る。図面に無いネット名は注意になる。
+    #[test]
+    fn a_short_to_ground_shows_the_fault_current() {
+        let sheet = role_series(&[("voltage", "24"), ("r_int_ohm", "0.1")], &[("rating_a", "30")], &[("current_a", "2")]);
+        let nets = crate::netlist::extract_netlist(&sheet, &role_defs());
+        // F1 の出口と LD1 の + をつなぐネット
+        let net = nets
+            .iter()
+            .find(|n| n.pins.iter().any(|p| p.reference == "LD1" && p.pin == "+"))
+            .unwrap()
+            .name
+            .clone();
+        let opts = SimOptions { shorts: vec![net.clone(), "NOPE".into()], ..Default::default() };
+        let Some(r) = run(&sheet, &opts) else { return };
+        // 24V / (0.1Ω + 配線・橋の数mΩ) ≈ 200A 強
+        let f1 = amps(&r, "F1");
+        assert!(f1 > 200.0 && f1 < 240.0, "{f1}");
+        assert!(r.findings.iter().any(|f| f.code == "sim.fuse_rating" && f.reference == "F1"));
+        assert!(r.warnings.iter().any(|w| w.contains(&net)), "{:?}", r.warnings);
+        assert!(r.warnings.iter().any(|w| w.contains("NOPE") && w.contains("ありません")), "{:?}", r.warnings);
+    }
+
+    /// A source carrying more than its i_max_a is reported as a source overload.
+    /// 電源の属性 i_max_a を超える電流は、電源の過負荷として指摘される。
+    #[test]
+    fn a_source_above_its_maximum_current_is_a_finding() {
+        let sheet = role_series(&[("voltage", "24"), ("i_max_a", "3")], &[], &[("current_a", "4")]);
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        let f = r.findings.iter().find(|f| f.code == "sim.source_overload").expect("source finding");
+        assert_eq!(f.reference, "BT1");
+        assert!((f.value - 4.0).abs() < 0.01, "{f:?}");
+    }
+
+    /// A load whose terminal voltage falls below its v_min because of long thin wires is reported with the voltage it actually gets.
+    /// 長く細い電線のせいで端子電圧が属性 v_min を下回る負荷は、実際に受ける電圧を添えて指摘される。
+    #[test]
+    fn a_load_below_its_minimum_voltage_is_a_finding() {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        place(&mut sheet, "t_src", "BT1", 0.0, 100.0, &[("voltage", "12")]);
+        place(&mut sheet, "t_load", "LD1", 50.0, 100.0, &[("current_a", "5"), ("v_min", "11")]);
+        // 0.3sq × 20m の往復: 1.17Ω × 2 → 5A で約 11.7V 落ちる
+        add_wire(&mut sheet, &[(0.0, 100.0), (50.0, 100.0)], 0.3, Some(20.0));
+        add_wire(&mut sheet, &[(50.0, 110.0), (0.0, 110.0)], 0.3, Some(20.0));
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        let f = r.findings.iter().find(|f| f.code == "sim.load_voltage").expect("voltage finding");
+        assert!(f.value < 11.0 && (f.limit - 11.0).abs() < 1e-9, "{f:?}");
+    }
+
+    /// A converter makes a second supply voltage: its output holds v_out for the load, and its input draws output power divided by efficiency and input voltage.
+    /// 変換器は2つ目の電源電圧を作る: 出力は負荷に対して v_out を保ち、入力は「出力電力 ÷ (効率 × 入力電圧)」の電流を引く。
+    #[test]
+    fn a_converter_feeds_a_second_voltage_and_loads_its_input() {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        place(&mut sheet, "t_src", "BT1", 0.0, 100.0, &[("voltage", "24")]);
+        place(&mut sheet, "t_conv", "U1", 20.0, 100.0, &[("v_out", "12"), ("eta", "0.8"), ("i_out_a", "3")]);
+        place(&mut sheet, "t_load", "LD1", 60.0, 100.0, &[("current_a", "4")]);
+        add_wire(&mut sheet, &[(0.0, 100.0), (20.0, 100.0)], 0.75, None);
+        add_wire(&mut sheet, &[(0.0, 110.0), (20.0, 110.0)], 0.75, None);
+        add_wire(&mut sheet, &[(40.0, 100.0), (60.0, 100.0)], 0.75, None);
+        add_wire(&mut sheet, &[(40.0, 110.0), (60.0, 110.0)], 0.75, None);
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        // 12V × 4A / (0.8 × 24V) = 2.5A
+        assert!((amps(&r, "BT1") - 2.5).abs() < 0.02, "{:?}", r.components);
+        let ld = r.components.iter().find(|c| c.reference == "LD1").unwrap();
+        assert!((ld.watts - 48.0).abs() < 0.5, "{ld:?}");
+        // 出力 4A は定格 3A を超える
+        let f = r.findings.iter().find(|f| f.code == "sim.converter_overload").expect("converter finding");
+        assert!((f.value - 4.0).abs() < 0.01 && (f.limit - 3.0).abs() < 1e-9, "{f:?}");
+    }
+
+    /// A connector symbol with no role still passes current through its same-numbered pins, and a pin current above pin_rating_a is reported with the pin number.
+    /// 役割「なし」のコネクタでも同じ番号のピンは電流を通し、属性 pin_rating_a を超えるピン電流はピン番号付きで指摘される。
+    #[test]
+    fn a_connector_pin_above_its_rating_is_a_finding() {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        place(&mut sheet, "t_src", "BT1", 0.0, 100.0, &[("voltage", "24")]);
+        place(&mut sheet, "t_cn", "CN1", 20.0, 100.0, &[("pin_rating_a", "3")]);
+        place(&mut sheet, "t_load", "LD1", 50.0, 100.0, &[("current_a", "5")]);
+        add_wire(&mut sheet, &[(0.0, 100.0), (20.0, 100.0)], 0.75, None);
+        add_wire(&mut sheet, &[(30.0, 100.0), (50.0, 100.0)], 0.75, None);
+        add_wire(&mut sheet, &[(50.0, 110.0), (0.0, 110.0)], 0.75, None);
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        assert!((amps(&r, "LD1") - 5.0).abs() < 0.01, "{:?}", r.components);
+        let f = r.findings.iter().find(|f| f.code == "sim.pin_rating").expect("pin finding");
+        assert!(f.reference == "CN1" && f.message.contains("ピン1"), "{f:?}");
+    }
+
+    /// A wire carrying more than the ampacity of its size is an error; a wire thicker than the ampacity table is not judged and is only noted when its current exceeds the table.
+    /// 太さの許容電流を超えて流れる電線はエラーになる。許容電流の表より太い電線は判定せず、電流が表の最大を超えたときだけ情報で知らせる。
+    #[test]
+    fn wire_currents_are_checked_against_their_size() {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        place(&mut sheet, "t_src", "BT1", 0.0, 100.0, &[("voltage", "24")]);
+        place(&mut sheet, "t_load", "LD1", 50.0, 100.0, &[("current_a", "40")]);
+        let thin = add_wire(&mut sheet, &[(0.0, 100.0), (50.0, 100.0)], 2.0, None);
+        let thick = add_wire(&mut sheet, &[(50.0, 110.0), (0.0, 110.0)], 8.0, None);
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        let e = r.findings.iter().find(|f| f.code == "sim.wire_ampacity").expect("ampacity finding");
+        assert_eq!(e.entity_ids, vec![thin]);
+        assert_eq!(e.severity, Severity::Error);
+        let i = r.findings.iter().find(|f| f.code == "sim.wire_unchecked").expect("unchecked note");
+        assert_eq!(i.entity_ids, vec![thick]);
+        assert_eq!(i.severity, Severity::Info);
+        // 重い順に並ぶ
+        assert_eq!(r.findings[0].severity, Severity::Error);
+    }
+
+    /// Simulation options can be sent with any field left out; an empty object means "the drawing as it is".
+    /// シミュレーションの条件はどの項目も省略して送れる。空のオブジェクトは「図面のまま」を意味する。
+    #[test]
+    fn simulation_options_default_to_the_drawing_as_it_is() {
+        let o: SimOptions = serde_json::from_str("{}").unwrap();
+        assert!(o.open_switches.is_empty() && o.overrides.is_empty() && o.shorts.is_empty());
+        let o: SimOptions = serde_json::from_str(r#"{"overrides":{"M1":{"current_a":"40"}},"shorts":["P24"]}"#).unwrap();
+        assert_eq!(o.overrides["M1"]["current_a"], "40");
+        assert_eq!(o.shorts, vec!["P24".to_string()]);
     }
 }

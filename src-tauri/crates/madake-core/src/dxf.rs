@@ -2972,6 +2972,7 @@ mod tests {
             text_slots: vec![],
             free_pins: false,
             net: None,
+            sim: None,
         };
         write_symbol_block_body(&mut w, "1", &def);
         let recs = records(&parse_pairs(&w.out).unwrap());

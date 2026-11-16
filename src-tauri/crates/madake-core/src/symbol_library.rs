@@ -72,6 +72,7 @@ pub mod code {
     pub const SLOT_UNKNOWN: &str = "symbol.slot_unknown";
     pub const SLOT_DUPLICATE: &str = "symbol.slot_duplicate";
     pub const SLOT_HEIGHT: &str = "symbol.slot_height";
+    pub const SIM_PINS: &str = "symbol.sim_pins";
 }
 
 /// 保存できない理由1件。[`validate`]は見つかった理由を**全部**返す(直す回数を減らす)。
@@ -391,6 +392,24 @@ pub fn validate(def: &SymbolDef) -> Vec<SymbolError> {
             format!("参照記号のスロット({SLOT_TAG})は必須です"),
         ));
     }
+    if let Some(sim) = &def.sim {
+        if let Some(n) = sim.required_pins() {
+            if sim.pins.len() != n {
+                errors.push(SymbolError::new(
+                    code::SIM_PINS,
+                    format!("シミュレーションの役割 {:?} にはピンを{n}つ指定してください (いまは{}つ)", sim.role, sim.pins.len()),
+                ));
+            }
+        }
+        for no in &sim.pins {
+            if !def.pins.iter().any(|p| p.number.trim() == no.trim()) {
+                errors.push(SymbolError::new(
+                    code::SIM_PINS,
+                    format!("シミュレーションの役割が使うピン{no}がシンボルにありません"),
+                ));
+            }
+        }
+    }
 
     errors
 }
@@ -544,6 +563,7 @@ mod tests {
             }],
             free_pins: false,
             net: None,
+            sim: None,
         }
     }
 
@@ -953,5 +973,37 @@ mod tests {
         assert_eq!(normalize(&back).net.as_deref(), Some("GND"));
         def.net = Some("  ".into());
         assert_eq!(normalize(&def).net, None);
+    }
+
+    /// A symbol's simulation role (for example "load on pins 1 and 2") is kept through save and load, and a symbol without one is written without the field.
+    /// シンボルのシミュレーションの役割 (例: 「ピン1と2の負荷」) は保存して読み直しても残る。役割の無いシンボルは、その項目を書き出さない。
+    #[test]
+    fn a_simulation_role_is_kept_and_written_only_when_set() {
+        use crate::symbol::{SimRole, SimSpec};
+        let mut def = sample();
+        assert!(!serde_json::to_string(&def).unwrap().contains("\"sim\""));
+        def.sim = Some(SimSpec { role: SimRole::Load, pins: vec!["1".into(), "2".into()] });
+        let text = serde_json::to_string(&def).unwrap();
+        assert!(text.contains("\"role\":\"load\""), "{text}");
+        let back: SymbolDef = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.sim, def.sim);
+        assert!(validate(&back).is_empty(), "{:?}", validate(&back));
+    }
+
+    /// A simulation role is refused when it names the wrong number of pins (a load needs two, a converter four) or a pin the symbol does not have.
+    /// シミュレーションの役割は、ピンの数が合わない (負荷は2つ、変換器は4つ) か、シンボルに無いピンを指すと断られる。
+    #[test]
+    fn a_simulation_role_with_wrong_pins_is_refused() {
+        use crate::symbol::{SimRole, SimSpec};
+        let mut def = sample();
+        def.sim = Some(SimSpec { role: SimRole::Converter, pins: vec!["1".into(), "2".into()] });
+        assert!(validate(&def).iter().any(|e| e.code == code::SIM_PINS && e.message.contains("4")));
+        def.sim = Some(SimSpec { role: SimRole::Source, pins: vec!["1".into(), "9".into()] });
+        let errors = validate(&def);
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert!(errors[0].code == code::SIM_PINS && errors[0].message.contains("9"));
+        // ヒューズ・導通はピンを省略できる (全ピンが導通)
+        def.sim = Some(SimSpec { role: SimRole::Fuse, pins: vec![] });
+        assert!(validate(&def).is_empty());
     }
 }

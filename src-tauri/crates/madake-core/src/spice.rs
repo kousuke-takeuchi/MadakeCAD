@@ -2,10 +2,15 @@
 //!
 //! ノードは「接続点クラスタ」(座標一致するピン・ジャンクション・ワイヤ端点)。
 //! ネット単位ではない: ワイヤは抵抗素子になり、ワイヤ抵抗でノードが分かれる。
+//!
+//! シンボル定義に `sim` (役割) があれば、それに従って電源・負荷・ヒューズ・導通・変換器を作る
+//! (ユーザーシンボルでもシミュレーションできる。値は置いた部品の属性)。無ければカテゴリで決める従来の扱い。
+
+use std::collections::BTreeMap;
 
 use crate::geometry::Point;
-use crate::model::Sheet;
-use crate::symbol::SymbolDef;
+use crate::model::{Sheet, SymbolInstance};
+use crate::symbol::{SimRole, SymbolDef};
 use crate::EntityId;
 
 /// 銅の抵抗率 (Ω·mm²/m)。verify.rsと共通。
@@ -14,11 +19,38 @@ pub const COPPER_RESISTIVITY: f64 = 0.0175;
 pub const BRIDGE_OHMS: f64 = 1e-3;
 /// current_a未設定の負荷の等価抵抗 (Ω)。存在だけ表現する。
 pub const UNKNOWN_LOAD_OHMS: f64 = 1e6;
+/// 役割付きの部品がある図面で、全ノードから接地へ入れる漏れ抵抗 (Ω)。浮いた回路でも解けるようにする。
+pub const SHUNT_OHMS: f64 = 1e9;
+/// 変換器の効率の既定値。
+pub const DEFAULT_ETA: f64 = 0.9;
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum SpiceError {
     #[error("電源(battery)がありません")]
     NoSource,
+}
+
+/// 抵抗素子の由来の種類 (判定で使う)。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ElementKind {
+    /// ワイヤの区間。
+    Wire,
+    /// 同じ番号のピンどうしの内部短絡 (端子台・コネクタの貫通)。ピン番号付き。
+    Pin(String),
+    /// 導通部品・ヒューズの橋。
+    Bridge,
+    /// 負荷 (等価抵抗、または定電流源の直列の検出抵抗)。
+    Load,
+    /// 電源の内部抵抗。
+    Source,
+    /// 変換器の入力側の検出抵抗。
+    ConverterIn,
+    /// 変換器の出力側の検出抵抗。
+    ConverterOut,
+    /// 同名ネットラベル・ネット名シンボルの橋。
+    Label,
+    /// 短絡指定 (ネットから接地へ)。ネット名付き。
+    Short(String),
 }
 
 /// デッキ中の抵抗素子1つ。電流はノード電圧差/ohmsで後計算する。
@@ -31,18 +63,31 @@ pub struct SpiceElement {
     pub node_a: String,
     pub node_b: String,
     pub ohms: f64,
+    pub kind: ElementKind,
+}
+
+/// 役割が負荷の部品の端子 (端子電圧の判定に使う)。
+#[derive(Debug, Clone)]
+pub struct LoadTerminals {
+    pub entity_id: EntityId,
+    pub plus: String,
+    pub minus: String,
 }
 
 #[derive(Debug)]
 pub struct SpiceDeck {
     /// SPICEネットリスト本文 (.end含まず。解析コマンドはランナーが付ける)。
     pub deck: String,
-    /// 電源電圧 (V)。
+    /// 電源電圧 (V)。最初の電源の電圧。
     pub voltage: f64,
     /// ワイヤ由来の抵抗素子 (分割されたワイヤは複数エントリ)。
     pub wire_elements: Vec<SpiceElement>,
     /// 部品・ラベル橋由来の抵抗素子 (ヒューズ電流の算出などに使う)。
     pub component_elements: Vec<SpiceElement>,
+    /// 役割が負荷の部品の端子ノード。
+    pub load_terminals: Vec<LoadTerminals>,
+    /// 組み立て時の注意 (見つからない短絡ネット・参照記号など)。
+    pub warnings: Vec<String>,
 }
 
 /// 座標→ノードクラスタキー (0.01mm量子化。実座標は2.5mmグリッド上なので十分)。
@@ -55,11 +100,48 @@ fn node_key(p: Point) -> (i64, i64) {
 pub struct DeckOptions {
     /// 開路として扱う導通部品の参照記号 (スイッチ/接点のwhat-if)。
     pub open_switches: Vec<String>,
+    /// 部品の属性の置き換え (参照記号 → {属性: 値})。同じ参照記号の全部品に効く。
+    pub overrides: BTreeMap<String, BTreeMap<String, String>>,
+    /// 接地へ短絡させるネットの名前 (1mΩ)。
+    pub shorts: Vec<String>,
+}
+
+impl DeckOptions {
+    /// 部品の属性 (置き換えがあればそちら)。
+    pub fn attr<'a>(&'a self, s: &'a SymbolInstance, key: &str) -> Option<&'a str> {
+        self.overrides
+            .get(&s.reference)
+            .and_then(|m| m.get(key))
+            .or_else(|| s.attrs.get(key))
+            .map(String::as_str)
+    }
+
+    /// 部品の属性を数で読む (例: "2.5A" → 2.5)。
+    pub fn number(&self, s: &SymbolInstance, key: &str) -> Option<f64> {
+        self.attr(s, key).and_then(crate::verify::parse_number)
+    }
 }
 
 /// シートからSPICEデッキを組み立てる。
 pub fn build_deck(sheet: &Sheet, symbols: &[SymbolDef]) -> Result<SpiceDeck, SpiceError> {
     build_deck_with(sheet, symbols, &DeckOptions::default())
+}
+
+/// デッキのノード: 接続点クラスタか、部品の内部ノード。
+#[derive(Debug, Clone)]
+enum Node {
+    Key((i64, i64)),
+    Internal(String),
+}
+
+/// 抵抗以外の素子 (ノード名が決まってから書く)。
+enum Extra {
+    /// 電圧源 (+, −, 電圧)。
+    Volt { name: String, plus: Node, minus: Node, volts: f64 },
+    /// 電流源。電流は from から素子を通って to へ流れる。
+    Amp { name: String, from: Node, to: Node, amps: f64 },
+    /// 変換器の入力 (定電力の電流源)。出力側の電圧源の電流から入力電流を決める。
+    ConverterInput { name: String, from: Node, to: Node, out_src: String, out_p: Node, out_m: Node, eta: f64 },
 }
 
 /// オプション付きでSPICEデッキを組み立てる。
@@ -71,14 +153,18 @@ pub fn build_deck_with(
     use crate::model::Entity;
     use crate::netlist::{pin_positions, segment_distance, CONNECT_EPS};
     use crate::verify::{is_conductor, is_load, parse_number};
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::BTreeSet;
 
     let defs: BTreeMap<&str, &SymbolDef> = symbols.iter().map(|d| (d.id.as_str(), d)).collect();
+    let mut warnings: Vec<String> = Vec::new();
 
-    // 電源: 最初のbattery (BTreeMap順で決定的)
+    // 電源: 同梱の battery と役割 source (BTreeMap順で決定的)。最初の電源の負極が接地
     let mut batteries = Vec::new();
+    let mut role_sources: Vec<(&SymbolInstance, Vec<(String, Point)>, Point, Point)> = Vec::new();
+    let mut has_roles = false;
     let mut attachments: Vec<crate::geometry::Point> = Vec::new(); // ワイヤ分割点になる点
     let mut labels: BTreeMap<&str, Vec<(EntityId, crate::geometry::Point)>> = BTreeMap::new();
+    let pin_of = |pins: &[(String, Point)], no: &str| pins.iter().find(|(n, _)| n == no).map(|(_, p)| *p);
     for e in sheet.entities.values() {
         match e {
             Entity::Symbol(s) => {
@@ -89,7 +175,17 @@ pub fn build_deck_with(
                     if let Some(name) = def.net_name() {
                         labels.entry(name).or_default().extend(pins.iter().map(|(_, p)| (s.id, *p)));
                     }
-                    if def.id == "battery" {
+                    if let Some(sim) = &def.sim {
+                        has_roles = true;
+                        if sim.role == SimRole::Source {
+                            if let (Some(p), Some(m)) = (
+                                sim.pins.first().and_then(|n| pin_of(&pins, n)),
+                                sim.pins.get(1).and_then(|n| pin_of(&pins, n)),
+                            ) {
+                                role_sources.push((s, pins.clone(), p, m));
+                            }
+                        }
+                    } else if def.id == "battery" {
                         batteries.push((s, def, pins));
                     }
                 }
@@ -113,26 +209,41 @@ pub fn build_deck_with(
             | Entity::Dimension(_) => {}
         }
     }
-    if batteries.is_empty() {
+    let source_volts = |s: &SymbolInstance| {
+        opts.number(s, "voltage").or_else(|| parse_number(&s.value)).unwrap_or(24.0)
+    };
+    let (voltage, gnd_key) = if let Some((s, _, pins)) = batteries.first() {
+        let minus = pins.last().map(|(_, p)| *p).expect("battery has pins");
+        (parse_number(&s.value).unwrap_or(24.0), node_key(minus))
+    } else if let Some((s, _, _, m)) = role_sources.first() {
+        (source_volts(s), node_key(*m))
+    } else {
         return Err(SpiceError::NoSource);
+    };
+    for r in opts.overrides.keys() {
+        let found = sheet
+            .entities
+            .values()
+            .any(|e| matches!(e, Entity::Symbol(s) if &s.reference == r));
+        if !found {
+            warnings.push(format!("置き換え指定の参照記号 {r} が図面にありません"));
+        }
     }
-    let voltage = parse_number(&batteries[0].0.value).unwrap_or(24.0);
-    // GND = 最初のbatteryの末尾ピン(負極)
-    let gnd_key = node_key(
-        batteries[0]
-            .2
-            .last()
-            .map(|(_, p)| *p)
-            .expect("battery has pins"),
-    );
 
     let mut used_keys: BTreeSet<(i64, i64)> = BTreeSet::new();
     let mut seq = 0usize;
     let mut wire_elements = Vec::new();
     let mut component_elements = Vec::new();
+    let mut extras: Vec<Extra> = Vec::new();
+    let mut raw_loads: Vec<(EntityId, (i64, i64), (i64, i64))> = Vec::new();
     let next_name = |seq: &mut usize| {
         *seq += 1;
         format!("R{seq}")
+    };
+    let mut internal_seq = 0usize;
+    let mut next_internal = |prefix: &str| {
+        internal_seq += 1;
+        format!("{prefix}{internal_seq}")
     };
 
     // ワイヤ → 分割点で区切った抵抗列
@@ -191,61 +302,148 @@ pub fn build_deck_with(
                 node_a: format!("{ka:?}"),
                 node_b: format!("{kb:?}"),
                 ohms: r_total * (t1 - t0) / total,
+                kind: ElementKind::Wire,
             });
         }
     }
 
-    // シンボル → 導通橋(1mΩ)・端子台の同番号貫通・負荷の等価抵抗
+    // シンボル → 導通橋(1mΩ)・端子台の同番号貫通・負荷・電源・変換器
     for e in sheet.entities.values() {
         let Entity::Symbol(s) = e else { continue };
         let Some(def) = defs.get(s.symbol_id.as_str()) else { continue };
         let pins = pin_positions(s, def);
-        let mut push = |a: crate::geometry::Point, b: crate::geometry::Point, ohms: f64| {
-            let (ka, kb) = (node_key(a), node_key(b));
-            if ka == kb {
+        // 抵抗素子 (a, b はキーか内部ノードの名前)
+        let mut push = |a: String, b: String, ohms: f64, kind: ElementKind, used: &mut BTreeSet<(i64, i64)>| {
+            if a == b {
                 return;
             }
-            used_keys.insert(ka);
-            used_keys.insert(kb);
+            for n in [&a, &b] {
+                if let Some(k) = parse_key(n) {
+                    used.insert(k);
+                }
+            }
             component_elements.push(SpiceElement {
                 entity_id: s.id,
                 name: next_name(&mut seq),
-                node_a: format!("{ka:?}"),
-                node_b: format!("{kb:?}"),
+                node_a: a,
+                node_b: b,
                 ohms,
+                kind,
             });
         };
-        // 同一ピン番号の複数接続点(端子台の左右)は内部短絡
+        let key = |p: Point| format!("{:?}", node_key(p));
+        // 同一ピン番号の複数接続点(端子台・コネクタの左右)は内部短絡
         let mut by_no: BTreeMap<&str, Vec<crate::geometry::Point>> = BTreeMap::new();
         for (no, p) in &pins {
             by_no.entry(no.as_str()).or_default().push(*p);
         }
-        for pts in by_no.values() {
+        for (no, pts) in &by_no {
             for pair in pts.windows(2) {
-                push(pair[0], pair[1], BRIDGE_OHMS);
+                if node_key(pair[0]) != node_key(pair[1]) {
+                    push(key(pair[0]), key(pair[1]), BRIDGE_OHMS, ElementKind::Pin(no.to_string()), &mut used_keys);
+                }
             }
         }
+        let first_of = |no: &str| by_no.get(no).map(|v| v[0]);
+        let is_open = opts.open_switches.iter().any(|r| r == &s.reference);
+        if let Some(sim) = &def.sim {
+            match sim.role {
+                SimRole::None => {}
+                SimRole::Fuse | SimRole::Conductor => {
+                    if !is_open {
+                        let numbers: Vec<&str> = if sim.pins.is_empty() {
+                            by_no.keys().copied().collect()
+                        } else {
+                            sim.pins.iter().map(String::as_str).collect()
+                        };
+                        let pts: Vec<Point> = numbers.iter().filter_map(|n| first_of(n)).collect();
+                        for p in pts.iter().skip(1) {
+                            push(key(pts[0]), key(*p), BRIDGE_OHMS, ElementKind::Bridge, &mut used_keys);
+                        }
+                    }
+                }
+                SimRole::Source => {
+                    let (Some(p), Some(m)) = (sim.pins.first().and_then(|n| first_of(n)), sim.pins.get(1).and_then(|n| first_of(n))) else { continue };
+                    let inner = next_internal("s");
+                    let r = opts.number(s, "r_int_ohm").filter(|r| *r > 0.0).unwrap_or(BRIDGE_OHMS);
+                    used_keys.insert(node_key(m));
+                    extras.push(Extra::Volt {
+                        name: format!("V{}", inner.to_uppercase()),
+                        plus: Node::Internal(inner.clone()),
+                        minus: Node::Key(node_key(m)),
+                        volts: source_volts(s),
+                    });
+                    push(inner, key(p), r, ElementKind::Source, &mut used_keys);
+                }
+                SimRole::Load => {
+                    let (Some(p), Some(m)) = (sim.pins.first().and_then(|n| first_of(n)), sim.pins.get(1).and_then(|n| first_of(n))) else { continue };
+                    raw_loads.push((s.id, node_key(p), node_key(m)));
+                    match opts.number(s, "current_a").filter(|a| *a > 0.0) {
+                        Some(amps) => {
+                            let inner = next_internal("l");
+                            used_keys.insert(node_key(m));
+                            extras.push(Extra::Amp {
+                                name: format!("I{}", inner.to_uppercase()),
+                                from: Node::Internal(inner.clone()),
+                                to: Node::Key(node_key(m)),
+                                amps,
+                            });
+                            push(key(p), inner, BRIDGE_OHMS, ElementKind::Load, &mut used_keys);
+                        }
+                        None => push(key(p), key(m), UNKNOWN_LOAD_OHMS, ElementKind::Load, &mut used_keys),
+                    }
+                }
+                SimRole::Converter => {
+                    let ends: Option<Vec<Point>> = sim.pins.iter().map(|n| first_of(n)).collect();
+                    let Some(ends) = ends.filter(|e| e.len() == 4) else { continue };
+                    let (ip, im, op, om) = (ends[0], ends[1], ends[2], ends[3]);
+                    let v_out = opts.number(s, "v_out").or_else(|| parse_number(&s.value)).unwrap_or(12.0);
+                    let eta = opts.number(s, "eta").filter(|e| *e > 0.0 && *e <= 1.0).unwrap_or(DEFAULT_ETA);
+                    let (ci, co) = (next_internal("ci"), next_internal("co"));
+                    let out_src = format!("V{}", co.to_uppercase());
+                    used_keys.insert(node_key(im));
+                    used_keys.insert(node_key(om));
+                    extras.push(Extra::Volt {
+                        name: out_src.clone(),
+                        plus: Node::Internal(co.clone()),
+                        minus: Node::Key(node_key(om)),
+                        volts: v_out,
+                    });
+                    extras.push(Extra::ConverterInput {
+                        name: format!("B{}", ci.to_uppercase()),
+                        from: Node::Internal(ci.clone()),
+                        to: Node::Key(node_key(im)),
+                        out_src,
+                        out_p: Node::Internal(co.clone()),
+                        out_m: Node::Key(node_key(om)),
+                        eta,
+                    });
+                    push(key(ip), ci, BRIDGE_OHMS, ElementKind::ConverterIn, &mut used_keys);
+                    push(co, key(op), BRIDGE_OHMS, ElementKind::ConverterOut, &mut used_keys);
+                }
+            }
+            continue;
+        }
         // 番号代表点 (番号ごとの先頭)
-        let reps: Vec<crate::geometry::Point> =
-            by_no.values().map(|pts| pts[0]).collect();
+        let reps: Vec<crate::geometry::Point> = by_no.values().map(|pts| pts[0]).collect();
         if is_conductor(def) {
             // what-if: 指定された参照記号の導通部品は開路扱い(橋を張らない)
-            if !opts.open_switches.iter().any(|r| r == &s.reference) {
+            if !is_open {
                 // 多極機器は極ごと(1-2 / 3-4 / …)に橋を張り、相どうしは短絡させない
                 for group in crate::symbol::conducting_pin_groups(def) {
                     let pts: Vec<crate::geometry::Point> =
                         group.iter().filter_map(|no| by_no.get(*no).map(|v| v[0])).collect();
                     for p in pts.iter().skip(1) {
-                        push(pts[0], *p, BRIDGE_OHMS);
+                        push(key(pts[0]), key(*p), BRIDGE_OHMS, ElementKind::Bridge, &mut used_keys);
                     }
                 }
             }
         } else if is_load(def) && reps.len() >= 2 {
-            let ohms = match s.attrs.get("current_a").and_then(|v| parse_number(v)) {
+            let ohms = match opts.number(s, "current_a") {
                 Some(a) if a > 0.0 => voltage / a,
                 _ => UNKNOWN_LOAD_OHMS,
             };
-            push(reps[0], reps[1], ohms);
+            push(key(reps[0]), key(reps[1]), ohms, ElementKind::Load, &mut used_keys);
         }
     }
 
@@ -264,7 +462,47 @@ pub fn build_deck_with(
                 node_a: format!("{ka:?}"),
                 node_b: format!("{kb:?}"),
                 ohms: BRIDGE_OHMS,
+                kind: ElementKind::Label,
             });
+        }
+    }
+
+    // 短絡指定: ネットの最初の接続点から接地へ 1mΩ
+    if !opts.shorts.is_empty() {
+        let nets = crate::netlist::extract_netlist(sheet, symbols);
+        for name in &opts.shorts {
+            let Some(net) = nets.iter().find(|n| &n.name == name || n.label.as_deref() == Some(name.as_str())) else {
+                warnings.push(format!("短絡指定のネット {name} が図面にありません"));
+                continue;
+            };
+            let point = net.wire_ids.iter().find_map(|id| match sheet.entities.get(id) {
+                Some(Entity::Wire(w)) => w.points.first().copied(),
+                _ => None,
+            });
+            let point = point.or_else(|| {
+                net.pins.iter().find_map(|np| match sheet.entities.get(&np.entity_id) {
+                    Some(Entity::Symbol(s)) => defs
+                        .get(s.symbol_id.as_str())
+                        .and_then(|d| pin_positions(s, d).into_iter().find(|(n, _)| n == &np.pin).map(|(_, p)| p)),
+                    _ => None,
+                })
+            });
+            let Some(point) = point else {
+                warnings.push(format!("短絡指定のネット {name} に接続点がありません"));
+                continue;
+            };
+            let k = node_key(point);
+            used_keys.insert(k);
+            used_keys.insert(gnd_key);
+            component_elements.push(SpiceElement {
+                entity_id: net.wire_ids.first().copied().unwrap_or_else(|| net.pins[0].entity_id),
+                name: next_name(&mut seq),
+                node_a: format!("{k:?}"),
+                node_b: format!("{gnd_key:?}"),
+                ohms: BRIDGE_OHMS,
+                kind: ElementKind::Short(name.clone()),
+            });
+            warnings.push(format!("短絡指定: {name}"));
         }
     }
 
@@ -279,18 +517,27 @@ pub fn build_deck_with(
         });
     }
     let resolve = |raw: &str, names: &BTreeMap<(i64, i64), String>| -> String {
-        // "{(x, y)}" 形式のデバッグキーを最終名へ置換
-        let key: (i64, i64) = {
-            let t = raw.trim_start_matches('(').trim_end_matches(')');
-            let mut it = t.split(',').map(|s| s.trim().parse::<i64>().unwrap());
-            (it.next().unwrap(), it.next().unwrap())
-        };
-        names.get(&key).cloned().unwrap_or_else(|| "0".into())
+        match parse_key(raw) {
+            Some(key) => names.get(&key).cloned().unwrap_or_else(|| "0".into()),
+            None => raw.to_string(), // 部品の内部ノード
+        }
+    };
+    let node_name = |node: &Node| match node {
+        Node::Key(k) => names.get(k).cloned().unwrap_or_else(|| "0".into()),
+        Node::Internal(s) => s.clone(),
     };
     for el in wire_elements.iter_mut().chain(component_elements.iter_mut()) {
         el.node_a = resolve(&el.node_a, &names);
         el.node_b = resolve(&el.node_b, &names);
     }
+    let load_terminals = raw_loads
+        .into_iter()
+        .map(|(entity_id, p, m)| LoadTerminals {
+            entity_id,
+            plus: node_name(&Node::Key(p)),
+            minus: node_name(&Node::Key(m)),
+        })
+        .collect();
 
     // デッキ本文
     let mut deck = String::from("* MadakeCAD verification\n");
@@ -306,11 +553,33 @@ pub fn build_deck_with(
             .unwrap_or_else(|| "0".into());
         deck.push_str(&format!("V{} {} {} DC {}\n", i + 1, plus, minus, v));
     }
+    for x in &extras {
+        match x {
+            Extra::Volt { name, plus, minus, volts } => {
+                deck.push_str(&format!("{name} {} {} DC {volts}\n", node_name(plus), node_name(minus)));
+            }
+            Extra::Amp { name, from, to, amps } => {
+                deck.push_str(&format!("{name} {} {} DC {amps}\n", node_name(from), node_name(to)));
+            }
+            Extra::ConverterInput { name, from, to, out_src, out_p, out_m, eta } => {
+                // 入力電流 = 出力電力 / (効率 × 入力電圧)。電圧源の電流は流れ込む向きが正なので符号を反転
+                let (f, t) = (node_name(from), node_name(to));
+                deck.push_str(&format!(
+                    "{name} {f} {t} I = max(v({},{}),0)*max(-i({out_src}),0)/({eta}*max(v({f},{t}),1))\n",
+                    node_name(out_p),
+                    node_name(out_m),
+                ));
+            }
+        }
+    }
     for el in wire_elements.iter().chain(component_elements.iter()) {
         deck.push_str(&format!(
             "{} {} {} {}\n",
             el.name, el.node_a, el.node_b, el.ohms
         ));
+    }
+    if has_roles {
+        deck.push_str(&format!(".options rshunt={SHUNT_OHMS}\n"));
     }
 
     Ok(SpiceDeck {
@@ -318,7 +587,19 @@ pub fn build_deck_with(
         voltage,
         wire_elements,
         component_elements,
+        load_terminals,
+        warnings,
     })
+}
+
+/// "(x, y)" 形式のデバッグキーを読む。内部ノード名なら None。
+fn parse_key(raw: &str) -> Option<(i64, i64)> {
+    let t = raw.strip_prefix('(')?.strip_suffix(')')?;
+    let mut it = t.split(',').map(|s| s.trim().parse::<i64>());
+    match (it.next(), it.next()) {
+        (Some(Ok(x)), Some(Ok(y))) => Some((x, y)),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -527,6 +808,80 @@ mod tests {
             build_deck(&sheet, &sheet_symbol_defs(&sheet)).unwrap_err(),
             SpiceError::NoSource
         );
+    }
+
+    /// 役割付きのユーザーシンボル (JSON で定義)。
+    fn role_symbol(id: &str, role: &str, pins: &[(&str, f64)], sim_pins: &[&str]) -> SymbolDef {
+        let pins: Vec<serde_json::Value> =
+            pins.iter().map(|(n, y)| serde_json::json!({"number": n, "at": {"x": 0.0, "y": y}})).collect();
+        serde_json::from_value(serde_json::json!({
+            "id": id, "name": id, "name_ja": id, "category": "user", "ref_prefix": "X",
+            "primitives": [], "pins": pins, "free_pins": true,
+            "sim": {"role": role, "pins": sim_pins}
+        }))
+        .unwrap()
+    }
+
+    /// A drawing whose only source is a user symbol with the source role can be converted: the source's minus pin is ground, the load becomes a constant current source, and every node gets a high-value shunt so isolated parts still solve.
+    /// 電源が「電源の役割を付けたユーザーシンボル」だけの図面も変換できる: 電源の負極が接地になり、負荷は定電流源になり、浮いた部分も解けるよう全ノードに大きな漏れ抵抗が入る。
+    #[test]
+    fn a_user_source_and_load_become_spice_sources() {
+        let defs = vec![
+            role_symbol("u_src", "source", &[("+", 0.0), ("-", 10.0)], &["+", "-"]),
+            role_symbol("u_load", "load", &[("+", 0.0), ("-", 10.0)], &["+", "-"]),
+        ];
+        let mut load = symbol("u_load", "LD1", 50.0, 100.0, "");
+        if let Entity::Symbol(s) = &mut load {
+            s.attrs.insert("current_a".into(), "2".into());
+        }
+        let sheet = sheet_with(vec![
+            symbol("u_src", "BT1", 0.0, 100.0, "DC12V"),
+            load,
+            wire(&[(0.0, 100.0), (50.0, 100.0)], 0.75, None),
+            wire(&[(50.0, 110.0), (0.0, 110.0)], 0.75, None),
+        ]);
+        let deck = build_deck(&sheet, &defs).unwrap();
+        assert!((deck.voltage - 12.0).abs() < 1e-9, "電圧は値の文字から");
+        assert!(deck.deck.lines().any(|l| l.starts_with('V') && l.contains(" DC 12")), "{}", deck.deck);
+        assert!(deck.deck.lines().any(|l| l.starts_with('I') && l.ends_with("DC 2")), "{}", deck.deck);
+        assert!(deck.deck.contains(".options rshunt="), "{}", deck.deck);
+        assert_eq!(deck.load_terminals.len(), 1);
+        // 負荷の − から電線1本で電源の − (接地 0) へ戻る
+        let minus = &deck.load_terminals[0].minus;
+        assert!(
+            deck.wire_elements.iter().any(|w| (w.node_a == *minus && w.node_b == "0") || (w.node_b == *minus && w.node_a == "0")),
+            "{}",
+            deck.deck
+        );
+    }
+
+    /// A drawing with only built-in symbols gets the same deck as before (no shunt option is added).
+    /// 同梱シンボルだけの図面は、これまでと同じデッキになる (漏れ抵抗の指定は足さない)。
+    #[test]
+    fn a_built_in_only_drawing_gets_no_shunt_option() {
+        let sheet = sheet_with(vec![
+            symbol("battery", "BT1", 0.0, 0.0, "DC24V"),
+            wire(&[(0.0, 0.0), (10.0, 0.0)], 0.75, None),
+        ]);
+        let deck = build_deck(&sheet, &sheet_symbol_defs(&sheet)).unwrap();
+        assert!(!deck.deck.contains("rshunt"), "{}", deck.deck);
+    }
+
+    /// A symbol with the "none" role takes no part in the circuit: it neither bridges its pins nor acts as a load.
+    /// 役割「なし」のシンボルは回路に加わらない: ピンどうしをつながず、負荷にもならない。
+    #[test]
+    fn a_symbol_with_no_role_adds_no_element() {
+        let defs = vec![
+            role_symbol("u_src", "source", &[("+", 0.0), ("-", 10.0)], &["+", "-"]),
+            role_symbol("u_lamp", "none", &[("1", 0.0), ("2", 10.0)], &[]),
+        ];
+        let sheet = sheet_with(vec![symbol("u_src", "BT1", 0.0, 100.0, "24"), symbol("u_lamp", "H1", 40.0, 100.0, "")]);
+        let deck = build_deck(&sheet, &defs).unwrap();
+        let h1 = match sheet.entities.values().find(|e| matches!(e, Entity::Symbol(s) if s.reference == "H1")) {
+            Some(e) => e.id(),
+            None => unreachable!(),
+        };
+        assert!(deck.component_elements.iter().all(|el| el.entity_id != h1), "{:?}", deck.component_elements);
     }
 
     /// Deck output is deterministic across runs, and the ground node 0 is the battery's minus pin.

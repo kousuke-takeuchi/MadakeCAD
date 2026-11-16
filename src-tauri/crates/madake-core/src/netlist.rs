@@ -1167,6 +1167,7 @@ mod tests {
             text_slots: vec![],
             free_pins: false,
             net: None,
+            sim: None,
         };
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
         for e in [
@@ -1719,6 +1720,7 @@ mod tests {
             text_slots: vec![],
             free_pins: true,
             net: None,
+            sim: None,
         };
         let mut sheet = Sheet::new("S", crate::model::PaperSize::A3, crate::model::Orientation::Landscape);
         let inst = Entity::Symbol(crate::model::SymbolInstance {
@@ -1771,6 +1773,7 @@ mod tests {
             text_slots: vec![],
             free_pins: false,
             net: net.map(str::to_string),
+            sim: None,
         }
     }
 

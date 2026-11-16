@@ -961,6 +961,7 @@ fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
         text_slots,
         free_pins: false,
         net: None,
+        sim: None,
     }
 }
 

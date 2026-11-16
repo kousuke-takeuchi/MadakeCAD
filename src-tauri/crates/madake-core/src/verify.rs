@@ -154,7 +154,7 @@ const VOLTAGE_DROP_RATIO: f64 = 0.03;
 const DEFAULT_VOLTAGE: f64 = 24.0;
 
 /// sq→許容電流(A) の第一版テーブル (AVS系の慣用値)。表にないsqは直近下位を使う。
-const AMPACITY: &[(f64, f64)] = &[
+pub(crate) const AMPACITY: &[(f64, f64)] = &[
     (0.3, 7.0),
     (0.5, 9.0),
     (0.75, 12.0),
@@ -163,7 +163,7 @@ const AMPACITY: &[(f64, f64)] = &[
     (3.5, 33.0),
 ];
 
-fn ampacity(sq: f64) -> f64 {
+pub(crate) fn ampacity(sq: f64) -> f64 {
     let mut amps = AMPACITY[0].1;
     for &(s, a) in AMPACITY {
         if sq + 1e-9 >= s {
@@ -382,10 +382,13 @@ fn electrical(sheet: &Sheet, symbols: &[SymbolDef], sim: Option<&SimResult>) -> 
         for e in sheet.entities.values() {
             let Entity::Symbol(s) = e else { continue };
             let Some(def) = defs.get(s) else { continue };
-            if def.id != "fuse" {
+            // 同梱の fuse か、役割が fuse のシンボル。定格は属性 rating_a、無ければ値の文字
+            let fuse_role = def.sim.as_ref().map(|r| r.role == crate::symbol::SimRole::Fuse);
+            if !(fuse_role == Some(true) || (fuse_role.is_none() && def.id == "fuse")) {
                 continue;
             }
-            let Some(rating) = parse_number(&s.value) else { continue };
+            let rating = s.attrs.get("rating_a").and_then(|v| parse_number(v)).or_else(|| parse_number(&s.value));
+            let Some(rating) = rating else { continue };
             let amps = comp_amps.get(&s.id).copied().unwrap_or(0.0);
             let label = if s.reference.is_empty() { "fuse" } else { s.reference.as_str() };
             if amps > rating + 1e-9 {
@@ -1247,6 +1250,64 @@ mod tests {
                 .any(|d| d.code == "elec.fuse_rating" && d.message.contains("F1")),
             "{diags:?}"
         );
+    }
+
+    /// With ngspice, a user symbol with the fuse role is checked like the built-in fuse: a simulated current above its rating_a is a fuse warning.
+    /// ngspice があれば、ヒューズの役割を付けたユーザーシンボルも同梱のヒューズと同じに確かめる: シミュレーションの電流が属性 rating_a を超えると警告になる。
+    #[test]
+    fn a_user_fuse_is_checked_in_the_simulation() {
+        if crate::ngspice::find_ngspice().is_none() {
+            eprintln!("ngspice未検出のためスキップ");
+            return;
+        }
+        let def = |id: &str, role: &str, p2: (f64, f64), sim_pins: &[&str]| -> SymbolDef {
+            serde_json::from_value(serde_json::json!({
+                "id": id, "name": id, "name_ja": id, "category": "user", "ref_prefix": "X",
+                "primitives": [], "free_pins": true,
+                "pins": [{"number": "1", "at": {"x": 0.0, "y": 0.0}}, {"number": "2", "at": {"x": p2.0, "y": p2.1}}],
+                "sim": {"role": role, "pins": sim_pins}
+            }))
+            .unwrap()
+        };
+        let defs = vec![
+            def("u_src", "source", (0.0, 10.0), &["1", "2"]),
+            def("u_fuse", "fuse", (10.0, 0.0), &[]),
+            def("u_load", "load", (0.0, 10.0), &["1", "2"]),
+        ];
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let mut put = |sid: &str, r: &str, x: f64, attrs: &[(&str, &str)]| {
+            let e = Entity::Symbol(SymbolInstance {
+                id: Uuid::new_v4(),
+                symbol_id: sid.into(),
+                at: Point::new(x, 100.0),
+                rotation: 0,
+                mirror: false,
+                reference: r.into(),
+                value: String::new(),
+                attrs: attrs.iter().map(|(k, v)| ((*k).into(), (*v).into())).collect(),
+            });
+            sheet.entities.insert(e.id(), e);
+        };
+        put("u_src", "BT1", 0.0, &[("voltage", "24")]);
+        put("u_fuse", "F7", 20.0, &[("rating_a", "3")]);
+        put("u_load", "LD1", 50.0, &[("current_a", "4")]);
+        for pts in [[(0.0, 100.0), (20.0, 100.0)], [(30.0, 100.0), (50.0, 100.0)], [(50.0, 110.0), (0.0, 110.0)]] {
+            let e = Entity::Wire(Wire {
+                id: Uuid::new_v4(),
+                points: pts.iter().map(|(x, y)| Point::new(*x, *y)).collect(),
+                color: String::new(),
+                sq: 0.75,
+                length_m: None,
+                length_source: Default::default(),
+                part_no: None,
+                net: None,
+                dashed: false,
+                weight_mm: None,
+            });
+            sheet.entities.insert(e.id(), e);
+        }
+        let diags = verify_sheet(&sheet, &defs);
+        assert!(diags.iter().any(|d| d.code == "elec.fuse_rating" && d.message.contains("F7")), "{diags:?}");
     }
 
     /// Voltage drop above 3 % of the supply voltage on a long wire is flagged; a short wire passes.

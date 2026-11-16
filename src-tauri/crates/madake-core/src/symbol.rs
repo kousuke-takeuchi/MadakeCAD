@@ -29,6 +29,48 @@ pub struct SymbolDef {
     /// 無い・空白だけなら普通のシンボル。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub net: Option<String>,
+    /// シミュレーションでの電気的な役割 (電源・負荷・ヒューズ・導通・変換器)。無ければカテゴリで決める従来の扱い。
+    /// ユーザーシンボルでもシミュレーションに参加できるようにする。値は置いた部品の属性 (attrs) が持つ。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sim: Option<SimSpec>,
+}
+
+/// シミュレーションでの役割。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SimRole {
+    /// 直流電源 (pins = [+, −])。属性 voltage / r_int_ohm / i_max_a。
+    Source,
+    /// 負荷 (pins = [+, −])。属性 current_a (定電流) / v_min。
+    Load,
+    /// ヒューズ (pins = 導通するピン、空なら全ピン)。属性 rating_a (無ければ値の文字)。
+    Fuse,
+    /// 導通 (スイッチ・接点・ジャンパ。pins = 導通するピン、空なら全ピン)。
+    Conductor,
+    /// DC/DC 変換器 (pins = [入力+, 入力−, 出力+, 出力−])。属性 v_out / eta / i_out_a。
+    Converter,
+    /// 電気的に何もしない (同じ番号の貫通ピンだけはつながる)。
+    None,
+}
+
+/// シンボル定義の `sim`: 役割と、役割が使うピン番号。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct SimSpec {
+    pub role: SimRole,
+    /// 役割が使うピン番号 (順序に意味がある。[`SimRole`] の説明を参照)。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pins: Vec<String>,
+}
+
+impl SimSpec {
+    /// 役割に必要なピン数 (固定の役割だけ)。fuse / conductor / none は任意。
+    pub fn required_pins(&self) -> Option<usize> {
+        match self.role {
+            SimRole::Source | SimRole::Load => Some(2),
+            SimRole::Converter => Some(4),
+            SimRole::Fuse | SimRole::Conductor | SimRole::None => None,
+        }
+    }
 }
 
 impl SymbolDef {
@@ -248,6 +290,7 @@ fn sym(
         text_slots,
         free_pins: false,
         net: None,
+        sim: None,
     }
 }
 
@@ -1591,6 +1634,7 @@ pub(crate) fn test_net_mark(id: &str, net: &str) -> SymbolDef {
         text_slots: vec![],
         free_pins: false,
         net: Some(net.into()),
+        sim: None,
     }
 }
 

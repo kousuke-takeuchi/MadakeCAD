@@ -1160,6 +1160,7 @@ mod tests {
             text_slots: vec![],
             free_pins: true,
             net: None,
+            sim: None,
         };
         let mut defs = builtin_symbols();
         defs.push(def);
