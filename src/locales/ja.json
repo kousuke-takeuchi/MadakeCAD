@@ -1763,6 +1763,12 @@
       "pin_rating": "ピン定格",
       "source_max": "電源の許容電流",
       "converter_out": "変換器の定格出力"
+    },
+    "menu": {
+      "shortWire": "ここで短絡",
+      "openWire": "ここで断線",
+      "shortPin": "ピン {pin} で短絡",
+      "remove": "この条件を外す"
     }
   },
   "verification": {

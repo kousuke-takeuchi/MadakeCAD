@@ -1763,6 +1763,12 @@
       "pin_rating": "pin rating",
       "source_max": "source maximum",
       "converter_out": "converter rated output"
+    },
+    "menu": {
+      "shortWire": "Short here",
+      "openWire": "Break here",
+      "shortPin": "Short at pin {pin}",
+      "remove": "Remove this condition"
     }
   },
   "verification": {

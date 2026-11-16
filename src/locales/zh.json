@@ -1763,6 +1763,12 @@
       "pin_rating": "引脚额定",
       "source_max": "电源最大电流",
       "converter_out": "变换器额定输出"
+    },
+    "menu": {
+      "shortWire": "在此短路",
+      "openWire": "在此断线",
+      "shortPin": "在引脚 {pin} 短路",
+      "remove": "移除此条件"
     }
   },
   "verification": {

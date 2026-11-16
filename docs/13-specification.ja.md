@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3558仕様項目**。
+全6領域・**3564仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -2999,6 +2999,15 @@
 - 用紙は表示中のシートに合わせる (盤シートだけA4になってしまわない)。 <sub>`sheet kind (schematic / panel)`</sub>
 - 種別を書いていない古いシートは回路図シートとして扱う。 <sub>`sheet kind (schematic / panel)`</sub>
 - 図面タブの「シート種別」の表示は種別ごとの文言になる。 <sub>`sheet kind (schematic / panel)`</sub>
+
+### simMenu
+
+- 電線の上では「ここで短絡」と「ここで断線」が出る <sub>`simulation right-click menu`</sub>
+- ケースに既にその電線の故障があれば「この条件を外す」も出る <sub>`simulation right-click menu`</sub>
+- 部品の上では、マウスに一番近いピンで「ピン N で短絡」が出る <sub>`simulation right-click menu`</sub>
+- ケースに既にその部品のピンの短絡があれば「この条件を外す」も出る <sub>`simulation right-click menu`</sub>
+- 何も無い所や、電線・部品以外 (接続点など) では何も出さない <sub>`simulation right-click menu`</sub>
+- 定義の引けない部品やピンの無い部品では短絡を出さない <sub>`simulation right-click menu`</sub>
 
 ### simOverlay
 

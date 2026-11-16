@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3558 specification clauses** across 6 areas.
+**3564 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -2999,6 +2999,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - keeps the paper size and orientation of the sheet in front <sub>`sheet kind (schematic / panel)`</sub>
 - treats a sheet with no kind as a schematic sheet <sub>`sheet kind (schematic / panel)`</sub>
 - labels the sheet kind shown next to the drawing tabs <sub>`sheet kind (schematic / panel)`</sub>
+
+### simMenu
+
+- offers a short and a break on a wire <sub>`simulation right-click menu`</sub>
+- also offers to remove a fault the case already has on that wire <sub>`simulation right-click menu`</sub>
+- offers a short at the pin nearest the pointer on a part <sub>`simulation right-click menu`</sub>
+- also offers to remove a short the case already has on that part <sub>`simulation right-click menu`</sub>
+- offers nothing on empty canvas or on other kinds of entities <sub>`simulation right-click menu`</sub>
+- offers no pin short for a part without a definition or pins <sub>`simulation right-click menu`</sub>
 
 ### simOverlay
 

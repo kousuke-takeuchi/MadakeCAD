@@ -1763,6 +1763,12 @@
       "pin_rating": "Kontaktnennstrom",
       "source_max": "Höchststrom der Quelle",
       "converter_out": "Nennausgang des Wandlers"
+    },
+    "menu": {
+      "shortWire": "Hier kurzschließen",
+      "openWire": "Hier unterbrechen",
+      "shortPin": "Kurzschluss an Pin {pin}",
+      "remove": "Diese Bedingung entfernen"
     }
   },
   "verification": {

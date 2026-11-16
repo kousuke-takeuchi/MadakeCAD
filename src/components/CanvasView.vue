@@ -13,6 +13,8 @@ import { useVariantsStore } from "../stores/variants";
 import ChatPanel from "./chat/ChatPanel.vue";
 import SearchBar from "./SearchBar.vue";
 import SurferPopup from "./SurferPopup.vue";
+import SimContextMenu from "./SimContextMenu.vue";
+import { simMenuItems, type SimMenuItem } from "../canvas/simMenu";
 import { useSurferStore } from "../stores/surfer";
 import { useSimulationStore } from "../stores/simulation";
 import { formatProbe } from "../canvas/simOverlay";
@@ -43,6 +45,27 @@ function updateProbe(p: { x: number; y: number }) {
   const e = store.activeSheet?.entities[id];
   const name = e && e.kind === "symbol" ? e.reference || e.symbol_id : t("simulation.wire");
   probe.value = { x: p.x + 14, y: p.y + 14, text: formatProbe(load), name };
+}
+
+// シミュレーションの右クリックメニュー (パネルが開いているときだけ)。
+const simMenu = ref<{ x: number; y: number; items: SimMenuItem[] } | null>(null);
+
+function onContextMenu(e: MouseEvent) {
+  simMenu.value = null;
+  const sheet = store.activeSheet;
+  if (!sim.panelOpen || !sheet) return;
+  const p = toLocal(e);
+  const world = controller.vp.toWorld(p);
+  const items = simMenuItems(controller.hitTest(world), sheet, store.resolveInstance, world, sim.selectedCase);
+  if (items.length) simMenu.value = { x: p.x, y: p.y, items };
+}
+
+function onSimMenuPick(item: SimMenuItem) {
+  simMenu.value = null;
+  if (item.kind === "short_wire") void sim.addFault({ kind: "short", target: { wire_id: item.wireId } });
+  else if (item.kind === "open_wire") void sim.addFault({ kind: "open", wire_id: item.wireId });
+  else if (item.kind === "short_pin") void sim.addFault({ kind: "short", target: { entity_id: item.entityId, pin: item.pin } });
+  else void sim.removeFault(item.fault);
 }
 
 function onCanvasPointerMove(e: PointerEvent) {
@@ -309,7 +332,7 @@ watch(() => store.activeSheetId, () => {
       @pointerleave="() => { controller.cursorScreen = null; probe = null; controller.requestRedraw(); }"
       @wheel.prevent="(e) => controller.onWheel(toLocal(e), e.deltaY)"
       @dblclick="() => controller.onDoubleClick()"
-      @contextmenu.prevent
+      @contextmenu.prevent="onContextMenu"
       @dragover.prevent
       @drop.prevent="(e) => void controller.dropPlacement(toLocal(e))"
     />
@@ -319,6 +342,7 @@ watch(() => store.activeSheetId, () => {
       <div>{{ t("simulation.voltages") }} {{ probe.text.volts }}</div>
       <div v-if="probe.text.limit">{{ t("simulation.limit") }} {{ probe.text.limit }} ({{ probe.text.ratio }})</div>
     </div>
+    <SimContextMenu v-if="simMenu" :x="simMenu.x" :y="simMenu.y" :items="simMenu.items" @pick="onSimMenuPick" @close="simMenu = null" />
     <SearchBar />
     <SurferPopup />
     <ChatPanel v-if="!dockChatOpen" />

@@ -1763,6 +1763,12 @@
       "pin_rating": "calibre du contact",
       "source_max": "maximum de la source",
       "converter_out": "sortie nominale du convertisseur"
+    },
+    "menu": {
+      "shortWire": "Court-circuit ici",
+      "openWire": "Coupure ici",
+      "shortPin": "Court-circuit à la broche {pin}",
+      "remove": "Retirer cette condition"
     }
   },
   "verification": {

@@ -1763,6 +1763,12 @@
       "pin_rating": "valor del contacto",
       "source_max": "máximo de la fuente",
       "converter_out": "salida nominal del convertidor"
+    },
+    "menu": {
+      "shortWire": "Cortocircuito aquí",
+      "openWire": "Corte aquí",
+      "shortPin": "Cortocircuito en el pin {pin}",
+      "remove": "Quitar esta condición"
     }
   },
   "verification": {
