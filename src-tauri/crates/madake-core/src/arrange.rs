@@ -340,7 +340,7 @@ pub fn align_moves(keys: &[f64], tol: f64) -> Vec<f64> {
     let mut order: Vec<usize> = (0..keys.len()).collect();
     order.sort_by(|&a, &b| keys[a].total_cmp(&keys[b]).then(a.cmp(&b)));
     let mut group: Vec<usize> = Vec::new();
-    let mut flush = |group: &mut Vec<usize>, moves: &mut Vec<f64>| {
+    let flush = |group: &mut Vec<usize>, moves: &mut Vec<f64>| {
         if group.is_empty() {
             return;
         }
