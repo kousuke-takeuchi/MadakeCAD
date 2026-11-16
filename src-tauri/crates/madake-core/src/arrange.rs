@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
+use crate::frame_template::FrameTemplate;
 use crate::geometry::Point;
 use crate::leader::entity_bounds;
 use crate::model::{Entity, EntityId, NetLabel, Sheet, SheetKind, Wire};
@@ -414,33 +415,40 @@ impl Warp {
 }
 
 /// 基準の座標 (keys) の差が tol 未満の組を、組の下側の中央値へそろえるずらし量 (2.5mmの倍数)。
-/// keys と同じ並びで返す。
+/// keys と同じ並びで返す。組は [`key_groups`] で分ける (組の幅は tol 未満)。2.5mmへの丸めで
+/// 並び順が入れ替わる組は動かさない。
 pub fn align_moves(keys: &[f64], tol: f64) -> Vec<f64> {
     let mut moves = vec![0.0; keys.len()];
-    let mut order: Vec<usize> = (0..keys.len()).collect();
-    order.sort_by(|&a, &b| keys[a].total_cmp(&keys[b]).then(a.cmp(&b)));
-    let mut group: Vec<usize> = Vec::new();
-    let flush = |group: &mut Vec<usize>, moves: &mut Vec<f64>| {
-        if group.is_empty() {
-            return;
-        }
+    let groups = key_groups(keys, tol);
+    let mut group_of = vec![0usize; keys.len()];
+    for (gi, group) in groups.iter().enumerate() {
         let target = keys[group[(group.len() - 1) / 2]];
-        for &i in group.iter() {
+        for &i in group {
+            group_of[i] = gi;
             moves[i] = ((target - keys[i]) / STEP_MM).round() * STEP_MM;
         }
-        group.clear();
-    };
-    let mut prev: Option<f64> = None;
-    for i in order {
-        if let Some(p) = prev {
-            if keys[i] - p >= tol {
-                flush(&mut group, &mut moves);
+    }
+    // 並び順が入れ替わる組は動かさない (元に戻すと順は保たれるので、繰り返せば必ず止まる)
+    let mut order: Vec<usize> = (0..keys.len()).collect();
+    order.sort_by(|&a, &b| keys[a].total_cmp(&keys[b]).then(a.cmp(&b)));
+    loop {
+        let mut undo: BTreeSet<usize> = BTreeSet::new();
+        for w in order.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            if keys[a] < keys[b] && keys[a] + moves[a] > keys[b] + moves[b] + EPS {
+                undo.insert(group_of[a]);
+                undo.insert(group_of[b]);
             }
         }
-        group.push(i);
-        prev = Some(keys[i]);
+        if undo.is_empty() {
+            break;
+        }
+        for (i, m) in moves.iter_mut().enumerate() {
+            if undo.contains(&group_of[i]) {
+                *m = 0.0;
+            }
+        }
     }
-    flush(&mut group, &mut moves);
     // -0.0 を 0.0 に直す。
     for m in &mut moves {
         if *m == 0.0 {
@@ -473,6 +481,20 @@ pub struct ArrangeContext {
     pub title_block: (f64, f64, f64, f64),
     /// プロジェクトで使われているラベル名とネット名シンボルの名前。
     pub taken_names: Vec<String>,
+}
+
+/// 図枠の内側と、表題欄 (上に積む改訂欄の行を含む) の矩形 (x0, y0, x1, y1) を、図枠テンプレートとシートから求める。
+/// 表題欄はテンプレートの隅 (`title_block.origin`) に、表題欄の幅と高さで置かれる。改訂欄は表題欄の直上に
+/// 同じ幅で、(改訂の行数 + 見出し1行) × 行高だけ積まれる (改訂が無ければ描かない)。
+pub fn frame_areas(template: &FrameTemplate, sheet: &Sheet) -> ((f64, f64, f64, f64), (f64, f64, f64, f64)) {
+    let (pw, ph) = sheet.paper_mm();
+    let frame = template.frame_rect(pw, ph);
+    let (tx, ty) = template.title_block_origin(pw, ph);
+    let tb = &template.title_block;
+    let rb = &template.revision_block;
+    let rows = rb.rows_fixed.unwrap_or_else(|| sheet.revisions.len().min(rb.rows_max));
+    let rev_h = if rows == 0 { 0.0 } else { (rows as f64 + 1.0) * template.revision_row_h() };
+    (frame, (tx, ty - rev_h, tx + tb.w, ty + tb.h))
 }
 
 /// 並べ直しの計画。図面は書き換えない。
@@ -750,18 +772,21 @@ fn overlap(a: &Bounds, b: &Bounds) -> bool {
     a.0 < b.2 - EPS && b.0 < a.2 - EPS && a.1 < b.3 - EPS && b.1 < a.3 - EPS
 }
 
-/// 基準の座標を、差が tol 未満のものどうしの組に分ける ([`align_moves`] と同じ分け方)。組は keys の添字。
+/// 基準の座標を、組の最初の座標との差が tol 未満のものどうしの組に分ける ([`align_moves`] の分け方)。
+/// 組の幅が tol を超えないので、近い座標が鎖のように続いても1つの組にはならない。組は keys の添字。
 fn key_groups(keys: &[f64], tol: f64) -> Vec<Vec<usize>> {
     let mut order: Vec<usize> = (0..keys.len()).collect();
     order.sort_by(|&a, &b| keys[a].total_cmp(&keys[b]).then(a.cmp(&b)));
     let mut out: Vec<Vec<usize>> = Vec::new();
-    let mut prev: Option<f64> = None;
+    let mut first: Option<f64> = None;
     for i in order {
-        match prev {
-            Some(p) if keys[i] - p < tol => out.last_mut().expect("組がある").push(i),
-            _ => out.push(vec![i]),
+        match first {
+            Some(f) if keys[i] - f < tol => out.last_mut().expect("組がある").push(i),
+            _ => {
+                out.push(vec![i]);
+                first = Some(keys[i]);
+            }
         }
-        prev = Some(keys[i]);
     }
     out
 }
@@ -2121,5 +2146,347 @@ mod tests {
         assert!(plan.moves.is_empty(), "{:?}", plan.moves);
         assert!(plan.labelled.is_empty(), "{:?}", plan.labelled);
         assert!(plan.remove.is_empty() && plan.add.is_empty() && plan.updates.is_empty());
+    }
+
+    // ------------------------------------------------------------------
+    // 検算 (I3) と表題欄 (I2)
+    // ------------------------------------------------------------------
+
+    /// Two parts joined by one straight wire.
+    fn two_wired_parts() -> (Sheet, EntityId, EntityId) {
+        let mut sh = new_sheet();
+        let a1 = place(&mut sh, "box2", (50.0, 50.0), "A1");
+        let a2 = place(&mut sh, "box2", (100.0, 50.0), "A2");
+        old_wire(&mut sh, &[(60.0, 50.0), (90.0, 50.0)]);
+        (sh, a1, a2)
+    }
+
+    /// The self-check refuses a result in which a net lost the name its label gave it, although the pins still share the net.
+    /// 検算は、ピンのつながりが同じでも、ネットがラベルの名前を失った結果を断る。
+    #[test]
+    fn the_self_check_refuses_a_lost_net_name() {
+        let (mut before, _, _) = two_wired_parts();
+        let l = label(&mut before, (75.0, 50.0), "P");
+        let mut after = before.clone();
+        after.entities.remove(&l);
+        let err = verify_after(&before, &after, &defs(), &BTreeSet::new(), &[]).expect_err("must refuse");
+        assert!(err.contains("名前"), "{err}");
+        assert!(verify_after(&before, &before, &defs(), &BTreeSet::new(), &[]).is_ok());
+    }
+
+    /// The self-check ignores only the fresh ARR names the plan made; any other new name on a net is refused.
+    /// 検算が数えないのは計画が作った新しいARRの名前だけで、それ以外の名前がネットに増えれば断る。
+    #[test]
+    fn the_self_check_ignores_only_fresh_names() {
+        let (before, _, _) = two_wired_parts();
+        let mut after = before.clone();
+        label(&mut after, (75.0, 50.0), "ARR_1");
+        assert!(verify_after(&before, &after, &defs(), &BTreeSet::from(["ARR_1".to_string()]), &[]).is_ok());
+        assert!(verify_after(&before, &after, &defs(), &BTreeSet::new(), &[]).is_err());
+    }
+
+    /// The self-check refuses a result in which a label that sat on a pin no longer does.
+    /// 検算は、ピンの上にあったラベルがピンから離れた結果を断る。
+    #[test]
+    fn the_self_check_refuses_a_label_moved_off_its_pin() {
+        let mut before = new_sheet();
+        place(&mut before, "box2", (50.0, 50.0), "A1");
+        let l = label(&mut before, (60.0, 50.0), "Y");
+        let mut after = before.clone();
+        after.entities.get_mut(&l).expect("label").translate(10.0, 0.0);
+        let err = verify_after(&before, &after, &defs(), &BTreeSet::new(), &[]).expect_err("must refuse");
+        assert!(err.contains("ピンの上"), "{err}");
+    }
+
+    /// A label stub that touches a wire of another net is refused; the same stub standing free passes.
+    /// ラベルでつなぐ短い線が他のネットの配線に触れれば断り、何にも触れなければ通す。
+    #[test]
+    fn a_label_stub_touching_another_wire_is_refused() {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (50.0, 50.0), "A1");
+        let w = old_wire(&mut sh, &[(40.0, 50.0), (35.0, 50.0)]);
+        let l = label(&mut sh, (35.0, 50.0), "ARR_1");
+        let stubs = [Stub { wire: w, label: l, name: "ARR_1".into() }];
+        assert!(check_stubs(&sh, &defs(), &stubs).is_ok());
+        old_wire(&mut sh, &[(35.0, 45.0), (35.0, 55.0)]);
+        let err = check_stubs(&sh, &defs(), &stubs).expect_err("must refuse");
+        assert!(err.contains("ARR_1"), "{err}");
+    }
+
+    /// The title block area follows the template's corner: top-left puts it in the top-left corner of the frame, with its own width and height.
+    /// 表題欄の範囲は図枠テンプレートの隅に従う。左上なら図枠の左上に、表題欄の幅と高さで置く。
+    #[test]
+    fn the_title_block_area_follows_the_template_corner() {
+        let mut t = crate::frame_template::default_template().clone();
+        let sh = new_sheet();
+        let (pw, ph) = sh.paper_mm();
+        let f = t.frame_rect(pw, ph);
+        t.title_block.origin = crate::frame_template::Origin::TopLeft;
+        let (frame, tb) = frame_areas(&t, &sh);
+        assert_eq!(frame, f);
+        assert_eq!(tb, (f.0, f.1, f.0 + t.title_block.w, f.1 + t.title_block.h));
+        t.title_block.origin = crate::frame_template::Origin::BottomRight;
+        let (_, tb) = frame_areas(&t, &sh);
+        assert_eq!(tb, (f.2 - t.title_block.w, f.3 - t.title_block.h, f.2, f.3));
+    }
+
+    /// Revision rows drawn above the title block are part of the area to avoid.
+    /// 表題欄の上に描く改訂欄の行も、避ける範囲に入る。
+    #[test]
+    fn the_title_block_area_includes_the_revision_rows() {
+        let t = crate::frame_template::default_template().clone();
+        let mut sh = new_sheet();
+        let (_, plain) = frame_areas(&t, &sh);
+        sh.revisions = vec![serde_json::from_value(serde_json::json!({"mark": "A", "date": "2026-01-01", "description": "first", "by": "K"})).expect("revision")];
+        let (_, with_rev) = frame_areas(&t, &sh);
+        assert_eq!(with_rev.1, plain.1 - 2.0 * t.revision_row_h());
+        assert_eq!((with_rev.0, with_rev.2, with_rev.3), (plain.0, plain.2, plain.3));
+    }
+
+    // ------------------------------------------------------------------
+    // 仕様の確かめ項目の追加 (I5)
+    // ------------------------------------------------------------------
+
+    /// 決定的な疑似乱数 (線形合同法)。
+    struct Lcg(u64);
+
+    impl Lcg {
+        fn next(&mut self) -> u64 {
+            self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            self.0 >> 33
+        }
+        fn below(&mut self, n: u64) -> u64 {
+            self.next() % n
+        }
+    }
+
+    /// A generated sheet of about 30 parts (some with off-grid pins), ground marks, power marks and labels.
+    fn generated_sheet(seed: u64) -> Sheet {
+        let mut r = Lcg(seed);
+        let mut sh = new_sheet();
+        let mut parts: Vec<EntityId> = Vec::new();
+        for row in 0..5 {
+            for col in 0..6 {
+                let x = 40.0 + col as f64 * 45.0 + r.below(5) as f64 * 2.5;
+                let y = 40.0 + row as f64 * 40.0 + r.below(5) as f64 * 2.5;
+                let kind = ["box2", "box2", "cap", "freebox"][r.below(4) as usize];
+                parts.push(place(&mut sh, kind, (x, y), &format!("P{row}{col}")));
+            }
+        }
+        let pins = pin_points(&sh, &defs());
+        let pins_of = |id: EntityId| -> Vec<&PinPt> { pins.iter().filter(|q| q.entity == id).collect() };
+        // 隣り合う部品のピンどうしをL字の配線でつなぐ
+        let mut corners: Vec<(Point, (EntityId, String))> = Vec::new();
+        for _ in 0..14 {
+            let k = r.below(parts.len() as u64 - 1) as usize;
+            let (pa, pb) = (pins_of(parts[k]), pins_of(parts[k + 1]));
+            let a = pa[r.below(pa.len() as u64) as usize];
+            let b = pb[r.below(pb.len() as u64) as usize];
+            let corner = (b.pos.x, a.pos.y);
+            old_wire(&mut sh, &[(a.pos.x, a.pos.y), corner, (b.pos.x, b.pos.y)]);
+            corners.push((p(corner.0, corner.1), (a.entity, a.number.clone())));
+        }
+        // 名前は物理的なまとまりごとに1つ (名前の違うラベルで断られないように)
+        let groups = phys_groups(&sh, &defs());
+        let group_of = |pin: &(EntityId, String)| groups.iter().position(|g| g.pins.contains(pin)).expect("group");
+        let mut named: BTreeMap<usize, String> = BTreeMap::new();
+        for (at, pin) in &corners {
+            if r.below(4) == 0 {
+                let g = group_of(pin);
+                let name = named.entry(g).or_insert_with(|| format!("SIG_{g}")).clone();
+                label(&mut sh, (at.x, at.y), &name);
+            }
+        }
+        // 接地の印・電源の印・タグのラベル
+        for _ in 0..8 {
+            let q = &pins[r.below(pins.len() as u64) as usize];
+            let g = group_of(&(q.entity, q.number.clone()));
+            match r.below(4) {
+                0 | 1 => {
+                    if named.get(&g).is_some_and(|n| n != "GND") {
+                        continue;
+                    }
+                    named.insert(g, "GND".into());
+                    if r.below(2) == 0 {
+                        place(&mut sh, "gnd", (q.pos.x, q.pos.y + 5.0), "");
+                    } else {
+                        old_wire(&mut sh, &[(q.pos.x, q.pos.y), (q.pos.x, q.pos.y + 5.0)]);
+                        place(&mut sh, "gnd", (q.pos.x, q.pos.y + 10.0), "");
+                    }
+                }
+                2 => {
+                    place(&mut sh, "mark", (q.pos.x, q.pos.y + 5.0), "");
+                }
+                _ => {
+                    let name = named.entry(g).or_insert_with(|| format!("TAG_{g}")).clone();
+                    label(&mut sh, (q.pos.x, q.pos.y), &name);
+                }
+            }
+        }
+        sh
+    }
+
+    /// On generated sheets with off-grid pins, marks and labels, every arrange either keeps which pins share a net and the names of every net, or refuses.
+    /// ずれたピン・印・ラベルのある生成した図面では、並べ直しはピンのつながりと全てのネットの名前を保つか、断るかのどちらかになる。
+    #[test]
+    fn generated_sheets_keep_connections_and_names_or_refuse() {
+        let mut planned = 0;
+        for seed in 1..=16u64 {
+            let sh = generated_sheet(seed);
+            let plan = match plan_arrange(&sh, &defs(), &ArrangeOptions::default(), &ctx()) { Ok(p) => p, Err(e) => { eprintln!("seed {seed}: {e}"); continue } };
+            planned += 1;
+            let after = apply(&sh, &plan);
+            let fresh: BTreeSet<String> = plan.labelled.iter().map(|l| l.1.clone()).filter(|n| n.starts_with("ARR_")).collect();
+            assert_eq!(pin_partition(&sh, &defs()), pin_partition(&after, &defs()), "seed {seed}");
+            assert_eq!(name_key(&sh, &defs(), &fresh), name_key(&after, &defs(), &fresh), "seed {seed}");
+        }
+        assert!(planned >= 4, "only {planned} of 16 generated sheets were arranged");
+    }
+
+    /// A walled box wired to a far box, placed at a vertical offset so that two such sheets can be combined.
+    fn add_walled(sh: &mut Sheet, dy: f64) {
+        place(sh, "box2", (50.0, 50.0 + dy), "");
+        place(sh, "wall_h", (50.0, 35.0 + dy), "");
+        place(sh, "wall_h", (50.0, 65.0 + dy), "");
+        place(sh, "wall_v", (17.5, 50.0 + dy), "");
+        place(sh, "wall_v", (82.5, 50.0 + dy), "");
+        place(sh, "box2", (160.0, 50.0 + dy), "");
+        old_wire(sh, &[(60.0, 50.0 + dy), (150.0, 50.0 + dy)]);
+    }
+
+    /// Two unrelated unroutable clusters get two different fresh names, so the labels never join them into one net.
+    /// 関係のない2つの引けないかたまりは別々の新しい名前になり、ラベルで1つのネットにつながることはない。
+    #[test]
+    fn two_unroutable_clusters_get_different_names() {
+        let mut sh = new_sheet();
+        add_walled(&mut sh, 0.0);
+        add_walled(&mut sh, 80.0);
+        let plan = arrange(&sh);
+        let names: BTreeSet<&String> = plan.labelled.iter().map(|l| &l.1).collect();
+        assert_eq!(plan.labelled.len(), 2, "{:?}", plan.labelled);
+        assert_eq!(names.len(), 2, "{:?}", plan.labelled);
+        let after = apply(&sh, &plan);
+        assert_eq!(pin_partition(&sh, &defs()), pin_partition(&after, &defs()));
+    }
+
+    /// A cluster that is joined by labels takes the name of its own label, and the old label is replaced.
+    /// ラベルでつなぐかたまりは自分のラベルの名前を使い、古いラベルは置き換わる。
+    #[test]
+    fn the_fallback_uses_the_cluster_label_name() {
+        let (mut sh, _, _) = walled_sheet();
+        let old = label(&mut sh, (120.0, 50.0), "FEED");
+        let plan = arrange(&sh);
+        assert_eq!(plan.labelled.len(), 1);
+        assert_eq!(plan.labelled[0].1, "FEED");
+        assert!(plan.remove.contains(&old));
+        let after = apply(&sh, &plan);
+        let feeds = after.entities.values().filter(|e| matches!(e, Entity::NetLabel(l) if l.name == "FEED")).count();
+        assert_eq!(feeds, 2);
+        assert_eq!(pin_partition(&sh, &defs()), pin_partition(&after, &defs()));
+    }
+
+    /// A cluster that is joined by labels and holds a ground mark takes the mark's net name.
+    /// ラベルでつなぐかたまりに接地の印があれば、その印のネット名を使う。
+    #[test]
+    fn the_fallback_uses_a_net_name_symbol() {
+        let (mut sh, _, _) = walled_sheet();
+        place(&mut sh, "gnd", (120.0, 55.0), "");
+        let plan = arrange(&sh);
+        assert_eq!(plan.labelled.len(), 1, "{:?}", plan.labelled);
+        assert_eq!(plan.labelled[0].1, "GND");
+        let after = apply(&sh, &plan);
+        assert_eq!(pin_partition(&sh, &defs()), pin_partition(&after, &defs()));
+    }
+
+    /// An alignment move that would make two units overlap where they did not before is skipped.
+    /// 整列の移動で、今まで重なっていなかった2つの単位が重なるなら、その移動はしない。
+    #[test]
+    fn an_alignment_that_would_overlap_is_skipped() {
+        // 単位1を単位0の x にそろえると、単位2に重なる
+        let mut cur = vec![(0.0, 0.0, 10.0, 10.0), (2.5, 20.0, 12.5, 30.0), (-5.0, 20.0, 1.0, 30.0)];
+        let anchors = [5.0, 7.5, -2.0];
+        assert!(creates_overlap(&cur, &[1], &[shifted(cur[1], Axis::X, -2.5)]));
+        let (total, _, _) = axis_pass(&mut cur, &anchors, Axis::X, &ArrangeOptions::default(), 20.0);
+        assert_eq!(total, vec![0.0, 0.0, 0.0]);
+    }
+
+    /// When the layout with the normal maximum gap does not fit, the gaps are reduced towards the channel width and the arrange succeeds.
+    /// 通常の空きの上限では図枠に収まらないときは、空きを通り道の幅まで詰めて並べ直す。
+    #[test]
+    fn a_tight_frame_reduces_the_gaps_and_fits() {
+        let mut sh = new_sheet();
+        let ids: Vec<EntityId> = (0..5).map(|i| place(&mut sh, "box2", (25.0 + 35.0 * i as f64, 50.0), &format!("A{i}"))).collect();
+        let c = ArrangeContext { frame: (10.0, 10.0, 160.0, 120.0), title_block: (300.0, 300.0, 310.0, 310.0), ..Default::default() };
+        let plan = plan_arrange(&sh, &defs(), &ArrangeOptions::default(), &c).expect("fits after reducing the gaps");
+        let after = apply(&sh, &plan);
+        let (b0, b1) = (bounds_of(&after, &defs(), ids[0]), bounds_of(&after, &defs(), ids[1]));
+        let gap = b1.0 - b0.2;
+        assert!(gap >= 8.0 - 1e-9 && gap < 15.0, "gap {gap}");
+    }
+
+    /// A layout that would run into the title block is refused when the drawing kept out of it before.
+    /// 元の図面が表題欄を避けていたのに、並べると表題欄に掛かるときは断る。
+    #[test]
+    fn a_layout_into_the_title_block_is_refused() {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (50.0, 50.0), "A1");
+        place(&mut sh, "box2", (73.0, 50.0), "A2");
+        let c = ArrangeContext { frame: (10.0, 10.0, 410.0, 287.0), title_block: (84.0, 10.0, 410.0, 287.0), ..Default::default() };
+        let err = plan_arrange(&sh, &defs(), &ArrangeOptions::default(), &c).expect_err("must refuse");
+        assert!(err.contains("図枠"), "{err}");
+    }
+
+    /// A wire that a note points at, or that is linked to FreeCAD, makes the arrange refuse and name the net.
+    /// 注記が指す配線や、FreeCADと対応付けた配線があれば、並べ直しはネット名を挙げて断る。
+    #[test]
+    fn pointed_wires_are_refused() {
+        let (mut sh, _, _) = two_wired_parts();
+        let w = *sh.entities.keys().find(|id| matches!(sh.entities[*id], Entity::Wire(_))).expect("wire");
+        let c = ArrangeContext { protected: vec![w], ..ctx() };
+        let err = plan_arrange(&sh, &defs(), &ArrangeOptions::default(), &c).expect_err("must refuse");
+        assert!(err.contains("動かせない配線"), "{err}");
+        let t = note(&mut sh, (75.0, 60.0));
+        if let Some(Entity::Text(text)) = sh.entities.get_mut(&t) {
+            text.leader_to = Some(w);
+        }
+        let err = plan_arrange(&sh, &defs(), &ArrangeOptions::default(), &ctx()).expect_err("must refuse");
+        assert!(err.contains("動かせない配線"), "{err}");
+    }
+
+    /// Wires of one cluster whose lengths come from different sources make the arrange refuse.
+    /// 1つのかたまりの配線の長さの出所がまちまちなら、並べ直しは断る。
+    #[test]
+    fn mixed_length_sources_are_refused() {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (50.0, 50.0), "A1");
+        place(&mut sh, "box2", (100.0, 50.0), "A2");
+        let w1 = old_wire(&mut sh, &[(60.0, 50.0), (75.0, 50.0)]);
+        let w2 = old_wire(&mut sh, &[(75.0, 50.0), (90.0, 50.0)]);
+        for (id, src) in [(w1, LengthSource::Manual), (w2, LengthSource::Freecad)] {
+            if let Some(Entity::Wire(w)) = sh.entities.get_mut(&id) {
+                w.length_m = Some(1.0);
+                w.length_source = src;
+            }
+        }
+        let err = plan_arrange(&sh, &defs(), &ArrangeOptions::default(), &ctx()).expect_err("must refuse");
+        assert!(err.contains("動かせない配線"), "{err}");
+    }
+
+    /// Alignment groups never span more than the alignment distance, so a chain of nearby keys is split instead of moving far.
+    /// 整列の組は整列の距離より広がらないので、近い座標が鎖のように続いても遠くへは動かさず、組を分ける。
+    #[test]
+    fn alignment_groups_do_not_chain() {
+        let m = align_moves(&[40.0, 43.0, 46.0, 49.0], 4.0);
+        assert_eq!(m, vec![0.0, -2.5, 0.0, -2.5]);
+    }
+
+    /// An alignment whose 2.5 mm rounding would swap the order of two parts is not done.
+    /// 2.5mmへの丸めで2つの部品の順が入れ替わる整列はしない。
+    #[test]
+    fn alignment_never_swaps_order() {
+        let keys = [49.0, 51.0, 52.0];
+        let m = align_moves(&keys, 4.0);
+        let new: Vec<f64> = keys.iter().zip(&m).map(|(k, d)| k + d).collect();
+        assert!(new.windows(2).all(|w| w[0] <= w[1]), "{new:?}");
     }
 }
