@@ -49,9 +49,9 @@ function volts(n: { volts_min: number; volts_max: number }): string {
   return `${n.volts_min.toFixed(2)} 〜 ${n.volts_max.toFixed(2)} V`;
 }
 
-function add() {
+async function add() {
   if (!draft.value.trim()) return;
-  invalid.value = !sim.addCondition(draft.value);
+  invalid.value = !(await sim.addCondition(draft.value));
   if (!invalid.value) draft.value = "";
 }
 

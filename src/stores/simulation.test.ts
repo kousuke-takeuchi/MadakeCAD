@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
 import { ipc, type SimOpResult } from "../ipc";
-import { useSimulationStore } from "./simulation";
+import { nextCaseName, useSimulationStore } from "./simulation";
 import { useDocumentStore } from "./document";
 
 const result: SimOpResult = {
@@ -35,10 +35,10 @@ describe("simulation store", () => {
     const spy = vi.spyOn(ipc, "simulateOp").mockResolvedValue(result);
     store.toggleOpen("SW1");
     await store.run(null);
-    expect(spy).toHaveBeenCalledWith(null, ["SW1"], { overrides: {}, shorts: [] });
+    expect(spy).toHaveBeenCalledWith(null, ["SW1"], {});
     store.toggleOpen("SW1");
     await store.run(null);
-    expect(spy).toHaveBeenLastCalledWith(null, [], { overrides: {}, shorts: [] });
+    expect(spy).toHaveBeenLastCalledWith(null, [], {});
   });
 
   // ja: 失敗時(ngspice未導入等)はエラーメッセージを保持したままパネルを開く
@@ -51,45 +51,8 @@ describe("simulation store", () => {
     expect(store.error).toContain("ngspice");
   });
 
-  // ja: 条件の入力を足すと、次の実行で属性の置き換えと短絡が送られる。同じ属性は上書き、同じネットは1回だけ
-  it("added conditions are sent as overrides and shorts on the next run", async () => {
-    const store = useSimulationStore();
-    const spy = vi.spyOn(ipc, "simulateOp").mockResolvedValue(result);
-    expect(store.addCondition("M1.current_a=40")).toBe(true);
-    expect(store.addCondition("M1.v_min=20")).toBe(true);
-    expect(store.addCondition("M1.current_a=31")).toBe(true);
-    expect(store.addCondition("短絡 P24")).toBe(true);
-    expect(store.addCondition("short P24")).toBe(true);
-    await store.run(null);
-    expect(spy).toHaveBeenLastCalledWith(null, [], {
-      overrides: { M1: { current_a: "31", v_min: "20" } },
-      shorts: ["P24"],
-    });
-    expect(store.conditions.map((c) => c.label)).toEqual(["M1.current_a=31", "M1.v_min=20", "P24"]);
-  });
 
-  // ja: 読めない条件の入力は断られ、条件は変わらない
-  it("an unreadable condition is refused and changes nothing", () => {
-    const store = useSimulationStore();
-    expect(store.addCondition("M1=40")).toBe(false);
-    expect(store.conditions).toEqual([]);
-  });
 
-  // ja: 条件は1つずつ外せ (部品の最後の属性を外すとその部品も消える)、まとめて全部外せる
-  it("conditions can be removed one by one or all at once", () => {
-    const store = useSimulationStore();
-    store.addCondition("M1.current_a=40");
-    store.addCondition("短絡 P24");
-    store.removeCondition("set:M1.current_a");
-    expect(store.overrides).toEqual({});
-    expect(store.shorts).toEqual(["P24"]);
-    store.removeCondition("short:P24");
-    expect(store.shorts).toEqual([]);
-    store.addCondition("M1.current_a=40");
-    store.addCondition("短絡 P24");
-    store.clearConditions();
-    expect(store.conditions).toEqual([]);
-  });
 
   // ja: 定格超過は重さごとに数えられ、結果に定格超過が無ければ空になる
   it("rating findings are counted by severity and empty when the result has none", async () => {
@@ -103,26 +66,7 @@ describe("simulation store", () => {
     expect(store.counts).toEqual({ error: 1, warning: 2, info: 0 });
   });
 
-  // ja: 結果が出ているときに条件を変えると、同じシートで自動で計算し直す (画面の条件と結果がずれない)
-  it("changing a condition after a run re-runs on the same sheet", async () => {
-    const store = useSimulationStore();
-    const spy = vi.spyOn(ipc, "simulateOp").mockResolvedValue(result);
-    await store.run("s1");
-    store.addCondition("短絡 P24");
-    expect(spy).toHaveBeenLastCalledWith("s1", [], { overrides: {}, shorts: ["P24"] });
-    store.removeCondition("short:P24");
-    expect(spy).toHaveBeenLastCalledWith("s1", [], { overrides: {}, shorts: [] });
-    expect(spy).toHaveBeenCalledTimes(3);
-  });
 
-  // ja: 結果がまだ無いときに条件を変えても、計算は始めない
-  it("changing a condition before any run does not start one", () => {
-    const store = useSimulationStore();
-    const spy = vi.spyOn(ipc, "simulateOp").mockResolvedValue(result);
-    store.addCondition("M1.current_a=40");
-    store.clearConditions();
-    expect(spy).not.toHaveBeenCalled();
-  });
 
   // ja: 計算したシートを覚え、シートの指定が無ければ先頭シートを覚える
   it("a run remembers its sheet, or the first sheet when none is given", async () => {
@@ -136,16 +80,6 @@ describe("simulation store", () => {
     expect(store.sheetId).toBe("first");
   });
 
-  // ja: 属性名に「.」を含む置き換えも、チップから正しく外せる
-  it("an override whose attribute contains a dot can be removed from its chip", () => {
-    const store = useSimulationStore();
-    store.addCondition("M1.rating.max=5");
-    expect(store.overrides).toEqual({ M1: { "rating.max": "5" } });
-    const key = store.conditions[0].key;
-    expect(key).toBe("set:M1.rating.max");
-    store.removeCondition(key);
-    expect(store.overrides).toEqual({});
-  });
 
   const withLoads = (ids: string[]): SimOpResult => ({
     ...result,
@@ -231,5 +165,162 @@ describe("simulation store", () => {
     });
     await store.run("s1");
     expect(store.stale).toBe(true);
+  });
+
+  const fakeExecute = (doc: ReturnType<typeof useDocumentStore>) =>
+    vi.spyOn(doc, "execute").mockImplementation(async (cmd) => {
+      const cases = doc.project!.sim_cases ?? (doc.project!.sim_cases = []);
+      if (cmd.type === "set_sim_case") {
+        const i = cases.findIndex((c) => c.id === cmd.case.id);
+        if (i >= 0) cases[i] = cmd.case;
+        else cases.push(cmd.case);
+      } else if (cmd.type === "remove_sim_case") {
+        doc.project!.sim_cases = cases.filter((c) => c.id !== cmd.id);
+      }
+      return { revision: 1, ops: [] } as never;
+    });
+
+  // ja: 「通常」のまま条件を足すと「ケース 1」が作られて選ばれ、条件はそのケースに入る
+  it("adding a condition while Normal is selected creates and selects Case 1", async () => {
+    const doc = docWith(["w1"]);
+    fakeExecute(doc);
+    const store = useSimulationStore();
+    expect(await store.addCondition("M1.current_a=40")).toBe(true);
+    expect(store.selectedCase?.name).toBe("ケース 1");
+    expect(store.selectedCase?.overrides).toEqual({ M1: { current_a: "40" } });
+  });
+
+  // ja: ケースの名前は空いている一番小さい番号になる
+  it("new case names take the first free number", () => {
+    const c = (name: string) => ({ id: name, name, open_switches: [], overrides: {}, faults: [] });
+    expect(nextCaseName([])).toBe("ケース 1");
+    expect(nextCaseName([c("ケース 1"), c("ケース 3")])).toBe("ケース 2");
+  });
+
+  // ja: 選んだケースで計算し、条件のチップはそのケースから作られる (消えた電線を指す故障は「見つからない」印付き)
+  it("runs with the selected case and builds chips from it, marking faults whose wire is gone", async () => {
+    const doc = docWith(["w1"]);
+    doc.project!.sim_cases = [{ id: "c1", name: "Short", open_switches: [], overrides: {}, faults: [
+      { kind: "short", target: { wire_id: "w1" } }, { kind: "open", wire_id: "gone" } ] }];
+    const spy = vi.spyOn(ipc, "simulateOp").mockResolvedValue(withLoads(["w1"]));
+    const store = useSimulationStore();
+    store.selectCase("c1");
+    await store.run("s1");
+    expect(spy).toHaveBeenLastCalledWith("s1", [], { caseId: "c1" });
+    expect(store.conditions.map((c) => [c.kind, c.missing])).toEqual([["short", false], ["open", true]]);
+  });
+
+  // ja: 選んでいるケースを消すと「通常」に戻る
+  it("deleting the selected case falls back to Normal", async () => {
+    const doc = docWith(["w1"]);
+    fakeExecute(doc);
+    const store = useSimulationStore();
+    await store.addCondition("M1.current_a=40");
+    await store.deleteCase();
+    expect(store.caseId).toBeNull();
+    expect(doc.project!.sim_cases).toEqual([]);
+  });
+
+  // ja: undo などでケースが無くなったら、選択は「通常」として扱われる
+  it("a selected case that disappears from the project reads as Normal", async () => {
+    const doc = docWith(["w1"]);
+    fakeExecute(doc);
+    const store = useSimulationStore();
+    await store.addCondition("M1.current_a=40");
+    doc.project!.sim_cases = [];
+    expect(store.selectedCase).toBeNull();
+  });
+
+  // ja: 「短絡 ネット名」はそのネットの最初の電線への短絡としてケースに入る
+  it("short NET is stored as a short on the net's first wire", async () => {
+    const doc = docWith(["w1", "w2"]);
+    fakeExecute(doc);
+    vi.spyOn(ipc, "getNetlist").mockResolvedValue([{ name: "P24", pins: [], wire_ids: ["w2", "w1"] }] as never);
+    const store = useSimulationStore();
+    expect(await store.addCondition("短絡 P24")).toBe(true);
+    expect(store.selectedCase?.faults).toEqual([{ kind: "short", target: { wire_id: "w2" } }]);
+    expect(await store.addCondition("短絡 NOPE")).toBe(false);
+  });
+
+  // ja: ケースの名前の変更が断られたら false を返し、ケースは変わらない
+  it("a refused rename returns false and leaves the case unchanged", async () => {
+    const doc = docWith(["w1"]);
+    fakeExecute(doc).mockRejectedValueOnce(new Error("既にあります"));
+    const store = useSimulationStore();
+    store.selectCase(null);
+    doc.project!.sim_cases = [{ id: "c1", name: "A", open_switches: [], overrides: {}, faults: [] }];
+    store.selectCase("c1");
+    expect(await store.renameCase("B")).toBe(false);
+    expect(store.selectedCase?.name).toBe("A");
+  });
+
+  // ja: 読めない条件の入力は断られ、ケースは作られない
+  it("an unreadable condition is refused and creates no case", async () => {
+    const doc = docWith(["w1"]);
+    fakeExecute(doc);
+    const store = useSimulationStore();
+    expect(await store.addCondition("M1=40")).toBe(false);
+    expect(doc.project!.sim_cases ?? []).toEqual([]);
+  });
+
+  // ja: 結果が出ているときにケースの条件を変えると、同じシートで自動で計算し直す
+  it("changing the case after a run re-runs on the same sheet with the case", async () => {
+    const doc = docWith(["w1"]);
+    fakeExecute(doc);
+    const store = useSimulationStore();
+    const spy = vi.spyOn(ipc, "simulateOp").mockResolvedValue(withLoads(["w1"]));
+    await store.run("s1");
+    await store.addCondition("M1.current_a=40");
+    expect(spy).toHaveBeenLastCalledWith("s1", [], { caseId: store.caseId });
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  // ja: 結果がまだ無いときにケースを変えても、計算は始めない
+  it("changing the case before any run does not start one", async () => {
+    const doc = docWith(["w1"]);
+    fakeExecute(doc);
+    const store = useSimulationStore();
+    const spy = vi.spyOn(ipc, "simulateOp").mockResolvedValue(withLoads(["w1"]));
+    await store.addCondition("M1.current_a=40");
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  // ja: 条件は1つずつ外せ (部品の最後の属性を外すとその部品も消える)、属性名に「.」があっても外せる。まとめて全部外すとケースは空で残る
+  it("conditions can be removed one by one, also with a dotted attribute, or all at once", async () => {
+    const doc = docWith(["w1"]);
+    fakeExecute(doc);
+    const store = useSimulationStore();
+    await store.addCondition("M1.rating.max=5");
+    await store.addFault({ kind: "open", wire_id: "w1" });
+    expect(store.conditions.map((c) => c.key)).toEqual(["set:M1.rating.max", "open:0"]);
+    await store.removeCondition("set:M1.rating.max");
+    expect(store.selectedCase?.overrides).toEqual({});
+    await store.addCondition("M1.current_a=40");
+    await store.clearConditions();
+    expect(store.selectedCase?.faults).toEqual([]);
+    expect(store.selectedCase?.overrides).toEqual({});
+  });
+
+  // ja: 同じ故障は2回足しても1つだけ
+  it("the same fault is stored once", async () => {
+    const doc = docWith(["w1"]);
+    fakeExecute(doc);
+    const store = useSimulationStore();
+    await store.addFault({ kind: "short", target: { wire_id: "w1" } });
+    await store.addFault({ kind: "short", target: { wire_id: "w1" } });
+    expect(store.selectedCase?.faults.length).toBe(1);
+  });
+
+  // ja: ケースの複製は「元の名前 1」のような空いた名前で作られ、選ばれる
+  it("duplicating a case makes a copy with a free name and selects it", async () => {
+    const doc = docWith(["w1"]);
+    fakeExecute(doc);
+    const store = useSimulationStore();
+    await store.addCondition("M1.current_a=40");
+    const first = store.caseId;
+    expect(await store.duplicateCase()).toBe(true);
+    expect(store.caseId).not.toBe(first);
+    expect(store.selectedCase?.name).toBe("ケース 1 1");
+    expect(store.selectedCase?.overrides).toEqual({ M1: { current_a: "40" } });
   });
 });

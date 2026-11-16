@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3551仕様項目**。
+全6領域・**3558仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -3869,20 +3869,27 @@
 - runでDC解析結果を取得してパネルを開く <sub>`simulation store`</sub>
 - 開閉トグルは再実行時にopen_switchesとして渡される <sub>`simulation store`</sub>
 - 失敗時(ngspice未導入等)はエラーメッセージを保持したままパネルを開く <sub>`simulation store`</sub>
-- 条件の入力を足すと、次の実行で属性の置き換えと短絡が送られる。同じ属性は上書き、同じネットは1回だけ <sub>`simulation store`</sub>
-- 読めない条件の入力は断られ、条件は変わらない <sub>`simulation store`</sub>
-- 条件は1つずつ外せ (部品の最後の属性を外すとその部品も消える)、まとめて全部外せる <sub>`simulation store`</sub>
 - 定格超過は重さごとに数えられ、結果に定格超過が無ければ空になる <sub>`simulation store`</sub>
-- 結果が出ているときに条件を変えると、同じシートで自動で計算し直す (画面の条件と結果がずれない) <sub>`simulation store`</sub>
-- 結果がまだ無いときに条件を変えても、計算は始めない <sub>`simulation store`</sub>
 - 計算したシートを覚え、シートの指定が無ければ先頭シートを覚える <sub>`simulation store`</sub>
-- 属性名に「.」を含む置き換えも、チップから正しく外せる <sub>`simulation store`</sub>
 - 結果は計算したシートにだけ重ね、ほかのシートを開いているときは描かない <sub>`simulation store`</sub>
 - 計算の後で図面を編集すると結果は古いとみなされ、重ねる表示は「古い」印付きになる <sub>`simulation store`</sub>
 - 計算に失敗すると、前の結果の色は残らない <sub>`simulation store`</sub>
 - 「図面に重ねる」を切ると表示が消え、パネルを閉じても消える <sub>`simulation store`</sub>
 - 図面で選んだ電線・部品の値を引ける (値の無い物を選んでいれば空) <sub>`simulation store`</sub>
 - 計算中に図面を編集すると、その結果は最初から古いとみなされる (計算を始めたときの図面で判定する) <sub>`simulation store`</sub>
+- 「通常」のまま条件を足すと「ケース 1」が作られて選ばれ、条件はそのケースに入る <sub>`simulation store`</sub>
+- ケースの名前は空いている一番小さい番号になる <sub>`simulation store`</sub>
+- 選んだケースで計算し、条件のチップはそのケースから作られる (消えた電線を指す故障は「見つからない」印付き) <sub>`simulation store`</sub>
+- 選んでいるケースを消すと「通常」に戻る <sub>`simulation store`</sub>
+- undo などでケースが無くなったら、選択は「通常」として扱われる <sub>`simulation store`</sub>
+- 「短絡 ネット名」はそのネットの最初の電線への短絡としてケースに入る <sub>`simulation store`</sub>
+- ケースの名前の変更が断られたら false を返し、ケースは変わらない <sub>`simulation store`</sub>
+- 読めない条件の入力は断られ、ケースは作られない <sub>`simulation store`</sub>
+- 結果が出ているときにケースの条件を変えると、同じシートで自動で計算し直す <sub>`simulation store`</sub>
+- 結果がまだ無いときにケースを変えても、計算は始めない <sub>`simulation store`</sub>
+- 条件は1つずつ外せ (部品の最後の属性を外すとその部品も消える)、属性名に「.」があっても外せる。まとめて全部外すとケースは空で残る <sub>`simulation store`</sub>
+- 同じ故障は2回足しても1つだけ <sub>`simulation store`</sub>
+- ケースの複製は「元の名前 1」のような空いた名前で作られ、選ばれる <sub>`simulation store`</sub>
 
 ### 開始テンプレート
 

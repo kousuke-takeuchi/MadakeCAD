@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3551 specification clauses** across 6 areas.
+**3558 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -3869,20 +3869,27 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - run fetches the DC result and opens the panel <sub>`simulation store`</sub>
 - toggled switches are passed as open_switches on the next run <sub>`simulation store`</sub>
 - failures (e.g. ngspice missing) keep the error message and still open the panel <sub>`simulation store`</sub>
-- added conditions are sent as overrides and shorts on the next run <sub>`simulation store`</sub>
-- an unreadable condition is refused and changes nothing <sub>`simulation store`</sub>
-- conditions can be removed one by one or all at once <sub>`simulation store`</sub>
 - rating findings are counted by severity and empty when the result has none <sub>`simulation store`</sub>
-- changing a condition after a run re-runs on the same sheet <sub>`simulation store`</sub>
-- changing a condition before any run does not start one <sub>`simulation store`</sub>
 - a run remembers its sheet, or the first sheet when none is given <sub>`simulation store`</sub>
-- an override whose attribute contains a dot can be removed from its chip <sub>`simulation store`</sub>
 - the overlay is shown only on the sheet that was simulated <sub>`simulation store`</sub>
 - editing the drawing after a run marks the result stale <sub>`simulation store`</sub>
 - a failed run leaves no overlay from the previous result <sub>`simulation store`</sub>
 - turning off the drawing toggle or closing the panel hides the overlay <sub>`simulation store`</sub>
 - the selected wire or part's values can be looked up <sub>`simulation store`</sub>
 - an edit made while the simulation runs marks its result stale <sub>`simulation store`</sub>
+- adding a condition while Normal is selected creates and selects Case 1 <sub>`simulation store`</sub>
+- new case names take the first free number <sub>`simulation store`</sub>
+- runs with the selected case and builds chips from it, marking faults whose wire is gone <sub>`simulation store`</sub>
+- deleting the selected case falls back to Normal <sub>`simulation store`</sub>
+- a selected case that disappears from the project reads as Normal <sub>`simulation store`</sub>
+- short NET is stored as a short on the net's first wire <sub>`simulation store`</sub>
+- a refused rename returns false and leaves the case unchanged <sub>`simulation store`</sub>
+- an unreadable condition is refused and creates no case <sub>`simulation store`</sub>
+- changing the case after a run re-runs on the same sheet with the case <sub>`simulation store`</sub>
+- changing the case before any run does not start one <sub>`simulation store`</sub>
+- conditions can be removed one by one, also with a dotted attribute, or all at once <sub>`simulation store`</sub>
+- the same fault is stored once <sub>`simulation store`</sub>
+- duplicating a case makes a copy with a free name and selects it <sub>`simulation store`</sub>
 
 ### Start templates
 
