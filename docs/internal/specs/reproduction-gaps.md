@@ -1456,8 +1456,8 @@ leader line had no arrow.
 
 **Current behaviour (verified).** Every connection point of a symbol had to be on the
 2.5 mm grid. A drawing made without this grid spaces the poles of a part by another
-distance, so a faithful symbol could not be written and the wire ends were up to about a
-millimetre away from the original.
+distance, so a faithful symbol could not be written and the wire ends were up to half a grid
+step away from the original.
 
 **What closed it.** A user symbol file may set `free_pins: true`; its connection points may
 then be anywhere. Wires and instances were never bound to the grid. Bundled symbols and

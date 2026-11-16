@@ -1939,6 +1939,7 @@ pub fn import_dxf(
                             color: None,
                             leader_to: None,
                             spacing: None,
+                            stretch: None,
                         }),
                     );
                     report.texts += 1;
@@ -2106,6 +2107,7 @@ pub fn import_dxf(
                         color: None,
                         leader_to: None,
                         spacing: None,
+                        stretch: None,
                     }),
                 );
                 report.texts += 1;
@@ -2147,6 +2149,7 @@ pub fn import_dxf(
                         color: None,
                         leader_to: None,
                         spacing: None,
+                        stretch: None,
                     }),
                 );
                 report.texts += 1;
@@ -2238,6 +2241,7 @@ mod tests {
             color: None,
             leader_to: None,
             spacing: None,
+            stretch: None,
         }));
         push(Entity::Harness(Harness {
             id: Uuid::new_v4(),

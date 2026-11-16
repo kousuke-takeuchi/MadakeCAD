@@ -1031,6 +1031,15 @@ impl Engine {
                     if crate::stroke_font::font(&tf.id).is_none() {
                         return Err(CoreError::InvalidCommand(format!("同梱していない書体です: {}", tf.id)));
                     }
+                    if let Some(k) = tf.stretch {
+                        if !crate::model::is_text_spacing(k) {
+                            return Err(CoreError::InvalidCommand(format!(
+                                "text stretch out of range: {k} (expected {}..{})",
+                                crate::model::MIN_TEXT_SPACING,
+                                crate::model::MAX_TEXT_SPACING
+                            )));
+                        }
+                    }
                     if let Some(k) = tf.spacing {
                         if !crate::model::is_text_spacing(k) {
                             return Err(CoreError::InvalidCommand(format!(
@@ -1882,6 +1891,15 @@ fn validate_entity(entity: &Entity, sheet: &Sheet) -> Result<()> {
             crate::caption::parse_layout(&s.attrs).map_err(CoreError::InvalidCommand)?;
         }
         Entity::Text(t) => {
+            if let Some(k) = t.stretch {
+                if !crate::model::is_text_spacing(k) {
+                    return Err(CoreError::InvalidCommand(format!(
+                        "text stretch out of range: {k} (expected {}..{})",
+                        crate::model::MIN_TEXT_SPACING,
+                        crate::model::MAX_TEXT_SPACING
+                    )));
+                }
+            }
             if let Some(k) = t.spacing {
                 if !crate::model::is_text_spacing(k) {
                     return Err(CoreError::InvalidCommand(format!(
@@ -2052,6 +2070,7 @@ mod tests {
             bold: false,
             leader_to: None,
             spacing: None,
+            stretch: None,
         })
     }
 
@@ -2441,6 +2460,7 @@ mod tests {
             bold: false,
             leader_to: Some(Uuid::new_v4()),
             spacing: None,
+            stretch: None,
         };
         let err = engine
             .execute(Command::AddEntity {
@@ -2482,6 +2502,7 @@ mod tests {
             bold: false,
             leader_to: Some(target_id),
             spacing: None,
+            stretch: None,
         });
         let note_id = note.id();
         engine.execute(Command::AddEntity { sheet_id, entity: note }).unwrap();
@@ -2990,7 +3011,7 @@ mod tests {
     #[test]
     fn set_text_font_and_undo() {
         let (mut engine, _) = test_engine();
-        let tf = crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Full, pen_mm: None, spacing: None, };
+        let tf = crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Full, pen_mm: None, spacing: None, stretch: None, };
         let patch = engine.execute(Command::SetTextFont { text_font: Some(tf.clone()) }).unwrap();
         assert!(matches!(&patch.ops[0], PatchOp::TextFontChanged { text_font: Some(t) } if *t == tf));
         assert_eq!(engine.project().text_font.as_ref(), Some(&tf));
@@ -3005,7 +3026,7 @@ mod tests {
     #[test]
     fn set_text_font_refuses_an_unknown_id() {
         let (mut engine, _) = test_engine();
-        let bad = crate::model::TextFont { id: "nope".into(), latin: crate::model::Latin::Half, pen_mm: None, spacing: None, };
+        let bad = crate::model::TextFont { id: "nope".into(), latin: crate::model::Latin::Half, pen_mm: None, spacing: None, stretch: None, };
         assert!(engine.execute(Command::SetTextFont { text_font: Some(bad) }).is_err());
         assert!(engine.project().text_font.is_none());
     }
@@ -3356,6 +3377,7 @@ mod tests {
             bold: false,
             leader_to: Some(target_id),
             spacing: None,
+            stretch: None,
         });
         let note_id = note.id();
         engine.execute(Command::AddEntity { sheet_id, entity: note }).unwrap();
@@ -5482,7 +5504,7 @@ mod tests {
     #[test]
     fn set_text_font_takes_a_pen_width_in_range() {
         let (mut engine, _) = test_engine();
-        let font = |pen| crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Half, pen_mm: pen, spacing: None, };
+        let font = |pen| crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Half, pen_mm: pen, spacing: None, stretch: None, };
         for bad in [0.05, 1.5, f64::NAN] {
             let err = engine.execute(Command::SetTextFont { text_font: Some(font(Some(bad))) }).expect_err("範囲外は断る");
             assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("text pen")), "{bad}: {err:?}");
@@ -5529,7 +5551,7 @@ mod tests {
     #[test]
     fn letter_spacing_is_checked_on_the_font_and_on_notes() {
         let (mut engine, sheet_id) = test_engine();
-        let font = |spacing| crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Full, pen_mm: None, spacing };
+        let font = |spacing| crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Full, pen_mm: None, spacing, stretch: None };
         let err = engine.execute(Command::SetTextFont { text_font: Some(font(Some(0.1))) }).expect_err("範囲外は断る");
         assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("text spacing")), "{err:?}");
         engine.execute(Command::SetTextFont { text_font: Some(font(Some(0.65))) }).unwrap();
@@ -5545,6 +5567,7 @@ mod tests {
             bold: false,
             leader_to: None,
             spacing,
+            stretch: None,
         });
         let err = engine.execute(Command::AddEntity { sheet_id, entity: note(Some(5.0)) }).expect_err("範囲外は断る");
         assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("text spacing")), "{err:?}");
@@ -5565,5 +5588,33 @@ mod tests {
         engine.undo().unwrap();
         assert!(!engine.project().sheets[0].hide_wire_numbers);
         assert!(!serde_json::to_string(engine.project()).unwrap().contains("hide_wire_numbers"));
+    }
+
+    /// A horizontal stretch outside 0.3 to 3 is refused on the text font and on a note; a value inside is kept and saved.
+    /// 0.3〜3 の外の横の伸縮率は、書体でも注記でも断る。範囲内の値は保存される。
+    #[test]
+    fn text_stretch_is_checked_on_the_font_and_on_notes() {
+        let (mut engine, sheet_id) = test_engine();
+        let font = |stretch| crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Full, pen_mm: None, spacing: None, stretch };
+        let err = engine.execute(Command::SetTextFont { text_font: Some(font(Some(4.0))) }).expect_err("範囲外は断る");
+        assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("text stretch")), "{err:?}");
+        engine.execute(Command::SetTextFont { text_font: Some(font(Some(0.65))) }).unwrap();
+        assert!(serde_json::to_string(engine.project()).unwrap().contains("\"stretch\":0.65"));
+        let note = |stretch| Entity::Text(TextEntity {
+            id: Uuid::new_v4(),
+            at: Point::new(10.0, 10.0),
+            text: "AB".into(),
+            height: 2.5,
+            rotation: 0,
+            anchor: TextAnchor::Start,
+            color: None,
+            bold: false,
+            leader_to: None,
+            spacing: None,
+            stretch,
+        });
+        let err = engine.execute(Command::AddEntity { sheet_id, entity: note(Some(0.1)) }).expect_err("範囲外は断る");
+        assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("text stretch")), "{err:?}");
+        engine.execute(Command::AddEntity { sheet_id, entity: note(Some(1.18)) }).unwrap();
     }
 }

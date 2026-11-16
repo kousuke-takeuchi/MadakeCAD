@@ -450,6 +450,10 @@ pub struct TextFont {
     /// 範囲は [`MIN_TEXT_SPACING`]〜[`MAX_TEXT_SPACING`]。図枠のセルや注記が自分の字間を持つときは、この値に掛ける。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spacing: Option<f64>,
+    /// 字の横の伸縮率 (字形と送りの両方に掛ける)。図面の全ての文字に効く。`None` は1。字を細長く書く図面で1より小さくする。
+    /// 範囲は字間と同じ。注記が自分の伸縮率を持つときは、この値に掛ける。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stretch: Option<f64>,
 }
 
 impl TextFont {
@@ -461,6 +465,11 @@ impl TextFont {
     /// 字間の倍率。未設定・範囲外なら1。
     pub fn spacing(&self) -> f64 {
         self.spacing.filter(|v| is_text_spacing(*v)).unwrap_or(1.0)
+    }
+
+    /// 字の横の伸縮率。未設定・範囲外なら1。
+    pub fn stretch(&self) -> f64 {
+        self.stretch.filter(|v| is_text_spacing(*v)).unwrap_or(1.0)
     }
 }
 
@@ -1415,6 +1424,9 @@ pub struct TextEntity {
     /// 字間 (字の送りに掛ける倍率)。ストロークフォントのときだけ効き、書体の字間 ([`TextFont::spacing`]) に掛ける。`None` は1。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spacing: Option<f64>,
+    /// 字の横の伸縮率 (字形と送りの両方)。ストロークフォントのときだけ効き、書体の伸縮率 ([`TextFont::stretch`]) に掛ける。`None` は1。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stretch: Option<f64>,
 }
 
 #[cfg(test)]
@@ -1676,6 +1688,7 @@ mod tests {
             bold: true,
             leader_to: None,
             spacing: None,
+            stretch: None,
         });
         let json = serde_json::to_string(&entity).unwrap();
         let Entity::Text(back) = serde_json::from_str::<Entity>(&json).unwrap() else {

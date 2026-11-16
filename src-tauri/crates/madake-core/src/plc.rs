@@ -1002,6 +1002,7 @@ fn text(at: Point, body: String) -> Entity {
         bold: false,
         leader_to: None,
         spacing: None,
+        stretch: None,
     })
 }
 

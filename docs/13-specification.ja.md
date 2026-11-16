@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3321仕様項目**。
+全6領域・**3333仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -292,6 +292,7 @@
 - caption_layout を読めないシンボルは断り、図面は変わらない。読めるものは、ブロックに限らずどのシンボルでも受け付ける。 <sub>`a_symbol_with_a_bad_caption_layout_is_refused`</sub>
 - 0.3〜3 の外の字間は、書体でも注記でも断る。範囲内の値は保存される。 <sub>`letter_spacing_is_checked_on_the_font_and_on_notes`</sub>
 - シートの配線の描き方は「線番を描かない」も保存し、元に戻すと前の値に戻る。 <sub>`set_sheet_wire_style_stores_hidden_wire_numbers`</sub>
+- 0.3〜3 の外の横の伸縮率は、書体でも注記でも断る。範囲内の値は保存される。 <sub>`text_stretch_is_checked_on_the_font_and_on_notes`</sub>
 
 ### connector
 
@@ -1137,6 +1138,8 @@
 - 書体の字間は全ての文字を詰め、注記の字間はそれに掛かる: 書体が0.5で注記が2.0なら、字間なしの文字と同じ幅になる。 <sub>`font_and_note_spacing_multiply`</sub>
 - 矢印のある線は、三角の先端ではなく付け根で止まる。太い線の角が先端の横からはみ出さない。 <sub>`the_line_of_an_arrow_stops_at_the_base_of_the_head`</sub>
 - ネット名を明示した配線は、その名前を線番として表示する。線番を描かないシートは名前を書かず、名前は配線に残る。 <sub>`a_sheet_can_hide_the_wire_numbers`</sub>
+- 書体の横の伸縮率は、字形と幅を一緒に縮め、高さは変えない。注記の伸縮率はそれに掛かる。 <sub>`the_text_stretch_scales_glyphs_and_width`</sub>
+- 書体の横の伸縮率は図枠には効かない: 図枠の文字の範囲の中では、文字は伸縮率なしと同じ幅になり、範囲を出ると伸縮率が戻る。 <sub>`the_frame_text_ignores_the_font_stretch`</sub>
 
 ### シンボルライブラリ
 
@@ -1407,6 +1410,8 @@
 - 同じシートを2回測ると全く同じ数値になるので、エージェントは編集の前後を比べられる。 <sub>`measuring_the_same_sheet_twice_gives_the_same_numbers`</sub>
 - tidy_issuesは数えた問題を1件ずつ、種類・関係するエンティティ・文字・場所つきで並べ、件数と一致するので、エージェントは1件ずつ見つけて直せる。 <sub>`tidy_issues_name_each_counted_problem`</sub>
 - 区間ケーブルの文字 (注記・芯数・扇の芯の呼び名) はケーブルが持つ文字として測られるので、ブロックの外形に乗った注記は文字の重なりとして詳細にも出て、何も無い所の注記は出ない。 <sub>`run_cable_text_is_measured_and_can_overlap`</sub>
+- グリッド外の接続点を持つシンボルをグリッドの外に置いても、その接続点で終わる配線も、グリッド外には数えない。そうした接続点に触れない配線は数える。 <sub>`free_pin_symbols_and_their_wires_are_not_off_grid`</sub>
+- 線番を描かないシートでは、描かれない線番を「重なる文字」に数えない。 <sub>`hidden_wire_numbers_are_not_counted_as_text`</sub>
 
 ### 整えバリアント (シート複製 / 採用)
 
@@ -2652,6 +2657,12 @@
 - 端子番号を上書きした多段端子台でも、1段ぶんの範囲はその段の列の外側に括弧を掛ける <sub>`pinGroupBracket`</sub>
 - シンボルの2つの辺にまたがるピン (向きが揃わない) への括弧は拒否される <sub>`pinGroupBracket`</sub>
 
+### pinSnap
+
+- カーソルの近く (1.25mm 以内) にグリッド外のピンがあれば、そのピンちょうどの位置を返す。配線はピンにつながる <sub>`snapping the wire tool to off-grid pins`</sub>
+- 1.25mm より遠いとき、グリッド上のピンの近くのとき、シートが無いときは何も返さない (グリッドへ吸着する) <sub>`snapping the wire tool to off-grid pins`</sub>
+- グリッド外のピンが2つ近くにあれば、近いほうを返す <sub>`snapping the wire tool to off-grid pins`</sub>
+
 ### relayXref
 
 - 同じ参照記号を持つコイルと接点は、1つのリレーデバイスとしてまとめられる。 <sub>`relayXref`</sub>
@@ -2805,6 +2816,9 @@
 - 書体の設定のペンの太さは0.1〜1.0mmだけを使う。範囲外・未設定は無いものとして扱う <sub>`text pen`</sub>
 - 書体の字間は全ての文字の送りに掛かり、注記の字間はさらにそれに掛かる。字間1のときの幅を基準に、送りの分だけ幅が変わる <sub>`letter spacing of the font and of a note`</sub>
 - 字間は0.3〜3だけを使う。範囲外・未設定は1として扱う <sub>`letter spacing of the font and of a note`</sub>
+- 横の伸縮率は字形の x と幅の両方に掛かる。書体が0.5なら幅は半分、字の横線も半分の長さになり、高さは変わらない。注記の伸縮率はさらに掛かる <sub>`horizontal stretch of the font and of a note`</sub>
+- 横の伸縮率は0.3〜3だけを使う。範囲外・未設定は1として扱う <sub>`horizontal stretch of the font and of a note`</sub>
+- 書体の横の伸縮率は図枠の文字には効かない。図枠の文字の範囲の中では伸縮率なしの幅になり、出ると戻る <sub>`frame text and the font stretch`</sub>
 
 ### surfer
 
@@ -2836,6 +2850,7 @@
 - 方向ボタンで足した接続点は、図形の外側1グリッドの位置にグリッドに乗って置かれる <sub>`symbol editor canvas geometry`</sub>
 - 同じ方向にもう1本足しても、接続点が同じ点に重なることはない <sub>`symbol editor canvas geometry`</sub>
 - 過不足のないシンボルは指摘ゼロで保存できる <sub>`symbol editor validation`</sub>
+- free_pins を付けたシンボルは、グリッド外の接続点があっても保存前チェックを通る。座標が数でなければ指摘される <sub>`symbol editor validation`</sub>
 - 2.5mmグリッドから外れた接続点は保存前に指摘される <sub>`symbol editor validation`</sub>
 - 同じ位置に同じ番号の接続点が2つあると保存前に指摘される <sub>`symbol editor validation`</sub>
 - 同じ位置に別番号の接続点が重なっていると保存前に指摘される <sub>`symbol editor validation`</sub>

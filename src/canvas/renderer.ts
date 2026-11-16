@@ -104,7 +104,7 @@ import { wireNoteFont, wireNoteLabels } from "./wireNotes";
 import { symbolWeightMm, vividWireColorScreen, WIRE_DASH, wireWeightMm, wireWeightOf } from "./wireStyle";
 import { captionLayoutOf, type CaptionLine } from "./caption";
 import { arrowHead } from "./shapes";
-import { textSpacingOf, withTextSpacing } from "./strokeFont";
+import { textSpacingOf, textStretchOf, withTextSpacing, withTextStretch } from "./strokeFont";
 import { TAG_FONT, netTag } from "./netTag";
 import { XREF_FONT, deviceXrefAt, xrefTextAt } from "./xref";
 import { annotationScale } from "./annotationText";
@@ -1553,7 +1553,7 @@ export function renderSheet(
       ctx.textAlign = canvasTextAlign(e.anchor);
       // 回転 (90・180・270、時計回り) は基準点を中心に回す (svg.rs と同じ)。0 は従来どおり
       const turn = noteTurnDeg(e.rotation);
-      withTextSpacing(textSpacingOf(e), () => {
+      withTextStretch(textStretchOf(e), () => withTextSpacing(textSpacingOf(e), () => {
         if (turn) {
           ctx.save();
           ctx.translate(s.x, s.y);
@@ -1563,7 +1563,7 @@ export function renderSheet(
         } else {
           drawingText(ctx, e.text, s.x, s.y);
         }
-      });
+      }));
       ctx.textAlign = "left";
       // 引き出し線 (G20): 対象がシート上に実在すれば、注記の辺から対象の外形まで
       // 毎回求め直して引く (位置は保存しないので、どちらを動かしても追従する)

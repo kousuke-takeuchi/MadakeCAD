@@ -587,7 +587,7 @@ mod tests {
     #[test]
     fn every_page_of_the_pdf_book_uses_the_stroke_font() {
         let (mut project, options) = full_book();
-        project.text_font = Some(TextFont { id: "kst32b".into(), latin: Latin::Half, pen_mm: None, spacing: None, });
+        project.text_font = Some(TextFont { id: "kst32b".into(), latin: Latin::Half, pen_mm: None, spacing: None, stretch: None, });
         let pages = project_pdf_pages(&project, &options);
         // 表紙1 + 回路2 + 盤1 + 帳票9種 (どれも1枚以上)
         assert!(pages.len() >= 13, "{}", pages.len());
@@ -606,7 +606,7 @@ mod tests {
         let fresh = project_pdf_pages(&plain, &options);
         assert!(fresh.iter().any(|p| p.contains("<text")));
         let mut stroked = plain.clone();
-        stroked.text_font = Some(TextFont { id: "kst32b".into(), latin: Latin::Half, pen_mm: None, spacing: None, });
+        stroked.text_font = Some(TextFont { id: "kst32b".into(), latin: Latin::Half, pen_mm: None, spacing: None, stretch: None, });
         assert_ne!(project_pdf_pages(&stroked, &options), fresh);
         assert_eq!(project_pdf_pages(&plain, &options), fresh);
     }

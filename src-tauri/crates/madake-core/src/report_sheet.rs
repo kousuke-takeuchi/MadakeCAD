@@ -1394,7 +1394,7 @@ mod tests {
     }
 
     fn kst32b() -> TextFont {
-        TextFont { id: "kst32b".into(), latin: Latin::Half, pen_mm: None, spacing: None, }
+        TextFont { id: "kst32b".into(), latin: Latin::Half, pen_mm: None, spacing: None, stretch: None, }
     }
 
     /// With a stroke font every report page, of every kind, is lettered with strokes and keeps no text element.

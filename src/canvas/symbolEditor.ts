@@ -332,7 +332,12 @@ export function validateSymbol(def: SymbolDef, reservedIds: readonly string[] = 
       out.push(error("symbol.pin_number_empty", { x: pin.at.x, y: pin.at.y }));
       continue;
     }
-    if (!onGrid(pin.at.x) || !onGrid(pin.at.y)) {
+    // free_pins のシンボルは接続点をグリッドに縛らない (有限の数であることだけ。Rust の validate と同じ)
+    if (def.free_pins) {
+      if (!Number.isFinite(pin.at.x) || !Number.isFinite(pin.at.y)) {
+        out.push(error("symbol.pin_off_grid", { number, x: pin.at.x, y: pin.at.y }));
+      }
+    } else if (!onGrid(pin.at.x) || !onGrid(pin.at.y)) {
       out.push(error("symbol.pin_off_grid", { number, x: pin.at.x, y: pin.at.y }));
     }
     const point = key(pin);

@@ -135,6 +135,14 @@ describe("symbol editor validation", () => {
     expect(validateSymbol(goodSymbol(), ["relay_coil"])).toEqual([]);
   });
 
+  // ja: free_pins を付けたシンボルは、グリッド外の接続点があっても保存前チェックを通る。座標が数でなければ指摘される
+  it("lets a free-pin symbol keep connection points off the grid", () => {
+    const def = { ...goodSymbol({ pins: [pin("1", -7.5, 0), pin("2", 7.5, 1.2)] }), free_pins: true };
+    expect(codes(def)).not.toContain("symbol.pin_off_grid");
+    const broken = { ...goodSymbol({ pins: [pin("1", Number.NaN, 0), pin("2", 7.5, 0)] }), free_pins: true };
+    expect(codes(broken)).toContain("symbol.pin_off_grid");
+  });
+
   // ja: 2.5mmグリッドから外れた接続点は保存前に指摘される
   it("reports a connection point that is off the 2.5 mm grid", () => {
     const def = goodSymbol({ pins: [pin("1", -7.5, 0), pin("2", 7.5, 1.2)] });

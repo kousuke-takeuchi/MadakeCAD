@@ -47,6 +47,7 @@ fn add_text(doc: &SharedDoc, label: &str) -> Command {
             bold: false,
             leader_to: None,
             spacing: None,
+            stretch: None,
         }),
     }
 }

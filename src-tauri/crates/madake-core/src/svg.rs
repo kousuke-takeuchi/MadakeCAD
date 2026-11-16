@@ -183,13 +183,22 @@ struct ActiveFont {
     pen: Option<f64>,
     /// 字間の倍率 (書体の字間 × 注記などの字間)。セルの字間にはさらにこれを掛ける。
     spacing: f64,
+    /// 字の横の伸縮率 (書体 × 注記)。字形の x と送りに掛ける。
+    stretch: f64,
 }
 
 /// ストロークフォントが有効な間だけ、字間にさらに倍率を掛ける (注記の字間)。`None`・1・範囲外ならそのまま。
 fn spacing_scope(spacing: Option<f64>) -> TextFontScope {
+    note_text_scope(spacing, None)
+}
+
+/// ストロークフォントが有効な間だけ、注記の字間と横の伸縮率を書体の値に掛ける。`None`・範囲外はそのまま。
+fn note_text_scope(spacing: Option<f64>, stretch: Option<f64>) -> TextFontScope {
     let previous = TEXT_FONT.with(|c| c.get());
-    if let (Some(active), Some(k)) = (previous, spacing.filter(|v| crate::model::is_text_spacing(*v))) {
-        TEXT_FONT.with(|c| c.set(Some(ActiveFont { spacing: active.spacing * k, ..active })));
+    if let Some(active) = previous {
+        let k = spacing.filter(|v| crate::model::is_text_spacing(*v)).unwrap_or(1.0);
+        let st = stretch.filter(|v| crate::model::is_text_spacing(*v)).unwrap_or(1.0);
+        TEXT_FONT.with(|c| c.set(Some(ActiveFont { spacing: active.spacing * k, stretch: active.stretch * st, ..active })));
     }
     TextFontScope { previous }
 }
@@ -219,15 +228,17 @@ impl Drop for TextFontScope {
 
 /// プロジェクトの書体を、戻り値を持っている間だけ有効にする。`None`や知らないidはシステムの書体。
 pub fn text_font_scope(text_font: Option<&crate::model::TextFont>) -> TextFontScope {
-    let next = text_font.and_then(|tf| crate::stroke_font::font(&tf.id).map(|font| ActiveFont { font, latin: tf.latin, pen: tf.pen(), spacing: tf.spacing() }));
+    let next = text_font.and_then(|tf| crate::stroke_font::font(&tf.id).map(|font| ActiveFont { font, latin: tf.latin, pen: tf.pen(), spacing: tf.spacing(), stretch: tf.stretch() }));
     TextFontScope { previous: TEXT_FONT.with(|c| c.replace(next)) }
 }
 
 /// ストロークフォントが有効な間だけ、英数字の字 (半角・全角) を上書きする。`None`ならそのまま。
+///
+/// 図枠の文字には書体の横の伸縮率を掛けない (図枠は自分のセルの大きさと字間で幅を決めているため)。
 fn latin_scope(latin: Option<crate::model::Latin>) -> TextFontScope {
     let previous = TEXT_FONT.with(|c| c.get());
-    if let (Some(active), Some(latin)) = (previous, latin) {
-        TEXT_FONT.with(|c| c.set(Some(ActiveFont { latin, ..active })));
+    if let Some(active) = previous {
+        TEXT_FONT.with(|c| c.set(Some(ActiveFont { latin: latin.unwrap_or(active.latin), stretch: 1.0, ..active })));
     }
     TextFontScope { previous }
 }
@@ -237,8 +248,7 @@ fn latin_scope(latin: Option<crate::model::Latin>) -> TextFontScope {
 pub(crate) fn text_advance(s: &str, size: f64, spacing: f64) -> f64 {
     TEXT_FONT
         .with(|c| c.get())
-        .and_then(|f| f.font.layout(s, size, f.latin, spacing * f.spacing))
-        .map(|t| t.width)
+        .and_then(|f| f.font.layout(s, size, f.latin, spacing * f.spacing).map(|t| t.width * f.stretch))
         .unwrap_or_else(|| crate::tidy::text_width(s, size))
 }
 
@@ -250,15 +260,18 @@ fn stroke_text_el(out: &mut String, x: f64, y: f64, size: f64, fill: &str, ancho
     if t.polylines.is_empty() {
         return true;
     }
+    // 横の伸縮率は字形の x と幅の両方に掛ける (基準点は動かない)
+    let st = active.stretch;
+    let width = t.width * st;
     let dx = match anchor {
-        "middle" => -t.width / 2.0,
-        "end" => -t.width,
+        "middle" => -width / 2.0,
+        "end" => -width,
         _ => 0.0,
     };
     let mut d = String::new();
     for line in &t.polylines {
         for (i, (px, py)) in line.iter().enumerate() {
-            let _ = write!(d, "{}{} {} ", if i == 0 { "M" } else { "L" }, n(x + dx + px), n(y + py));
+            let _ = write!(d, "{}{} {} ", if i == 0 { "M" } else { "L" }, n(x + dx + px * st), n(y + py));
         }
     }
     let _ = writeln!(
@@ -2026,7 +2039,7 @@ fn sheet_to_svg_with_xrefs(
             Entity::Text(t) => {
                 // 注記の装飾 (G4): 基準位置・色トークン・太字。既定の注記は従来と同じ出力。
                 // 回転 (90・180・270、時計回り) は基準点を中心に回す。0 のときは何も足さない
-                let _note_spacing = spacing_scope(t.spacing);
+                let _note_spacing = note_text_scope(t.spacing, t.stretch);
                 let turned = matches!(t.rotation % 360, 90 | 180 | 270);
                 if turned {
                     let _ = write!(
@@ -2904,6 +2917,7 @@ mod tests {
             bold: false,
             leader_to: None,
             spacing: None,
+            stretch: None,
         }
     }
 
@@ -5116,6 +5130,7 @@ mod tests {
             bold: false,
             leader_to: None,
             spacing: None,
+            stretch: None,
         };
         note.leader_to = Some(target_id);
         sheet.entities.insert(target_id, target);
@@ -5330,7 +5345,7 @@ mod tests {
     }
 
     fn kst(latin: crate::model::Latin) -> crate::model::TextFont {
-        crate::model::TextFont { id: "kst32b".into(), latin, pen_mm: None, spacing: None }
+        crate::model::TextFont { id: "kst32b".into(), latin, pen_mm: None, spacing: None, stretch: None }
     }
 
     /// 文字を持つ要素をひととおり置いたプロジェクト: リレー2枚組 + 注記付き配線 + ネットラベル + 表題欄 +
@@ -5745,7 +5760,7 @@ mod tests {
     /// 書体にペンの太さがあると、文字は大きさによらずその太さで描かれ、太字は1.5倍になる。ペンの太さが無ければ、太さは文字の大きさに比例する。
     #[test]
     fn a_text_pen_fixes_the_stroke_width() {
-        let font = |pen| crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Half, pen_mm: pen, spacing: None, };
+        let font = |pen| crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Half, pen_mm: pen, spacing: None, stretch: None, };
         {
             let _scope = text_font_scope(Some(&font(None)));
             assert!((text_stroke_width(10.0, false) - 0.7).abs() < 1e-9);
@@ -5798,7 +5813,7 @@ mod tests {
     /// 書体の字間は全ての文字を詰め、注記の字間はそれに掛かる: 書体が0.5で注記が2.0なら、字間なしの文字と同じ幅になる。
     #[test]
     fn font_and_note_spacing_multiply() {
-        let font = |spacing| crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Half, pen_mm: None, spacing };
+        let font = |spacing| crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Half, pen_mm: None, spacing, stretch: None };
         let plain = {
             let _scope = text_font_scope(Some(&font(None)));
             text_advance("ABCDE", 5.0, 1.0)
@@ -5844,5 +5859,51 @@ mod tests {
         assert!(!sheet_to_svg(&sheet, &builtin_symbols(), &[]).contains(">BUS_L<"));
         let Entity::Wire(w) = sheet.entities.values().next().unwrap() else { unreachable!() };
         assert_eq!(w.net.as_deref(), Some("BUS_L"));
+    }
+
+    /// The horizontal stretch of the font narrows the glyphs and the width together and leaves the height alone; a note's own stretch multiplies it.
+    /// 書体の横の伸縮率は、字形と幅を一緒に縮め、高さは変えない。注記の伸縮率はそれに掛かる。
+    #[test]
+    fn the_text_stretch_scales_glyphs_and_width() {
+        let font = |stretch| crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Half, pen_mm: None, spacing: None, stretch };
+        let path_xs = |out: &str| -> (f64, f64, f64, f64) {
+            let d = out.split("d=\"").nth(1).unwrap().split('"').next().unwrap();
+            let nums: Vec<f64> = d.split_whitespace().filter_map(|t| t.trim_start_matches(['M', 'L']).parse().ok()).collect();
+            let xs: Vec<f64> = nums.iter().step_by(2).copied().collect();
+            let ys: Vec<f64> = nums.iter().skip(1).step_by(2).copied().collect();
+            (xs.iter().cloned().fold(f64::MAX, f64::min), xs.iter().cloned().fold(f64::MIN, f64::max), ys.iter().cloned().fold(f64::MAX, f64::min), ys.iter().cloned().fold(f64::MIN, f64::max))
+        };
+        let draw = |f: &crate::model::TextFont, note: Option<f64>| {
+            let _scope = text_font_scope(Some(f));
+            let _note = note_text_scope(None, note);
+            let mut out = String::new();
+            assert!(stroke_text_el(&mut out, 0.0, 10.0, 5.0, "#000", "start", false, 1.0, "HH"));
+            (path_xs(&out), text_advance("HH", 5.0, 1.0))
+        };
+        let ((x0, x1, y0, y1), w) = draw(&font(None), None);
+        let ((nx0, nx1, ny0, ny1), nw) = draw(&font(Some(0.5)), None);
+        assert!((nw - w / 2.0).abs() < 1e-9, "幅は半分: {nw} {w}");
+        assert!((nx0 - x0 / 2.0).abs() < 1e-3 && (nx1 - x1 / 2.0).abs() < 1e-3, "字形の x も半分: {nx0} {nx1} / {x0} {x1}");
+        assert_eq!((ny0, ny1), (y0, y1), "高さは変わらない");
+        let (_, back) = draw(&font(Some(0.5)), Some(2.0));
+        assert!((back - w).abs() < 1e-9, "注記の2倍で元の幅");
+    }
+
+    /// The horizontal stretch of the font does not reach the frame: inside the frame's text scope a text is as wide as without any stretch, and after the scope the stretch applies again.
+    /// 書体の横の伸縮率は図枠には効かない: 図枠の文字の範囲の中では、文字は伸縮率なしと同じ幅になり、範囲を出ると伸縮率が戻る。
+    #[test]
+    fn the_frame_text_ignores_the_font_stretch() {
+        let font = |stretch| crate::model::TextFont { id: "kst32b".into(), latin: crate::model::Latin::Half, pen_mm: None, spacing: None, stretch };
+        let plain = {
+            let _scope = text_font_scope(Some(&font(None)));
+            text_advance("ABC", 5.0, 1.0)
+        };
+        let _scope = text_font_scope(Some(&font(Some(0.5))));
+        assert!((text_advance("ABC", 5.0, 1.0) - plain / 2.0).abs() < 1e-9);
+        {
+            let _frame = latin_scope(None);
+            assert!((text_advance("ABC", 5.0, 1.0) - plain).abs() < 1e-9);
+        }
+        assert!((text_advance("ABC", 5.0, 1.0) - plain / 2.0).abs() < 1e-9);
     }
 }

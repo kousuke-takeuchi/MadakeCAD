@@ -147,6 +147,7 @@ mod tests {
             bold: false,
             leader_to: None,
             spacing: None,
+            stretch: None,
         }
     }
 

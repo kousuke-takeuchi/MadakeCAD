@@ -67,7 +67,7 @@ pub fn tidy_metrics(sheet: &Sheet, symbols: &[SymbolDef]) -> TidyMetrics {
         crossings: wire_crossings(sheet),
         label_overlaps: label_overlaps(sheet, symbols),
         symbol_overlaps: symbol_overlaps(sheet, symbols),
-        off_grid: off_grid_count(sheet),
+        off_grid: off_grid_count(sheet, symbols),
     }
 }
 
@@ -353,8 +353,9 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
             _ => {}
         }
     }
-    // 線番はネットごとに代表線分の脇へ1回だけ描かれる (SVG出力と同じ位置)
-    for net in crate::netlist::extract_wire_nets(sheet, symbols) {
+    // 線番はネットごとに代表線分の脇へ1回だけ描かれる (SVG出力と同じ位置)。線番を描かないシートでは数えない
+    let numbered = if sheet.hide_wire_numbers { Vec::new() } else { crate::netlist::extract_wire_nets(sheet, symbols) };
+    for net in numbered {
         let Some(no) = net.wire_no.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
             continue;
         };
@@ -569,12 +570,29 @@ pub fn is_on_grid(p: &Point) -> bool {
 }
 
 /// 2.5mmグリッドから外れている点の数 (シンボル原点・配線頂点)。ずれた点1つにつき1件。
-pub fn off_grid_count(sheet: &Sheet) -> usize {
-    off_grid_issues(sheet).len()
+pub fn off_grid_count(sheet: &Sheet, symbols: &[SymbolDef]) -> usize {
+    off_grid_issues(sheet, symbols).len()
 }
 
 /// [`off_grid_count`]が数える点を1件ずつ。
-pub fn off_grid_issues(sheet: &Sheet) -> Vec<TidyIssue> {
+///
+/// グリッド外の接続点を持つシンボル (`free_pins`) は数えない: その配置点と、その接続点に頂点が乗る配線は、
+/// 意図してグリッドの外にある (グリッドへ寄せると接続が切れる)。
+pub fn off_grid_issues(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TidyIssue> {
+    let defs = crate::symbol::DefIndex::new(symbols);
+    let mut free_ids: std::collections::BTreeSet<EntityId> = Default::default();
+    let mut free_pins: Vec<Point> = Vec::new();
+    for entity in sheet.entities.values() {
+        let Entity::Symbol(s) = entity else { continue };
+        let Some(def) = defs.get(s) else { continue };
+        if def.free_pins {
+            free_ids.insert(s.id);
+            free_pins.extend(crate::pin_wiring::part_pins(s, &def).pins.iter().map(|p| Point::new(p.x, p.y)));
+        }
+    }
+    let on_free_pin = |w: &crate::model::Wire| {
+        w.points.iter().any(|p| free_pins.iter().any(|q| p.distance_to(q) < crate::netlist::CONNECT_EPS))
+    };
     let issue = |id: EntityId, at: Point| TidyIssue {
         kind: TidyIssueKind::OffGrid,
         entity_ids: vec![id],
@@ -584,7 +602,8 @@ pub fn off_grid_issues(sheet: &Sheet) -> Vec<TidyIssue> {
     let mut issues = Vec::new();
     for entity in sheet.entities.values() {
         match entity {
-            Entity::Symbol(s) if !is_on_grid(&s.at) => issues.push(issue(s.id, s.at)),
+            Entity::Symbol(s) if !is_on_grid(&s.at) && !free_ids.contains(&s.id) => issues.push(issue(s.id, s.at)),
+            Entity::Wire(w) if on_free_pin(w) => {}
             Entity::Wire(w) => issues.extend(
                 w.points.iter().filter(|p| !is_on_grid(p)).map(|p| issue(w.id, *p)),
             ),
@@ -626,7 +645,7 @@ pub fn tidy_issues(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TidyIssue> {
     let mut issues = crossing_issues(sheet);
     issues.extend(label_overlap_issues(sheet, symbols));
     issues.extend(symbol_overlap_issues(sheet, symbols));
-    issues.extend(off_grid_issues(sheet));
+    issues.extend(off_grid_issues(sheet, symbols));
     issues
 }
 
@@ -701,6 +720,7 @@ mod tests {
             bold: false,
             leader_to: None,
             spacing: None,
+            stretch: None,
         })
     }
 
@@ -979,7 +999,7 @@ mod tests {
             symbol("resistor", (100.0, 50.0), "R1"),
             wire(&[(50.0, 50.0), (92.5, 50.0)]),
         ]);
-        assert_eq!(off_grid_count(&sheet), 0);
+        assert_eq!(off_grid_count(&sheet, &builtin_symbols()), 0);
     }
 
     /// A point shifted by 0.1 mm off the grid is counted, and each stray vertex counts once.
@@ -990,7 +1010,7 @@ mod tests {
             symbol("resistor", (100.1, 50.0), "R1"),
             wire(&[(50.0, 50.1), (92.6, 50.0)]),
         ]);
-        assert_eq!(off_grid_count(&sheet), 3);
+        assert_eq!(off_grid_count(&sheet, &builtin_symbols()), 3);
     }
 
     /// A hidden designator takes no space in the tidy metrics, because it is not printed.
@@ -1121,5 +1141,47 @@ mod tests {
         let issues = label_overlap_issues(&covered, &defs);
         assert!(issues[0].entity_ids.contains(&id));
         assert!(issues[0].texts.iter().any(|t| t.starts_with("W1")), "{issues:?}");
+    }
+
+    /// A symbol with free connection points placed off the grid, and a wire that ends on one of its points, are not counted as off-grid; a wire that touches no such point still is.
+    /// グリッド外の接続点を持つシンボルをグリッドの外に置いても、その接続点で終わる配線も、グリッド外には数えない。そうした接続点に触れない配線は数える。
+    #[test]
+    fn free_pin_symbols_and_their_wires_are_not_off_grid() {
+        use crate::symbol::{PinDef, PinDir, Primitive};
+        let def = SymbolDef {
+            id: "user_free".into(),
+            name: "Free".into(),
+            name_ja: "自由ピン".into(),
+            category: "user".into(),
+            ref_prefix: "CN".into(),
+            keywords: vec![],
+            primitives: vec![Primitive::Rect { p1: Point::new(0.0, -2.0), p2: Point::new(3.9, 5.3), filled: false }],
+            pins: vec![PinDef { number: "1".into(), name: String::new(), at: Point::new(0.0, 0.0), dir: PinDir::Left, contacts: vec![] }],
+            text_slots: vec![],
+            free_pins: true,
+        };
+        let mut defs = builtin_symbols();
+        defs.push(def);
+        let sheet = sheet_with(vec![
+            symbol("user_free", (118.7, 63.1), "CN1"),
+            wire(&[(62.1, 81.7), (62.1, 63.1), (118.7, 63.1)]),
+            wire(&[(50.3, 20.0), (60.0, 20.0)]),
+        ]);
+        assert_eq!(off_grid_count(&sheet, &defs), 1, "接続点に触れない配線の1点だけ");
+    }
+
+    /// On a sheet that hides wire numbers, a hidden wire number is not counted as text that overlaps something.
+    /// 線番を描かないシートでは、描かれない線番を「重なる文字」に数えない。
+    #[test]
+    fn hidden_wire_numbers_are_not_counted_as_text() {
+        let mut named = wire(&[(50.0, 50.0), (90.0, 50.0)]);
+        if let Entity::Wire(w) = &mut named {
+            w.net = Some("BUS_L".into());
+        }
+        let mut sheet = sheet_with(vec![named]);
+        let count = |s: &Sheet| text_boxes(s, &builtin_symbols()).iter().filter(|b| b.text == "BUS_L").count();
+        assert_eq!(count(&sheet), 1);
+        sheet.hide_wire_numbers = true;
+        assert_eq!(count(&sheet), 0);
     }
 }

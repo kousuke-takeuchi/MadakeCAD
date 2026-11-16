@@ -70,7 +70,25 @@ export function layoutStroke(
 }
 
 /** いまキャンバスで有効な書体 (プロジェクトの`text_font`。未設定・読み込み前は null)。 */
-let active: { font: StrokeFontData; latin: Latin; pen: number | null; spacing: number } | null = null;
+let active: { font: StrokeFontData; latin: Latin; pen: number | null; spacing: number; stretch: number } | null = null;
+
+/** 字の横の伸縮率を読む。未設定・範囲外 (0.3〜3 の外) は1。 */
+export function textStretchOf(v: { stretch?: number | null } | null | undefined): number {
+  const k = v?.stretch;
+  return typeof k === "number" && Number.isFinite(k) && k >= 0.3 && k <= 3 ? k : 1;
+}
+
+/** `fn` の間だけ、有効な書体の横の伸縮率にさらに倍率を掛ける (注記の伸縮率)。1 ならそのまま。 */
+export function withTextStretch<T>(k: number, fn: () => T): T {
+  if (!active || k === 1) return fn();
+  const previous = active;
+  active = { ...active, stretch: active.stretch * k };
+  try {
+    return fn();
+  } finally {
+    active = previous;
+  }
+}
 
 /** 字間の倍率の範囲。Rust 側 model.rs の MIN/MAX_TEXT_SPACING と同じ。 */
 export const MIN_TEXT_SPACING = 0.3;
@@ -111,8 +129,14 @@ export function textStrokeWidth(size: number, bold: boolean): number {
 }
 
 /** 有効な書体を切り替える (null でシステムの書体へ戻す)。キャンバス用の配置のキャッシュも捨てる。 */
-export function setActiveStrokeFont(font: StrokeFontData | null, latin: Latin, pen: number | null = null, spacing = 1): void {
-  active = font ? { font, latin, pen, spacing } : null;
+export function setActiveStrokeFont(
+  font: StrokeFontData | null,
+  latin: Latin,
+  pen: number | null = null,
+  spacing = 1,
+  stretch = 1,
+): void {
+  active = font ? { font, latin, pen, spacing, stretch } : null;
   unitCache.clear();
 }
 
@@ -145,7 +169,8 @@ export function activeUnitStroke(text: string, cellSpacing = 1): UnitStroke | nu
   if (!active) return null;
   // 書体 (と注記) の字間を掛ける。キャッシュの鍵にも掛けたあとの値を使う
   const spacing = cellSpacing * active.spacing;
-  const key = `${active.font.id}\u0000${active.latin}\u0000${spacing}\u0000${text}`;
+  const stretch = active.stretch;
+  const key = `${active.font.id}\u0000${active.latin}\u0000${spacing}\u0000${stretch}\u0000${text}`;
   const hit = unitCache.get(key);
   if (hit !== undefined) {
     // 最近使ったものを後ろへ (上限を超えたとき先頭の古いものから捨てる)
@@ -157,7 +182,8 @@ export function activeUnitStroke(text: string, cellSpacing = 1): UnitStroke | nu
   let entry: UnitStroke | null = null;
   if (t) {
     const unit = CAP_HEIGHT_RATIO / Math.max(1, active.font.cap_top - active.font.baseline);
-    const lines = t.polylines.map((l) => l.flat());
+    // 横の伸縮率は字形の x と幅の両方に掛ける
+    const lines = t.polylines.map((l) => l.flat().map((v, i) => (i % 2 === 0 ? v * stretch : v)));
     let path: Path2D | null = null;
     if (typeof Path2D !== "undefined" && lines.length > 0) {
       path = new Path2D();
@@ -168,7 +194,7 @@ export function activeUnitStroke(text: string, cellSpacing = 1): UnitStroke | nu
         }
       }
     }
-    entry = { width: t.width, descent: active.font.baseline * unit, lines, path };
+    entry = { width: t.width * stretch, descent: active.font.baseline * unit, lines, path };
   }
   unitCache.set(key, entry);
   if (unitCache.size > UNIT_CACHE_MAX) {
@@ -184,9 +210,10 @@ export function activeStrokeFont(): { font: StrokeFontData; latin: Latin } | nul
 
 /** 有効な書体があれば、その間だけ英数字の字 (半角・全角) を上書きする (図枠テンプレートの`text_latin`)。 */
 export function withLatin<T>(latin: Latin | null | undefined, fn: () => T): T {
-  if (!active || !latin) return fn();
+  if (!active) return fn();
   const previous = active;
-  active = { ...active, latin };
+  // 図枠の文字には書体の横の伸縮率を掛けない (svg.rs の latin_scope と同じ)
+  active = { ...active, latin: latin ?? active.latin, stretch: 1 };
   try {
     return fn();
   } finally {
@@ -200,7 +227,7 @@ export function withLatin<T>(latin: Latin | null | undefined, fn: () => T): T {
  */
 export function textAdvanceMm(text: string, size: number, spacing = 1): number {
   const t = active ? layoutStroke(active.font, text, size, active.latin, spacing * active.spacing) : null;
-  return t ? t.width : textWidthMm(text, size);
+  return t ? t.width * (active?.stretch ?? 1) : textWidthMm(text, size);
 }
 
 /**

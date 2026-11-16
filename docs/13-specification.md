@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3321 specification clauses** across 6 areas.
+**3333 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -292,6 +292,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A symbol whose caption_layout cannot be read is refused and the document is not changed; a readable one is accepted on any symbol, not only on blocks. <sub>`a_symbol_with_a_bad_caption_layout_is_refused`</sub>
 - A letter spacing outside 0.3 to 3 is refused on the text font and on a note; a value inside is kept and saved. <sub>`letter_spacing_is_checked_on_the_font_and_on_notes`</sub>
 - The sheet wire style also stores the "hide wire numbers" switch, and undo puts it back. <sub>`set_sheet_wire_style_stores_hidden_wire_numbers`</sub>
+- A horizontal stretch outside 0.3 to 3 is refused on the text font and on a note; a value inside is kept and saved. <sub>`text_stretch_is_checked_on_the_font_and_on_notes`</sub>
 
 ### connector
 
@@ -1137,6 +1138,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The letter spacing of the font tightens every text, and a note's own spacing multiplies it: with the font at 0.5 a note at 2.0 is as wide as plain text. <sub>`font_and_note_spacing_multiply`</sub>
 - The line of an arrow stops at the base of the triangle, not at its tip, so a thick line does not stick out beside the tip. <sub>`the_line_of_an_arrow_stops_at_the_base_of_the_head`</sub>
 - A wire with an explicit net name shows that name as its wire number; a sheet that hides wire numbers does not write it, and the name stays on the wire. <sub>`a_sheet_can_hide_the_wire_numbers`</sub>
+- The horizontal stretch of the font narrows the glyphs and the width together and leaves the height alone; a note's own stretch multiplies it. <sub>`the_text_stretch_scales_glyphs_and_width`</sub>
+- The horizontal stretch of the font does not reach the frame: inside the frame's text scope a text is as wide as without any stretch, and after the scope the stretch applies again. <sub>`the_frame_text_ignores_the_font_stretch`</sub>
 
 ### Symbol library
 
@@ -1407,6 +1410,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Measuring the same sheet twice gives exactly the same numbers, so the agent can compare before and after. <sub>`measuring_the_same_sheet_twice_gives_the_same_numbers`</sub>
 - tidy_issues lists every counted problem with its kind, the entities involved, the text and where it is, one entry per count, so the agent can find and fix each one. <sub>`tidy_issues_name_each_counted_problem`</sub>
 - A run cable's text (label, core count, fan core names) is measured as text boxes owned by the cable, so a label lying over a block's outline is a label overlap that shows up in the issue details, while an unobstructed one is not. <sub>`run_cable_text_is_measured_and_can_overlap`</sub>
+- A symbol with free connection points placed off the grid, and a wire that ends on one of its points, are not counted as off-grid; a wire that touches no such point still is. <sub>`free_pin_symbols_and_their_wires_are_not_off_grid`</sub>
+- On a sheet that hides wire numbers, a hidden wire number is not counted as text that overlaps something. <sub>`hidden_wire_numbers_are_not_counted_as_text`</sub>
 
 ### Tidy variants (sheet copies / adopt)
 
@@ -2652,6 +2657,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - keeps a multi-level bracket outside its own column after an override <sub>`pinGroupBracket`</sub>
 - refuses a bracket across mixed pin directions <sub>`pinGroupBracket`</sub>
 
+### pinSnap
+
+- returns the exact place of an off-grid pin near the cursor <sub>`snapping the wire tool to off-grid pins`</sub>
+- returns nothing when no off-grid pin is near, for a pin on the grid, or without a sheet <sub>`snapping the wire tool to off-grid pins`</sub>
+- picks the nearer of two off-grid pins <sub>`snapping the wire tool to off-grid pins`</sub>
+
 ### relayXref
 
 - groups the coil and contacts that share a reference into one device <sub>`relayXref`</sub>
@@ -2805,6 +2816,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - reads a pen width only inside 0.1 to 1.0 mm <sub>`text pen`</sub>
 - multiplies the advance by the font spacing and then by the note spacing <sub>`letter spacing of the font and of a note`</sub>
 - reads a spacing only inside 0.3 to 3 <sub>`letter spacing of the font and of a note`</sub>
+- scales the glyph x and the width, not the height, and multiplies with the note's stretch <sub>`horizontal stretch of the font and of a note`</sub>
+- reads a stretch only inside 0.3 to 3 <sub>`horizontal stretch of the font and of a note`</sub>
+- does not stretch text inside the frame's text scope <sub>`frame text and the font stretch`</sub>
 
 ### surfer
 
@@ -2836,6 +2850,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - places a new connection point one grid step outside the shape on the chosen side <sub>`symbol editor canvas geometry`</sub>
 - never stacks a second connection point on the same point as an existing one <sub>`symbol editor canvas geometry`</sub>
 - reports no problem for a well-formed symbol <sub>`symbol editor validation`</sub>
+- lets a free-pin symbol keep connection points off the grid <sub>`symbol editor validation`</sub>
 - reports a connection point that is off the 2.5 mm grid <sub>`symbol editor validation`</sub>
 - reports two connection points with the same number at the same position <sub>`symbol editor validation`</sub>
 - reports two different connection point numbers stacked on one position <sub>`symbol editor validation`</sub>

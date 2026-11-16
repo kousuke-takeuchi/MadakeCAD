@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import shared from "../../src-tauri/crates/madake-core/tests/fixtures/stroke_layout_cases.json";
 import type { Latin, StrokeFontData } from "../ipc";
-import { textPenOf, textSpacingOf, textStrokeWidth, withTextSpacing } from "./strokeFont";
+import { textPenOf, textSpacingOf, textStretchOf, textStrokeWidth, withTextSpacing, withTextStretch } from "./strokeFont";
 import {
   UNIT_CACHE_MAX,
   activeStrokeFont,
@@ -263,6 +263,45 @@ describe("letter spacing of the font and of a note", () => {
     expect(textSpacingOf({ spacing: 0.1 })).toBe(1);
     expect(textSpacingOf({ spacing: null })).toBe(1);
     expect(textSpacingOf(null)).toBe(1);
+  });
+});
+
+describe("horizontal stretch of the font and of a note", () => {
+  const tiny: StrokeFontData = { id: "t", baseline: 0, cap_top: 25, glyphs: { L: { wide: false, strokes: [[2, 25, 2, 0, 12, 0]] } } };
+
+  // ja: 横の伸縮率は字形の x と幅の両方に掛かる。書体が0.5なら幅は半分、字の横線も半分の長さになり、高さは変わらない。注記の伸縮率はさらに掛かる
+  it("scales the glyph x and the width, not the height, and multiplies with the note's stretch", () => {
+    setActiveStrokeFont(tiny, "half");
+    const base = activeUnitStroke("LL")!;
+    setActiveStrokeFont(tiny, "half", null, 1, 0.5);
+    const narrow = activeUnitStroke("LL")!;
+    expect(narrow.width).toBeCloseTo(base.width / 2, 9);
+    expect(narrow.lines[0].filter((_, i) => i % 2 === 0)).toEqual(base.lines[0].filter((_, i) => i % 2 === 0).map((v) => v / 2));
+    expect(narrow.lines[0].filter((_, i) => i % 2 === 1)).toEqual(base.lines[0].filter((_, i) => i % 2 === 1));
+    expect(textAdvanceMm("LL", 10)).toBeCloseTo(withTextStretch(2, () => textAdvanceMm("LL", 10)) / 2, 9);
+    expect(withTextStretch(2, () => activeUnitStroke("LL")!.width)).toBeCloseTo(base.width, 9);
+  });
+
+  // ja: 横の伸縮率は0.3〜3だけを使う。範囲外・未設定は1として扱う
+  it("reads a stretch only inside 0.3 to 3", () => {
+    expect(textStretchOf({ stretch: 0.65 })).toBe(0.65);
+    expect(textStretchOf({ stretch: 9 })).toBe(1);
+    expect(textStretchOf(null)).toBe(1);
+  });
+});
+
+describe("frame text and the font stretch", () => {
+  const tiny: StrokeFontData = { id: "t", baseline: 0, cap_top: 25, glyphs: { L: { wide: false, strokes: [[2, 25, 2, 0, 12, 0]] } } };
+
+  // ja: 書体の横の伸縮率は図枠の文字には効かない。図枠の文字の範囲の中では伸縮率なしの幅になり、出ると戻る
+  it("does not stretch text inside the frame's text scope", () => {
+    setActiveStrokeFont(tiny, "half");
+    const plain = textAdvanceMm("LL", 10);
+    setActiveStrokeFont(tiny, "half", null, 1, 0.5);
+    expect(textAdvanceMm("LL", 10)).toBeCloseTo(plain / 2, 9);
+    expect(withLatin(null, () => textAdvanceMm("LL", 10))).toBeCloseTo(plain, 9);
+    expect(withLatin("half", () => textAdvanceMm("LL", 10))).toBeCloseTo(plain, 9);
+    expect(textAdvanceMm("LL", 10)).toBeCloseTo(plain / 2, 9);
   });
 });
 

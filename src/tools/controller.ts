@@ -1,5 +1,6 @@
 // 対話ツールの状態機械。ドラッグ中はローカルプレビュー、確定時にCommandを発行する。
 
+import { offGridPinNear } from "../canvas/pinSnap";
 import { harnessAddCommand, harnessRectPoints, harnessWireCount } from "../canvas/harness";
 import { cableAddCommand, cableHit, cablePoints, isCable, isRunCable } from "../canvas/cable";
 import { dimensionAddCommand, footprintAt, panelMarkHit } from "../canvas/panelMarks";
@@ -520,9 +521,14 @@ export class EditorController {
         break;
       }
       case "wire": {
-        const base = this.wirePoints.length
-          ? this.ortho(this.wirePoints[this.wirePoints.length - 1], this.snap(world))
-          : this.snap(world);
+        // グリッド外のピン (free_pins のシンボル) が近ければ、グリッドより先にそのピンちょうどへ吸着する。
+        // 直交の拘束はかけない (ピンから外れると接続されないため)
+        const pin = offGridPinNear(this.store.activeSheet, this.store.resolveInstance, world);
+        const base = pin
+          ? pin
+          : this.wirePoints.length
+            ? this.ortho(this.wirePoints[this.wirePoints.length - 1], this.snap(world))
+            : this.snap(world);
         this.wirePoints.push(base);
         break;
       }

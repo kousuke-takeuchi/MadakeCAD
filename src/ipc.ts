@@ -123,6 +123,8 @@ export interface TextEntity {
   leader_to?: string | null;
   /** 字間 (字の送りに掛ける倍率)。ストロークフォントのときだけ効き、書体の字間に掛ける。未設定は1。 */
   spacing?: number | null;
+  /** 字の横の伸縮率。ストロークフォントのときだけ効き、書体の伸縮率に掛ける。未設定は1。 */
+  stretch?: number | null;
 }
 
 /**
@@ -442,6 +444,8 @@ export interface TextFont {
   pen_mm?: number | null;
   /** 字間 (字の送りに掛ける倍率、0.3〜3)。図面の全ての文字に効く。未設定は1。 */
   spacing?: number | null;
+  /** 字の横の伸縮率 (字形と送りの両方、0.3〜3)。図面の全ての文字に効く。未設定は1。 */
+  stretch?: number | null;
 }
 
 /** PLC I/O割付表の1行 = I/O点1つ (Rustの`PlcAssignment`)。 */
