@@ -24329,6 +24329,41 @@
             },
             {
               "type": "frame",
+              "id": "wHGl4",
+              "name": "SIM重ね表示切替",
+              "fill": "#EAF2FC",
+              "cornerRadius": 8,
+              "gap": 4,
+              "padding": [
+                1,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "rnu5W",
+                  "name": "SIM重ね表示アイコン",
+                  "width": 11,
+                  "height": 11,
+                  "icon": "layers",
+                  "library": "lucide",
+                  "fill": "$acad-blue"
+                },
+                {
+                  "type": "text",
+                  "id": "gEKgV",
+                  "name": "SIM重ね表示文字",
+                  "fill": "$acad-blue",
+                  "content": "図面に重ねる",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
               "id": "BNVar",
               "name": "SIMスペーサ",
               "width": "fill_container",
@@ -24551,314 +24586,45 @@
         },
         {
           "type": "frame",
+          "id": "k3EpmF",
+          "name": "SIM古い結果",
+          "width": "fill_container",
+          "fill": "#FFF7ED",
+          "gap": 6,
+          "padding": [
+            3,
+            10
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "icon",
+              "id": "ul9RR",
+              "name": "SIM古い結果アイコン",
+              "width": 11,
+              "height": 11,
+              "icon": "refresh-cw",
+              "library": "lucide",
+              "fill": "#D97706"
+            },
+            {
+              "type": "text",
+              "id": "mc0Xx",
+              "name": "SIM古い結果文",
+              "fill": "#D97706",
+              "content": "図面が変わりました。再実行で更新してください",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 10,
+              "fontWeight": "600"
+            }
+          ]
+        },
+        {
+          "type": "frame",
           "id": "JPtmF",
           "name": "SIM本体",
           "width": "fill_container",
           "children": [
-            {
-              "type": "frame",
-              "id": "dVppj",
-              "name": "SIMネット列",
-              "width": 210,
-              "layout": "vertical",
-              "gap": 3,
-              "padding": [
-                6,
-                10
-              ],
-              "children": [
-                {
-                  "type": "text",
-                  "id": "Y51EeT",
-                  "name": "SIMネット見出し",
-                  "fill": "$ui-muted",
-                  "content": "ネット電圧",
-                  "fontFamily": "Noto Sans JP",
-                  "fontSize": 10,
-                  "fontWeight": "600"
-                },
-                {
-                  "type": "frame",
-                  "id": "kf74e",
-                  "name": "SIMネット行 1",
-                  "width": "fill_container",
-                  "gap": 8,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "blk6C",
-                      "name": "SIMネット名 1",
-                      "fill": "$ui-text",
-                      "content": "24V",
-                      "fontFamily": "JetBrains Mono",
-                      "fontSize": 11,
-                      "fontWeight": "normal"
-                    },
-                    {
-                      "type": "frame",
-                      "id": "YSRRo",
-                      "name": "SIMネットsp 1",
-                      "width": "fill_container",
-                      "height": 1
-                    },
-                    {
-                      "type": "text",
-                      "id": "WVtbK",
-                      "name": "SIMネット電圧 1",
-                      "fill": "$ui-text",
-                      "content": "24.00 V",
-                      "fontFamily": "JetBrains Mono",
-                      "fontSize": 11,
-                      "fontWeight": "600"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "WDI0e",
-                  "name": "SIMネット行 2",
-                  "width": "fill_container",
-                  "gap": 8,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "v2GEM",
-                      "name": "SIMネット名 2",
-                      "fill": "$ui-text",
-                      "content": "N001",
-                      "fontFamily": "JetBrains Mono",
-                      "fontSize": 11,
-                      "fontWeight": "normal"
-                    },
-                    {
-                      "type": "frame",
-                      "id": "uyxXh",
-                      "name": "SIMネットsp 2",
-                      "width": "fill_container",
-                      "height": 1
-                    },
-                    {
-                      "type": "text",
-                      "id": "BJjiI",
-                      "name": "SIMネット電圧 2",
-                      "fill": "$ui-text",
-                      "content": "23.86 〜 23.99 V",
-                      "fontFamily": "JetBrains Mono",
-                      "fontSize": 11,
-                      "fontWeight": "600"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "V4xak",
-                  "name": "SIMネット行 3",
-                  "width": "fill_container",
-                  "gap": 8,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "e3ak0R",
-                      "name": "SIMネット名 3",
-                      "fill": "$ui-text",
-                      "content": "0V",
-                      "fontFamily": "JetBrains Mono",
-                      "fontSize": 11,
-                      "fontWeight": "normal"
-                    },
-                    {
-                      "type": "frame",
-                      "id": "i4qaY",
-                      "name": "SIMネットsp 3",
-                      "width": "fill_container",
-                      "height": 1
-                    },
-                    {
-                      "type": "text",
-                      "id": "xBohh",
-                      "name": "SIMネット電圧 3",
-                      "fill": "$ui-text",
-                      "content": "0.00 V",
-                      "fontFamily": "JetBrains Mono",
-                      "fontSize": 11,
-                      "fontWeight": "600"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "hJ2pp",
-              "name": "SIM部品列",
-              "width": 230,
-              "stroke": "$ribbon-line",
-              "strokeWidth": {
-                "left": 1
-              },
-              "layout": "vertical",
-              "gap": 3,
-              "padding": [
-                6,
-                10
-              ],
-              "children": [
-                {
-                  "type": "text",
-                  "id": "mhbVT",
-                  "name": "SIM部品見出し",
-                  "fill": "$ui-muted",
-                  "content": "部品電流",
-                  "fontFamily": "Noto Sans JP",
-                  "fontSize": 10,
-                  "fontWeight": "600"
-                },
-                {
-                  "type": "frame",
-                  "id": "aM3lE",
-                  "name": "SIM部品行 1",
-                  "width": "fill_container",
-                  "gap": 8,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "X9UOZi",
-                      "name": "SIM部品名 1",
-                      "fill": "$ui-text",
-                      "content": "F1",
-                      "fontFamily": "JetBrains Mono",
-                      "fontSize": 11,
-                      "fontWeight": "normal"
-                    },
-                    {
-                      "type": "frame",
-                      "id": "tcVw0",
-                      "name": "SIM部品sp 1",
-                      "width": "fill_container",
-                      "height": 1
-                    },
-                    {
-                      "type": "text",
-                      "id": "uuEaQ",
-                      "name": "SIM部品A 1",
-                      "fill": "$ui-text",
-                      "content": "1.999 A",
-                      "fontFamily": "JetBrains Mono",
-                      "fontSize": 11,
-                      "fontWeight": "600"
-                    },
-                    {
-                      "type": "text",
-                      "id": "x9XSAK",
-                      "name": "SIM部品W 1",
-                      "fill": "$ui-muted",
-                      "content": "0.00 W",
-                      "fontFamily": "JetBrains Mono",
-                      "fontSize": 10,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "B5Xpm8",
-                  "name": "SIM部品行 2",
-                  "width": "fill_container",
-                  "gap": 8,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "zVAyI",
-                      "name": "SIM部品名 2",
-                      "fill": "$ui-text",
-                      "content": "L1",
-                      "fontFamily": "JetBrains Mono",
-                      "fontSize": 11,
-                      "fontWeight": "normal"
-                    },
-                    {
-                      "type": "frame",
-                      "id": "Nms0o",
-                      "name": "SIM部品sp 2",
-                      "width": "fill_container",
-                      "height": 1
-                    },
-                    {
-                      "type": "text",
-                      "id": "H11rpG",
-                      "name": "SIM部品A 2",
-                      "fill": "$ui-text",
-                      "content": "1.999 A",
-                      "fontFamily": "JetBrains Mono",
-                      "fontSize": 11,
-                      "fontWeight": "600"
-                    },
-                    {
-                      "type": "text",
-                      "id": "m0qdiE",
-                      "name": "SIM部品W 2",
-                      "fill": "$ui-muted",
-                      "content": "47.90 W",
-                      "fontFamily": "JetBrains Mono",
-                      "fontSize": 10,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "MlE1v",
-                  "name": "SIM部品行 3",
-                  "width": "fill_container",
-                  "gap": 8,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "wFWKU",
-                      "name": "SIM部品名 3",
-                      "fill": "$ui-text",
-                      "content": "SW1",
-                      "fontFamily": "JetBrains Mono",
-                      "fontSize": 11,
-                      "fontWeight": "normal"
-                    },
-                    {
-                      "type": "frame",
-                      "id": "pOzww",
-                      "name": "SIM部品sp 3",
-                      "width": "fill_container",
-                      "height": 1
-                    },
-                    {
-                      "type": "text",
-                      "id": "KXXa1",
-                      "name": "SIM部品A 3",
-                      "fill": "$ui-text",
-                      "content": "1.999 A",
-                      "fontFamily": "JetBrains Mono",
-                      "fontSize": 11,
-                      "fontWeight": "600"
-                    },
-                    {
-                      "type": "text",
-                      "id": "gMm07",
-                      "name": "SIM部品W 3",
-                      "fill": "$ui-muted",
-                      "content": "0.00 W",
-                      "fontFamily": "JetBrains Mono",
-                      "fontSize": 10,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                }
-              ]
-            },
             {
               "type": "frame",
               "id": "ftcde",
@@ -24866,7 +24632,7 @@
               "width": "fill_container",
               "stroke": "$ribbon-line",
               "strokeWidth": {
-                "left": 1
+                "right": 1
               },
               "layout": "vertical",
               "padding": [
@@ -24878,22 +24644,94 @@
                   "type": "frame",
                   "id": "LkGkB",
                   "name": "SIM定格見出し枠",
+                  "width": "fill_container",
+                  "gap": 8,
                   "padding": [
                     0,
                     10,
                     3,
                     10
                   ],
+                  "alignItems": "center",
                   "children": [
                     {
                       "type": "text",
                       "id": "EFuY0",
                       "name": "SIM定格見出し",
                       "fill": "$ui-muted",
-                      "content": "定格超過 (重い順・クリックで部品へ)",
+                      "content": "定格超過",
                       "fontFamily": "Noto Sans JP",
                       "fontSize": 10,
                       "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ya3A1",
+                      "name": "SIM絞り込み ✗ 1",
+                      "fill": "#FEF2F2",
+                      "cornerRadius": 8,
+                      "padding": [
+                        0,
+                        6
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "FoHwz",
+                          "name": "SIM絞り込み文字",
+                          "fill": "#DC2626",
+                          "content": "✗ 1",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 9,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "m5DkAP",
+                      "name": "SIM絞り込み ⚠ 6",
+                      "fill": "#FFF7ED",
+                      "cornerRadius": 8,
+                      "padding": [
+                        0,
+                        6
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "hCUhl",
+                          "name": "SIM絞り込み文字",
+                          "fill": "#D97706",
+                          "content": "⚠ 6",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 9,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "amLjf",
+                      "name": "SIM絞り込み ℹ 2",
+                      "fill": "#EFF6FF",
+                      "cornerRadius": 8,
+                      "padding": [
+                        0,
+                        6
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "B56TfE",
+                          "name": "SIM絞り込み文字",
+                          "fill": "#1D4ED8",
+                          "content": "ℹ 2",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 9,
+                          "fontWeight": "600"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -25168,6 +25006,578 @@
                   ]
                 }
               ]
+            },
+            {
+              "type": "frame",
+              "id": "dVppj",
+              "x": 0,
+              "y": 0,
+              "name": "SIMネット列",
+              "enabled": false,
+              "width": 210,
+              "layout": "vertical",
+              "gap": 3,
+              "padding": [
+                6,
+                10
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Y51EeT",
+                  "name": "SIMネット見出し",
+                  "fill": "$ui-muted",
+                  "content": "ネット電圧",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "kf74e",
+                  "name": "SIMネット行 1",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "blk6C",
+                      "name": "SIMネット名 1",
+                      "fill": "$ui-text",
+                      "content": "24V",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "YSRRo",
+                      "name": "SIMネットsp 1",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "WVtbK",
+                      "name": "SIMネット電圧 1",
+                      "fill": "$ui-text",
+                      "content": "24.00 V",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "WDI0e",
+                  "name": "SIMネット行 2",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "v2GEM",
+                      "name": "SIMネット名 2",
+                      "fill": "$ui-text",
+                      "content": "N001",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "uyxXh",
+                      "name": "SIMネットsp 2",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "BJjiI",
+                      "name": "SIMネット電圧 2",
+                      "fill": "$ui-text",
+                      "content": "23.86 〜 23.99 V",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "V4xak",
+                  "name": "SIMネット行 3",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "e3ak0R",
+                      "name": "SIMネット名 3",
+                      "fill": "$ui-text",
+                      "content": "0V",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "i4qaY",
+                      "name": "SIMネットsp 3",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "xBohh",
+                      "name": "SIMネット電圧 3",
+                      "fill": "$ui-text",
+                      "content": "0.00 V",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "hJ2pp",
+              "x": 210,
+              "y": 0,
+              "name": "SIM部品列",
+              "enabled": false,
+              "width": 230,
+              "stroke": "$ribbon-line",
+              "strokeWidth": {
+                "left": 1
+              },
+              "layout": "vertical",
+              "gap": 3,
+              "padding": [
+                6,
+                10
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "mhbVT",
+                  "name": "SIM部品見出し",
+                  "fill": "$ui-muted",
+                  "content": "部品電流",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "aM3lE",
+                  "name": "SIM部品行 1",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "X9UOZi",
+                      "name": "SIM部品名 1",
+                      "fill": "$ui-text",
+                      "content": "F1",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "tcVw0",
+                      "name": "SIM部品sp 1",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "uuEaQ",
+                      "name": "SIM部品A 1",
+                      "fill": "$ui-text",
+                      "content": "1.999 A",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "x9XSAK",
+                      "name": "SIM部品W 1",
+                      "fill": "$ui-muted",
+                      "content": "0.00 W",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "B5Xpm8",
+                  "name": "SIM部品行 2",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "zVAyI",
+                      "name": "SIM部品名 2",
+                      "fill": "$ui-text",
+                      "content": "L1",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Nms0o",
+                      "name": "SIM部品sp 2",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "H11rpG",
+                      "name": "SIM部品A 2",
+                      "fill": "$ui-text",
+                      "content": "1.999 A",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "m0qdiE",
+                      "name": "SIM部品W 2",
+                      "fill": "$ui-muted",
+                      "content": "47.90 W",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "MlE1v",
+                  "name": "SIM部品行 3",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "wFWKU",
+                      "name": "SIM部品名 3",
+                      "fill": "$ui-text",
+                      "content": "SW1",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "pOzww",
+                      "name": "SIM部品sp 3",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "KXXa1",
+                      "name": "SIM部品A 3",
+                      "fill": "$ui-text",
+                      "content": "1.999 A",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "gMm07",
+                      "name": "SIM部品W 3",
+                      "fill": "$ui-muted",
+                      "content": "0.00 W",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "mR3JN",
+              "name": "SIM選択中列",
+              "width": 300,
+              "layout": "vertical",
+              "gap": 4,
+              "padding": [
+                6,
+                10
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "PtZm9",
+                  "name": "SIM選択中見出し",
+                  "fill": "$ui-muted",
+                  "content": "選択中",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 10,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "x554C",
+                  "name": "SIM選択中名前行",
+                  "gap": 6,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "V1z28N",
+                      "name": "SIM選択中名前",
+                      "fill": "$ui-text",
+                      "content": "CN301",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "RRJhh",
+                      "name": "SIM選択中超過",
+                      "fill": "#FEF2F2",
+                      "cornerRadius": 8,
+                      "padding": [
+                        0,
+                        6
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "y3mfFy",
+                          "name": "SIM選択中超過文字",
+                          "fill": "#DC2626",
+                          "content": "超過 142%",
+                          "fontFamily": "Noto Sans JP",
+                          "fontSize": 9,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "KtJnI",
+                  "name": "SIM選択中行 電流",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "mMJcq",
+                      "name": "SIM選択中項目",
+                      "fill": "$ui-muted",
+                      "content": "電流",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ENk3T",
+                      "name": "SIM選択中sp",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "Y6YPl",
+                      "name": "SIM選択中値",
+                      "fill": "$ui-text",
+                      "content": "70.96 A",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "E14mc",
+                  "name": "SIM選択中行 電圧",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "T1K3Y",
+                      "name": "SIM選択中項目",
+                      "fill": "$ui-muted",
+                      "content": "電圧",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "QinPg",
+                      "name": "SIM選択中sp",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "AF2qt",
+                      "name": "SIM選択中値",
+                      "fill": "$ui-text",
+                      "content": "24.25 / 24.24 V",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "uDqwD",
+                  "name": "SIM選択中行 限度",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "H5IIQg",
+                      "name": "SIM選択中項目",
+                      "fill": "$ui-muted",
+                      "content": "限度",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "s0dzs",
+                      "name": "SIM選択中sp",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "X4T19e",
+                      "name": "SIM選択中値",
+                      "fill": "$ui-text",
+                      "content": "50 A (ピン定格)",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "xCHki",
+                  "name": "SIM選択中行 負荷率",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "jwHOI",
+                      "name": "SIM選択中項目",
+                      "fill": "$ui-muted",
+                      "content": "負荷率",
+                      "fontFamily": "Noto Sans JP",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "EzmrW",
+                      "name": "SIM選択中sp",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "Z5VzCw",
+                      "name": "SIM選択中値",
+                      "fill": "$ui-text",
+                      "content": "142%",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "j6aZO",
+                  "name": "SIM選択中ヒント",
+                  "fill": "$ui-muted",
+                  "content": "図面で電線か部品を選ぶと値が出ます (選んでいないとき)",
+                  "fontFamily": "Noto Sans JP",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "Zk5Yq",
+          "name": "SIMすべての値",
+          "width": "fill_container",
+          "stroke": "$ribbon-line",
+          "strokeWidth": {
+            "top": 1
+          },
+          "gap": 6,
+          "padding": [
+            4,
+            10
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "icon",
+              "id": "mmBPg",
+              "name": "SIMすべての値アイコン",
+              "width": 11,
+              "height": 11,
+              "icon": "chevron-right",
+              "library": "lucide",
+              "fill": "$ui-muted"
+            },
+            {
+              "type": "text",
+              "id": "AjwY4",
+              "name": "SIMすべての値文字",
+              "fill": "$acad-blue",
+              "content": "すべての値を表示 (ネット電圧 160・部品電流 120)",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 10,
+              "fontWeight": "600"
             }
           ]
         }
@@ -85744,6 +86154,237 @@
               ]
             }
           ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "VT3PD",
+      "x": 960,
+      "y": 14495,
+      "name": "シミュレーション 重ね表示とプローブの例",
+      "clip": true,
+      "width": 760,
+      "height": 260,
+      "fill": "#212830",
+      "layout": "none",
+      "children": [
+        {
+          "type": "path",
+          "id": "u7mNC",
+          "x": 60,
+          "y": 66.5,
+          "name": "重ね 超過の下敷き",
+          "geometry": "M0 3.5l360 0",
+          "viewBox": [
+            0,
+            0,
+            360,
+            7
+          ],
+          "fill": "#00000000",
+          "width": 360,
+          "height": 7,
+          "stroke": "#ff5a4f8c",
+          "strokeWidth": 7
+        },
+        {
+          "type": "path",
+          "id": "EEdOJ",
+          "x": 60,
+          "y": 69.25,
+          "name": "配線 1",
+          "geometry": "M0 0.75l360 0",
+          "viewBox": [
+            0,
+            0,
+            360,
+            1.5
+          ],
+          "fill": "#00000000",
+          "width": 360,
+          "height": 1.5,
+          "stroke": "#e8eaec",
+          "strokeWidth": 1.5
+        },
+        {
+          "type": "path",
+          "id": "y0y2eN",
+          "x": 60,
+          "y": 146.5,
+          "name": "重ね 注意の下敷き",
+          "geometry": "M0 3.5l360 0",
+          "viewBox": [
+            0,
+            0,
+            360,
+            7
+          ],
+          "fill": "#00000000",
+          "width": 360,
+          "height": 7,
+          "stroke": "#f5a5248c",
+          "strokeWidth": 7
+        },
+        {
+          "type": "path",
+          "id": "bkaUr",
+          "x": 60,
+          "y": 149.25,
+          "name": "配線 2",
+          "geometry": "M0 0.75l360 0",
+          "viewBox": [
+            0,
+            0,
+            360,
+            1.5
+          ],
+          "fill": "#00000000",
+          "width": 360,
+          "height": 1.5,
+          "stroke": "#e8eaec",
+          "strokeWidth": 1.5
+        },
+        {
+          "type": "path",
+          "id": "EHx5v",
+          "x": 60,
+          "y": 214.25,
+          "name": "配線 3",
+          "geometry": "M0 0.75l360 0",
+          "viewBox": [
+            0,
+            0,
+            360,
+            1.5
+          ],
+          "fill": "#00000000",
+          "width": 360,
+          "height": 1.5,
+          "stroke": "#e8eaec",
+          "strokeWidth": 1.5
+        },
+        {
+          "type": "frame",
+          "id": "hWW4h",
+          "x": 250,
+          "y": 52,
+          "name": "超過の札",
+          "fill": "#781410e6",
+          "cornerRadius": 2,
+          "padding": [
+            2,
+            6
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "eNIPF",
+              "name": "超過の札文字",
+              "fill": "#ffe9e7",
+              "content": "71.0A / 50A",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 11,
+              "fontWeight": "600"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "t69um",
+          "x": 440,
+          "y": 40,
+          "name": "部品 (超過の枠)",
+          "width": 70,
+          "height": 60,
+          "cornerRadius": 1,
+          "stroke": "#ff5a4f",
+          "strokeWidth": 3,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "G4wLt",
+              "name": "部品記号",
+              "fill": "#e8eaec",
+              "content": "MCB01",
+              "fontFamily": "JetBrains Mono",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "Byff1",
+          "x": 540,
+          "y": 120,
+          "name": "プローブ",
+          "fill": "#2e333be6",
+          "cornerRadius": 4,
+          "stroke": "#1f6fbf",
+          "strokeWidth": 1,
+          "layout": "vertical",
+          "gap": 2,
+          "padding": [
+            4,
+            8
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "Q4JLW",
+              "name": "プローブ文字",
+              "fill": "#e8eaec",
+              "content": "電線",
+              "fontFamily": "JetBrains Mono",
+              "fontSize": 11,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "z7DFRr",
+              "name": "プローブ文字",
+              "fill": "#e8eaec",
+              "content": "電流 6.00 A",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "n8U2F",
+              "name": "プローブ文字",
+              "fill": "#e8eaec",
+              "content": "電圧 24.00 V → 23.50 V",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "tbaDj",
+              "name": "プローブ文字",
+              "fill": "#e8eaec",
+              "content": "限度 12 A (50%)",
+              "fontFamily": "Noto Sans JP",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "Q1YCq",
+          "x": 20,
+          "y": 236,
+          "name": "説明",
+          "fill": "#9aa2ab",
+          "content": "赤 = 負荷率 100% 超 (札付き)、橙 = 80〜100%、色なし = 80% 未満か限度なし。古い結果は薄く塗り、札は出さない",
+          "fontFamily": "Noto Sans JP",
+          "fontSize": 10,
+          "fontWeight": "normal"
         }
       ]
     }
