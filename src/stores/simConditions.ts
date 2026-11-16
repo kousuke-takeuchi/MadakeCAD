@@ -15,7 +15,8 @@ export interface SimConditionError {
  * 前後と区切りの空白は無視する。どちらの形でもなければ error。
  */
 export function parseSimCondition(text: string): SimCondition | SimConditionError {
-  const s = text.trim();
+  // 全角の英数字・記号 (日本語入力の ． ＝ など) は半角にそろえてから読む
+  const s = text.normalize("NFKC").trim();
   const short = /^(?:短絡|short)\s+(\S+)$/i.exec(s);
   if (short) return { kind: "short", net: short[1] };
   const set = /^([^.=\s]+)\s*\.\s*([^=\s]+)\s*=\s*(\S.*)$/.exec(s);

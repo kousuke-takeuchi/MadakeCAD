@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3392仕様項目**。
+全6領域・**3398仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -3699,6 +3699,8 @@
 - 「参照記号.属性=値」は部品の属性の置き換えとして読む (空白は無視) <sub>`simulation condition input`</sub>
 - 「短絡 ネット名」と「short ネット名」はネットの短絡として読む <sub>`simulation condition input`</sub>
 - どちらの形でもない入力 (値の無い置き換え・ネット名の無い短絡・ただの文字) は読めないと返す <sub>`simulation condition input`</sub>
+- 大文字の SHORT、全角の空白、日本語入力の全角の ． ＝ も読める。値には空白や = を含められる <sub>`simulation condition input`</sub>
+- 短絡のネット名の後ろに余計な語があれば読めないと返す <sub>`simulation condition input`</sub>
 
 ### simulation
 
@@ -3709,6 +3711,10 @@
 - 読めない条件の入力は断られ、条件は変わらない <sub>`simulation store`</sub>
 - 条件は1つずつ外せ (部品の最後の属性を外すとその部品も消える)、まとめて全部外せる <sub>`simulation store`</sub>
 - 定格超過は重さごとに数えられ、結果に定格超過が無ければ空になる <sub>`simulation store`</sub>
+- 結果が出ているときに条件を変えると、同じシートで自動で計算し直す (画面の条件と結果がずれない) <sub>`simulation store`</sub>
+- 結果がまだ無いときに条件を変えても、計算は始めない <sub>`simulation store`</sub>
+- 計算したシートを覚え、シートの指定が無ければ先頭シートを覚える <sub>`simulation store`</sub>
+- 属性名に「.」を含む置き換えも、チップから正しく外せる <sub>`simulation store`</sub>
 
 ### 開始テンプレート
 

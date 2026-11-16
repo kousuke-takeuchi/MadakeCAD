@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3392 specification clauses** across 6 areas.
+**3398 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -3699,6 +3699,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - reads REF.ATTR=VALUE as an attribute override, ignoring spaces <sub>`simulation condition input`</sub>
 - reads 短絡 NET and short NET as a short of that net <sub>`simulation condition input`</sub>
 - refuses input that is neither form <sub>`simulation condition input`</sub>
+- accepts upper-case SHORT, full-width spaces and full-width punctuation, and values with spaces or = <sub>`simulation condition input`</sub>
+- refuses a short with extra words after the net name <sub>`simulation condition input`</sub>
 
 ### simulation
 
@@ -3709,6 +3711,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - an unreadable condition is refused and changes nothing <sub>`simulation store`</sub>
 - conditions can be removed one by one or all at once <sub>`simulation store`</sub>
 - rating findings are counted by severity and empty when the result has none <sub>`simulation store`</sub>
+- changing a condition after a run re-runs on the same sheet <sub>`simulation store`</sub>
+- changing a condition before any run does not start one <sub>`simulation store`</sub>
+- a run remembers its sheet, or the first sheet when none is given <sub>`simulation store`</sub>
+- an override whose attribute contains a dot can be removed from its chip <sub>`simulation store`</sub>
 
 ### Start templates
 

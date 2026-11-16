@@ -3,6 +3,7 @@
 import { defineStore } from "pinia";
 import { ipc, type SimFinding, type SimOpResult } from "../ipc";
 import { parseSimCondition } from "./simConditions";
+import { useDocumentStore } from "./document";
 
 export const useSimulationStore = defineStore("simulation", {
   state: () => ({
@@ -30,7 +31,7 @@ export const useSimulationStore = defineStore("simulation", {
       for (const f of this.findings) c[f.severity] += 1;
       return c;
     },
-    /** 条件の一覧 (チップの並び順: 置き換え → 短絡)。 */
+    /** 条件の一覧 (チップの並び順: 置き換え → 短絡)。label は置き換えなら表示する文字そのもの、短絡ならネット名だけ (画面が「短絡」を足す)。 */
     conditions(state): { key: string; label: string; kind: "set" | "short" }[] {
       const out: { key: string; label: string; kind: "set" | "short" }[] = [];
       for (const [reference, attrs] of Object.entries(state.overrides)) {
@@ -45,13 +46,14 @@ export const useSimulationStore = defineStore("simulation", {
   actions: {
     async run(sheetId: string | null) {
       this.running = true;
-      this.sheetId = sheetId;
       try {
         this.result = await ipc.simulateOp(sheetId, this.openSwitches, {
           overrides: this.overrides,
           shorts: this.shorts,
         });
         this.error = null;
+        // 計算したシート (指定が無ければ先頭シート)。定格超過の行から部品へ移るとき、このシートへ切り替える
+        this.sheetId = sheetId ?? useDocumentStore().project?.sheets[0]?.id ?? null;
       } catch (e) {
         this.result = null;
         this.error = e instanceof Error ? e.message : String(e);
@@ -65,6 +67,10 @@ export const useSimulationStore = defineStore("simulation", {
       if (i >= 0) this.openSwitches.splice(i, 1);
       else this.openSwitches.push(reference);
     },
+    /** 条件が変わったら、結果が出ている (または失敗している) ときだけ同じシートで計算し直す (結果と条件をずらさない)。 */
+    rerunAfterChange() {
+      if (this.result || this.error) void this.run(this.sheetId);
+    },
     /** 条件の入力を足す。読めなければ false (何も変えない)。同じ属性・同じネットは上書き・重複しない。 */
     addCondition(text: string): boolean {
       const c = parseSimCondition(text);
@@ -74,6 +80,7 @@ export const useSimulationStore = defineStore("simulation", {
       } else if (!this.shorts.includes(c.net)) {
         this.shorts = [...this.shorts, c.net];
       }
+      this.rerunAfterChange();
       return true;
     },
     /** 条件を1つ外す (`conditions` の key)。 */
@@ -81,6 +88,7 @@ export const useSimulationStore = defineStore("simulation", {
       if (key.startsWith("short:")) {
         const net = key.slice("short:".length);
         this.shorts = this.shorts.filter((n) => n !== net);
+        this.rerunAfterChange();
         return;
       }
       const body = key.slice("set:".length);
@@ -93,10 +101,12 @@ export const useSimulationStore = defineStore("simulation", {
       if (Object.keys(rest).length) next[reference] = rest;
       else delete next[reference];
       this.overrides = next;
+      this.rerunAfterChange();
     },
     clearConditions() {
       this.overrides = {};
       this.shorts = [];
+      this.rerunAfterChange();
     },
     close() {
       this.panelOpen = false;

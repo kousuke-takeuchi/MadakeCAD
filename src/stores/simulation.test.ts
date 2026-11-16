@@ -4,6 +4,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
 import { ipc, type SimOpResult } from "../ipc";
 import { useSimulationStore } from "./simulation";
+import { useDocumentStore } from "./document";
 
 const result: SimOpResult = {
   voltage: 24,
@@ -13,7 +14,10 @@ const result: SimOpResult = {
 };
 
 describe("simulation store", () => {
-  beforeEach(() => setActivePinia(createPinia()));
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    setActivePinia(createPinia());
+  });
 
   // ja: runでDC解析結果を取得してパネルを開く
   it("run fetches the DC result and opens the panel", async () => {
@@ -97,5 +101,49 @@ describe("simulation store", () => {
     vi.spyOn(ipc, "simulateOp").mockResolvedValue({ ...result, findings: [f("error"), f("warning"), f("warning")] });
     await store.run(null);
     expect(store.counts).toEqual({ error: 1, warning: 2, info: 0 });
+  });
+
+  // ja: 結果が出ているときに条件を変えると、同じシートで自動で計算し直す (画面の条件と結果がずれない)
+  it("changing a condition after a run re-runs on the same sheet", async () => {
+    const store = useSimulationStore();
+    const spy = vi.spyOn(ipc, "simulateOp").mockResolvedValue(result);
+    await store.run("s1");
+    store.addCondition("短絡 P24");
+    expect(spy).toHaveBeenLastCalledWith("s1", [], { overrides: {}, shorts: ["P24"] });
+    store.removeCondition("short:P24");
+    expect(spy).toHaveBeenLastCalledWith("s1", [], { overrides: {}, shorts: [] });
+    expect(spy).toHaveBeenCalledTimes(3);
+  });
+
+  // ja: 結果がまだ無いときに条件を変えても、計算は始めない
+  it("changing a condition before any run does not start one", () => {
+    const store = useSimulationStore();
+    const spy = vi.spyOn(ipc, "simulateOp").mockResolvedValue(result);
+    store.addCondition("M1.current_a=40");
+    store.clearConditions();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  // ja: 計算したシートを覚え、シートの指定が無ければ先頭シートを覚える
+  it("a run remembers its sheet, or the first sheet when none is given", async () => {
+    const store = useSimulationStore();
+    vi.spyOn(ipc, "simulateOp").mockResolvedValue(result);
+    await store.run("s2");
+    expect(store.sheetId).toBe("s2");
+    const doc = useDocumentStore();
+    doc.project = { sheets: [{ id: "first" }] } as unknown as typeof doc.project;
+    await store.run(null);
+    expect(store.sheetId).toBe("first");
+  });
+
+  // ja: 属性名に「.」を含む置き換えも、チップから正しく外せる
+  it("an override whose attribute contains a dot can be removed from its chip", () => {
+    const store = useSimulationStore();
+    store.addCondition("M1.rating.max=5");
+    expect(store.overrides).toEqual({ M1: { "rating.max": "5" } });
+    const key = store.conditions[0].key;
+    expect(key).toBe("set:M1.rating.max");
+    store.removeCondition(key);
+    expect(store.overrides).toEqual({});
   });
 });

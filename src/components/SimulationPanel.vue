@@ -90,7 +90,7 @@ function pick(f: SimFinding) {
       <div class="col findings left-border">
         <div class="col-head pad">{{ t("simulation.findings") }}</div>
         <div v-if="sim.findings.length === 0" class="ok-note pad">{{ t("simulation.noFindings") }}</div>
-        <button v-for="(f, i) in sim.findings" :key="i" class="finding" @click="pick(f)">
+        <button v-for="(f, i) in sim.findings" :key="f.code + ':' + f.reference + ':' + f.entity_ids.join(',') + ':' + i" class="finding" @click="pick(f)">
           <span class="mark" :class="f.severity">{{ marks[f.severity] }}</span>
           <span class="code">{{ f.code }}</span>
           <span class="msg">{{ f.message }}</span>
