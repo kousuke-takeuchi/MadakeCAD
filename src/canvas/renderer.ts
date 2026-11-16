@@ -219,6 +219,35 @@ export interface SimPaint {
   items: ReadonlyMap<string, OverlayItem>;
   /** 図面が計算の後に変わった (薄く塗り、札は出さない)。 */
   stale: boolean;
+  /** 選んでいる計算ケースの故障の印 (短絡は電線の始点かピン、断線は電線の長さの半分)。 */
+  faults?: { kind: "short" | "open"; at: Point }[];
+}
+
+/** 故障の印 (画面上で一定の大きさ)。結果が古くても描く (条件そのものなので)。 */
+export function drawSimFaults(ctx: CanvasRenderingContext2D, vp: Viewport, paint: SimPaint): void {
+  ctx.save();
+  ctx.strokeStyle = theme.simFault;
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const f of paint.faults ?? []) {
+    const p = vp.toScreen(f.at);
+    ctx.beginPath();
+    if (f.kind === "short") {
+      // 稲妻: 右上から左下へのジグザグ
+      ctx.moveTo(p.x + 4, p.y - 9);
+      ctx.lineTo(p.x - 2, p.y - 1);
+      ctx.lineTo(p.x + 2, p.y - 1);
+      ctx.lineTo(p.x - 4, p.y + 7);
+    } else {
+      ctx.moveTo(p.x - 5, p.y - 5);
+      ctx.lineTo(p.x + 5, p.y + 5);
+      ctx.moveTo(p.x + 5, p.y - 5);
+      ctx.lineTo(p.x - 5, p.y + 5);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 const SIM_STALE_ALPHA = 0.35;
@@ -1699,6 +1728,7 @@ export function renderSheet(
 
   // 超過の札は図面の上
   if (opts.sim) drawSimLabels(ctx, vp, sheet, defs, opts.sim);
+  if (opts.sim) drawSimFaults(ctx, vp, opts.sim);
 
   // エージェント編集オーバーレイ(図面の上、クロスヘアの下)
   if (opts.agent) drawAgentOverlay(ctx, vp, opts.agent);

@@ -2,7 +2,7 @@
 // シミュレーション結果パネル (デザイン: MadakeCAD.pen「シミュレーション結果パネル」)。
 // 見出し: 定格超過の件数と「図面に重ねる」。条件バー: 属性の置き換え・短絡のチップと入力。古い結果の注意。
 // 本体: 定格超過 (重さで絞り込み、行クリックで選択+ズーム) と選択中の詳細。下端: すべての値 (ネット電圧・部品電流) の折りたたみ。
-import { ChevronDown, ChevronRight, Layers, RefreshCw, X } from "lucide-vue-next";
+import { ChevronDown, ChevronRight, Copy, Layers, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-vue-next";
 import { computed, inject, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import type { SimFinding } from "../ipc";
@@ -10,6 +10,7 @@ import type { EditorController } from "../tools/controller";
 import { useDocumentStore } from "../stores/document";
 import { useSimulationStore } from "../stores/simulation";
 import { formatProbe } from "../canvas/simOverlay";
+import { roleAttributes } from "../canvas/simCaseView";
 
 const sim = useSimulationStore();
 const store = useDocumentStore();
@@ -31,6 +32,58 @@ function toggleSeverity(sv: SimFinding["severity"]) {
   shown.value = next;
 }
 const visibleFindings = computed(() => sim.findings.filter((f) => shown.value.has(f.severity)));
+
+/** ケースの名前の変更中の文字 (null = 変更していない) と、断られたときの印。 */
+const renaming = ref<string | null>(null);
+const renameRefused = ref(false);
+async function commitRename() {
+  if (renaming.value === null) return;
+  const ok = await sim.renameCase(renaming.value);
+  renameRefused.value = !ok;
+  if (ok) renaming.value = null;
+}
+function onCaseSelect(e: Event) {
+  const v = (e.target as HTMLSelectElement).value;
+  renaming.value = null;
+  sim.selectCase(v === "" ? null : v);
+}
+
+/** 図面で選んだ部品 (値の編集の対象)。 */
+const selectedSymbol = computed(() => {
+  const sheet = store.activeSheet;
+  if (!sheet) return null;
+  for (const id of store.selection) {
+    const e = sheet.entities[id];
+    if (e && e.kind === "symbol") return e;
+  }
+  return null;
+});
+/** 選んだ部品の役割に関係する値 (図面の値と、このケースでの値)。 */
+const valueRows = computed(() => {
+  const e = selectedSymbol.value;
+  if (!e) return [];
+  const caseAttrs = sim.selectedCase?.overrides[e.reference] ?? {};
+  return roleAttributes(store.resolveInstance(e)).map((attr) => ({
+    attr,
+    drawing: e.attrs[attr] ?? "—",
+    value: caseAttrs[attr] ?? "",
+  }));
+});
+function setValue(attr: string, ev: Event) {
+  const e = selectedSymbol.value;
+  if (!e || !e.reference) return;
+  const v = (ev.target as HTMLInputElement).value;
+  const current = sim.selectedCase?.overrides[e.reference]?.[attr] ?? "";
+  if (v.trim() === current) return;
+  void sim.setOverride(e.reference, attr, v);
+}
+
+/** 条件のチップの文字。 */
+function chipLabel(c: { kind: "set" | "short" | "open"; label: string; missing: boolean }): string {
+  const text =
+    c.kind === "short" ? t("simulation.shortChip", { net: c.label }) : c.kind === "open" ? t("simulation.openChip", { label: c.label }) : c.label;
+  return c.missing ? `${text} (${t("simulation.missing")})` : text;
+}
 
 /** すべての値 (ネット電圧・部品電流) を開いているか。 */
 const showAll = ref(false);
@@ -66,6 +119,25 @@ function pick(f: SimFinding) {
     <div class="head">
       <span class="title">{{ t("simulation.title") }}</span>
       <span v-if="sim.result" class="chip">{{ t("simulation.source", { volts: sim.result.voltage }) }}</span>
+      <input
+        v-if="renaming !== null"
+        v-model="renaming"
+        class="case-rename"
+        :class="{ invalid: renameRefused }"
+        :title="renameRefused ? t('simulation.caseNameTaken') : ''"
+        @input="renameRefused = false"
+        @keydown.enter="commitRename()"
+        @keydown.esc="renaming = null"
+      />
+      <select v-else class="case-select" :value="sim.selectedCase?.id ?? ''" @change="onCaseSelect">
+        <option value="">{{ t("simulation.normalCase") }}</option>
+        <option v-for="c in sim.cases" :key="c.id" :value="c.id">{{ c.name }}</option>
+      </select>
+      <button class="icon" :title="t('simulation.newCase')" @click="sim.newCase()"><Plus :size="12" /></button>
+      <button class="icon" :title="t('simulation.renameCase')" :disabled="!sim.selectedCase" @click="renaming = sim.selectedCase?.name ?? null"><Pencil :size="12" /></button>
+      <button class="icon" :title="t('simulation.duplicateCase')" :disabled="!sim.selectedCase" @click="sim.duplicateCase()"><Copy :size="12" /></button>
+      <button class="icon" :title="t('simulation.deleteCase')" :disabled="!sim.selectedCase" @click="sim.deleteCase()"><Trash2 :size="12" /></button>
+      <span v-if="renameRefused" class="cond-error">{{ t("simulation.caseNameTaken") }}</span>
       <span v-if="sim.counts.error" class="badge error">✗ {{ sim.counts.error }}</span>
       <span v-if="sim.counts.warning" class="badge warning">⚠ {{ sim.counts.warning }}</span>
       <span v-if="sim.counts.info" class="badge info">ℹ {{ sim.counts.info }}</span>
@@ -79,8 +151,8 @@ function pick(f: SimFinding) {
     </div>
     <div class="conditions">
       <span class="cond-head">{{ t("simulation.conditions") }}</span>
-      <span v-for="c in sim.conditions" :key="c.key" class="cond-chip" :class="c.kind">
-        {{ c.kind === "short" ? t("simulation.shortChip", { net: c.label }) : c.label }}
+      <span v-for="c in sim.conditions" :key="c.key" class="cond-chip" :class="[c.kind, { missing: c.missing }]">
+        {{ chipLabel(c) }}
         <button class="cond-remove" :title="t('simulation.removeCondition')" @click="sim.removeCondition(c.key)"><X :size="10" /></button>
       </span>
       <input
@@ -132,7 +204,26 @@ function pick(f: SimFinding) {
           </div>
           <div v-if="selected.text.ratio" class="row"><span class="label">{{ t("simulation.ratio") }}</span><span class="spacer" /><span class="mono strong">{{ selected.text.ratio }}</span></div>
         </template>
-        <div v-else class="hint">{{ t("simulation.selectHint") }}</div>
+        <template v-if="valueRows.length">
+          <div class="row value-head">
+            <span class="attr">{{ t("simulation.values") }}</span>
+            <span class="drawing">{{ t("simulation.drawingValue") }}</span>
+            <span class="case-col">{{ t("simulation.caseValue") }}</span>
+          </div>
+          <div v-for="r in valueRows" :key="(selectedSymbol?.id ?? '') + r.attr" class="row">
+            <span class="mono attr">{{ r.attr }}</span>
+            <span class="mono drawing">{{ r.drawing }}</span>
+            <input
+              class="case-col case-value"
+              :class="{ set: r.value !== '' }"
+              :value="r.value"
+              placeholder="—"
+              @keydown.enter="setValue(r.attr, $event)"
+              @blur="setValue(r.attr, $event)"
+            />
+          </div>
+        </template>
+        <div v-if="!selected && !valueRows.length" class="hint">{{ t("simulation.selectHint") }}</div>
       </div>
     </div>
     <button v-if="sim.result && !sim.error" class="all-bar" @click="showAll = !showAll">
@@ -225,6 +316,36 @@ function pick(f: SimFinding) {
   padding: 1px 6px 1px 8px;
 }
 .cond-chip.short { color: var(--err-fg); background: var(--err-bg); }
+.cond-chip.open { color: var(--warn-fg); background: var(--warn-bg); }
+.cond-chip.missing { color: var(--ui-muted); background: var(--hover-bg); opacity: 0.7; }
+.case-select, .case-rename {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border: 1px solid var(--ribbon-line);
+  border-radius: 3px;
+  background: var(--input-bg);
+  color: var(--ui-text);
+  max-width: 160px;
+}
+.case-rename.invalid { border-color: var(--err-fg); }
+.icon { border: none; background: transparent; color: var(--ui-muted); display: flex; padding: 2px; cursor: pointer; }
+.icon:disabled { opacity: 0.35; cursor: default; }
+.value-head { padding-top: 6px; font-size: 9px; color: var(--ui-muted); }
+.attr { flex: none; width: 90px; font-size: 10px; }
+.value-head .attr { font-size: 10px; font-weight: 600; }
+.drawing { flex: 1; font-size: 10px; color: var(--ui-muted); }
+.case-col { flex: none; width: 90px; }
+.case-value {
+  font-family: var(--mono-font);
+  font-size: 10px;
+  padding: 1px 6px;
+  border: 1px solid var(--ribbon-line);
+  border-radius: 3px;
+  background: var(--input-bg);
+  color: var(--ui-text);
+}
+.case-value.set { border-color: var(--acad-blue); }
 .cond-remove { border: none; background: transparent; color: var(--ui-muted); display: flex; padding: 0; cursor: pointer; }
 .cond-input {
   width: 240px;

@@ -1737,7 +1737,7 @@
     "netVoltages": "网络电压",
     "componentCurrents": "元件电流",
     "conditions": "条件",
-    "shortChip": "短路 {net}",
+    "shortChip": "⚡ 短路 {net}",
     "removeCondition": "移除此条件",
     "conditionHint": "例: M1.current_a=40 / short P24",
     "addCondition": "添加",
@@ -1769,7 +1769,18 @@
       "openWire": "在此断线",
       "shortPin": "在引脚 {pin} 短路",
       "remove": "移除此条件"
-    }
+    },
+    "normalCase": "常规",
+    "newCase": "新建工况",
+    "renameCase": "重命名工况",
+    "duplicateCase": "复制工况",
+    "deleteCase": "删除工况",
+    "caseNameTaken": "不能使用该名称 (为空或与其他工况重名)",
+    "values": "数值",
+    "drawingValue": "图纸值",
+    "caseValue": "此工况的值",
+    "missing": "找不到",
+    "openChip": "✕ 断线 {label}"
   },
   "verification": {
     "title": "校验",

@@ -1737,7 +1737,7 @@
     "netVoltages": "Netzspannungen",
     "componentCurrents": "Bauteilströme",
     "conditions": "Bedingungen",
-    "shortChip": "Kurzschluss {net}",
+    "shortChip": "⚡ Kurzschluss {net}",
     "removeCondition": "Diese Bedingung entfernen",
     "conditionHint": "z. B. M1.current_a=40 / short P24",
     "addCondition": "Hinzufügen",
@@ -1769,7 +1769,18 @@
       "openWire": "Hier unterbrechen",
       "shortPin": "Kurzschluss an Pin {pin}",
       "remove": "Diese Bedingung entfernen"
-    }
+    },
+    "normalCase": "Normal",
+    "newCase": "Neuer Fall",
+    "renameCase": "Fall umbenennen",
+    "duplicateCase": "Fall duplizieren",
+    "deleteCase": "Fall löschen",
+    "caseNameTaken": "Dieser Name ist nicht möglich (leer oder bereits vergeben)",
+    "values": "Werte",
+    "drawingValue": "Plan",
+    "caseValue": "In diesem Fall",
+    "missing": "fehlt",
+    "openChip": "✕ Unterbrechung {label}"
   },
   "verification": {
     "title": "Prüfung",

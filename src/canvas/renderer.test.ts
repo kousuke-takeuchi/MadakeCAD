@@ -8,6 +8,7 @@ import {
   REV_COL_W,
   REV_HEADERS,
   drawDeviceBlock,
+  drawSimFaults,
   drawSimLabels,
   drawSimUnderlay,
   drawSymbol,
@@ -1249,5 +1250,16 @@ describe("simulation overlay painting", () => {
     const items = new Map([["gone", { entityId: "gone", kind: "wire" as const, level: "over" as const, label: "x" }]]);
     drawSimUnderlay(ctx, new Viewport(), sheetOf({}), new Map(), { items, stale: false });
     expect(strokes).toEqual([]);
+  });
+
+  // ja: 計算ケースの短絡と断線の印は、結果が古くても描く (条件そのものなので)
+  it("draws a mark for each fault of the case, also when the result is stale", () => {
+    const { ctx, strokes } = rec();
+    const faults = [
+      { kind: "short" as const, at: { x: 0, y: 0 } },
+      { kind: "open" as const, at: { x: 10, y: 0 } },
+    ];
+    drawSimFaults(ctx, new Viewport(), { items: new Map(), stale: true, faults });
+    expect(strokes.filter((s) => s.style === theme.simFault).length).toBe(2);
   });
 });

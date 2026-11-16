@@ -1737,7 +1737,7 @@
     "netVoltages": "Tensions des réseaux",
     "componentCurrents": "Courants des composants",
     "conditions": "Conditions",
-    "shortChip": "Court-circuit {net}",
+    "shortChip": "⚡ Court-circuit {net}",
     "removeCondition": "Retirer cette condition",
     "conditionHint": "ex. M1.current_a=40 / short P24",
     "addCondition": "Ajouter",
@@ -1769,7 +1769,18 @@
       "openWire": "Coupure ici",
       "shortPin": "Court-circuit à la broche {pin}",
       "remove": "Retirer cette condition"
-    }
+    },
+    "normalCase": "Normal",
+    "newCase": "Nouveau cas",
+    "renameCase": "Renommer le cas",
+    "duplicateCase": "Dupliquer le cas",
+    "deleteCase": "Supprimer le cas",
+    "caseNameTaken": "Ce nom ne peut pas être utilisé (vide ou déjà pris)",
+    "values": "Valeurs",
+    "drawingValue": "Plan",
+    "caseValue": "Dans ce cas",
+    "missing": "introuvable",
+    "openChip": "✕ Coupure {label}"
   },
   "verification": {
     "title": "Vérification",

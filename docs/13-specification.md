@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3564 specification clauses** across 6 areas.
+**3567 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -2935,6 +2935,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - paints over wires red and near wires amber under the ink, and labels only over items <sub>`simulation overlay painting`</sub>
 - a stale result is painted faintly and without labels <sub>`simulation overlay painting`</sub>
 - items no longer on the sheet are skipped <sub>`simulation overlay painting`</sub>
+- draws a mark for each fault of the case, also when the result is stale <sub>`simulation overlay painting`</sub>
 
 ### search
 
@@ -2999,6 +3000,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - keeps the paper size and orientation of the sheet in front <sub>`sheet kind (schematic / panel)`</sub>
 - treats a sheet with no kind as a schematic sheet <sub>`sheet kind (schematic / panel)`</sub>
 - labels the sheet kind shown next to the drawing tabs <sub>`sheet kind (schematic / panel)`</sub>
+
+### simCaseView
+
+- the editable attributes follow the part's role, always ending with the pin rating <sub>`simulation case view helpers`</sub>
+- places short marks at the wire start or the pin and break marks halfway along the wire, skipping missing targets <sub>`simulation case view helpers`</sub>
 
 ### simMenu
 

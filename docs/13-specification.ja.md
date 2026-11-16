@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3564仕様項目**。
+全6領域・**3567仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -2935,6 +2935,7 @@
 - 超過の電線は赤、注意の電線は橙の太い下敷き線で塗り、超過にだけ札を描く <sub>`simulation overlay painting`</sub>
 - 古い結果は薄く塗り、札は描かない <sub>`simulation overlay painting`</sub>
 - 結果にあっても図面から消えた物は描かずに飛ばす <sub>`simulation overlay painting`</sub>
+- 計算ケースの短絡と断線の印は、結果が古くても描く (条件そのものなので) <sub>`simulation overlay painting`</sub>
 
 ### search
 
@@ -2999,6 +3000,11 @@
 - 用紙は表示中のシートに合わせる (盤シートだけA4になってしまわない)。 <sub>`sheet kind (schematic / panel)`</sub>
 - 種別を書いていない古いシートは回路図シートとして扱う。 <sub>`sheet kind (schematic / panel)`</sub>
 - 図面タブの「シート種別」の表示は種別ごとの文言になる。 <sub>`sheet kind (schematic / panel)`</sub>
+
+### simCaseView
+
+- 選んだ部品で編集できる値は役割で決まり、どの部品でもピン定格を最後に足す <sub>`simulation case view helpers`</sub>
+- 短絡の印は電線の始点かピンの点、断線の印は電線の長さの半分の所に置き、消えた対象は飛ばす <sub>`simulation case view helpers`</sub>
 
 ### simMenu
 

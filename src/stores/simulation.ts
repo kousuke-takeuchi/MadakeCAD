@@ -3,8 +3,9 @@
 // 「通常」(caseId = null) は条件の無い基本の状態で、保存しない。
 
 import { defineStore } from "pinia";
-import { ipc, type EntityLoad, type SimCase, type SimFault, type SimFinding, type SimOpResult } from "../ipc";
+import { ipc, type EntityLoad, type Point, type SimCase, type SimFault, type SimFinding, type SimOpResult } from "../ipc";
 import { buildOverlay, type OverlayItem } from "../canvas/simOverlay";
+import { faultPoints } from "../canvas/simCaseView";
 import { parseSimCondition } from "./simConditions";
 import { useDocumentStore } from "./document";
 
@@ -60,13 +61,17 @@ export const useSimulationStore = defineStore("simulation", {
       return state.result !== null && state.resultRevision !== useDocumentStore().revision;
     },
     /** 図面に重ねる表示。パネルが閉じている・切ってある・結果が無い・別のシートなら null。 */
-    overlay(state): { items: Map<string, OverlayItem>; stale: boolean } | null {
+    overlay(state): { items: Map<string, OverlayItem>; stale: boolean; faults: { kind: "short" | "open"; at: Point }[] } | null {
       const doc = useDocumentStore();
       const sheet = doc.activeSheet;
       if (!state.panelOpen || !state.showOnDrawing || !state.result || !sheet || state.sheetId !== doc.activeSheetId) {
         return null;
       }
-      return { items: buildOverlay(state.result, sheet), stale: this.stale };
+      return {
+        items: buildOverlay(state.result, sheet),
+        stale: this.stale,
+        faults: faultPoints(this.selectedCase, sheet, doc.resolveInstance),
+      };
     },
     /** エンティティ id から負荷を引く (無ければ null)。 */
     loadOf(state): (id: string) => EntityLoad | null {

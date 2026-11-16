@@ -43,6 +43,8 @@ export const theme = {
   /** 超過の札の地と文字。 */
   simLabelBg: "rgba(120, 20, 16, 0.9)",
   simLabelText: "#ffe9e7",
+  /** 計算ケースの故障の印 (短絡 ⚡・断線 ✕)。 */
+  simFault: "#ffd84d",
 } as const;
 
 /**

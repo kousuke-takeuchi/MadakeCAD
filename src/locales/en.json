@@ -1737,7 +1737,7 @@
     "netVoltages": "Net voltages",
     "componentCurrents": "Component currents",
     "conditions": "Conditions",
-    "shortChip": "Short {net}",
+    "shortChip": "⚡ Short {net}",
     "removeCondition": "Remove this condition",
     "conditionHint": "e.g. M1.current_a=40 / short P24",
     "addCondition": "Add",
@@ -1769,7 +1769,18 @@
       "openWire": "Break here",
       "shortPin": "Short at pin {pin}",
       "remove": "Remove this condition"
-    }
+    },
+    "normalCase": "Normal",
+    "newCase": "New case",
+    "renameCase": "Rename case",
+    "duplicateCase": "Duplicate case",
+    "deleteCase": "Delete case",
+    "caseNameTaken": "That name cannot be used (empty or used by another case)",
+    "values": "Values",
+    "drawingValue": "Drawing",
+    "caseValue": "In this case",
+    "missing": "missing",
+    "openChip": "✕ Break {label}"
   },
   "verification": {
     "title": "Verification",

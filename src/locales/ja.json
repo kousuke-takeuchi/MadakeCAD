@@ -1737,7 +1737,7 @@
     "netVoltages": "ネット電圧",
     "componentCurrents": "部品電流",
     "conditions": "条件",
-    "shortChip": "短絡 {net}",
+    "shortChip": "⚡ 短絡 {net}",
     "removeCondition": "この条件を外す",
     "conditionHint": "例: M1.current_a=40 / 短絡 P24",
     "addCondition": "追加",
@@ -1769,7 +1769,18 @@
       "openWire": "ここで断線",
       "shortPin": "ピン {pin} で短絡",
       "remove": "この条件を外す"
-    }
+    },
+    "normalCase": "通常",
+    "newCase": "新しいケース",
+    "renameCase": "ケースの名前を変える",
+    "duplicateCase": "ケースを複製",
+    "deleteCase": "ケースを削除",
+    "caseNameTaken": "その名前は使えません (空か、ほかのケースと同じ)",
+    "values": "値",
+    "drawingValue": "図面の値",
+    "caseValue": "このケースでの値",
+    "missing": "見つかりません",
+    "openChip": "✕ 断線 {label}"
   },
   "verification": {
     "title": "検証結果",
