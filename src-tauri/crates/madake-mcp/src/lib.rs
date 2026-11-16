@@ -146,9 +146,12 @@ impl SharedDoc {
         Ok(patch)
     }
 
-    /// 配線の引き直し: 計画から適用までを**同じロックの中**で行い (間で部品が動くと端がピンから外れる)、
-    /// 消す配線と新しい配線を **1回の編集** (undo一発) として実行する。返すJSONは
-    /// `{ rerouted, unchanged: [{net, reason}], before, after, wire_length_mm: {before, after} }`。
+    /// 配線の引き直し。設定を確かめてから、シートの写しと版番号 ([`Engine::revision`]) を取ってロックを放し、
+    /// ロックの外で計画を作る (大きな図面でも他の操作を待たせない)。適用はもう一度ロックを取り、版番号が
+    /// 変わっていなければ消す配線と新しい配線を **1回の編集** (undo一発) として実行する。変わっていれば
+    /// (計画中に部品が動くと端がピンから外れるので) 計画を作り直す。3回続けて変わったらエラー。
+    /// FreeCADと対応付けた配線 ([`madake_core::Project::mech_links`]) を含むかたまりは動かさない。
+    /// 返すJSONは `{ rerouted, unchanged: [{net, reason}], before, after, wire_length_mm: {before, after} }`。
     /// `after`の整えメトリクスは計画を当てた写しのシートで測る (本物の変更はコマンドだけが行う)。
     /// 変えるものが無い (消す配線も足す配線も無い) ときは空のバッチを実行せず、`rerouted`は空で返す。
     pub fn reroute_wires(
@@ -157,63 +160,72 @@ impl SharedDoc {
         options: &madake_core::route::RerouteOptions,
         origin: EditOrigin,
     ) -> Result<serde_json::Value, String> {
-        let (reply, patch) = {
-            let mut engine = self.engine.lock().unwrap();
-            let (commands, reply) = {
-                let sheet = engine
-                    .project()
+        options.route.validate()?;
+        for _ in 0..3 {
+            let (revision, sheet, protected) = {
+                let engine = self.engine.lock().unwrap();
+                let project = engine.project();
+                let sheet = project
                     .sheet(sheet_id)
-                    .ok_or_else(|| format!("sheet not found: {sheet_id}"))?;
-                let defs = sheet_symbol_defs(sheet);
-                let plan = madake_core::route::plan_reroute(sheet, &defs, options);
-                let before = madake_core::tidy::tidy_metrics(sheet, &defs);
-                let length_before = total_wire_length_mm(sheet);
-                let nothing = plan.remove.is_empty() && plan.add.is_empty();
-                let mut after_sheet = sheet.clone();
-                for id in &plan.remove {
-                    after_sheet.entities.remove(id);
-                }
-                for e in &plan.add {
-                    after_sheet.entities.insert(e.id(), e.clone());
-                }
-                let after = madake_core::tidy::tidy_metrics(&after_sheet, &defs);
-                let length_after = total_wire_length_mm(&after_sheet);
-                // 同じネットが何度も出る (配線のかたまりごとに調べる) ので、(ネット, 理由) の重複を省く。
-                // 「選ばれなかった」ネットは頼まれていないので返さない
-                let mut unchanged: Vec<serde_json::Value> = Vec::new();
-                let mut seen = std::collections::BTreeSet::new();
-                for (net, reason) in &plan.unchanged {
-                    if reason == "not selected" || !seen.insert((net.clone(), reason.clone())) {
-                        continue;
-                    }
-                    unchanged.push(serde_json::json!({ "net": net, "reason": reason }));
-                }
-                let reply = serde_json::json!({
-                    "rerouted": if nothing { Vec::new() } else { plan.rerouted.clone() },
-                    "unchanged": unchanged,
-                    "before": before,
-                    "after": after,
-                    "wire_length_mm": { "before": length_before, "after": length_after },
-                });
-                let mut commands = Vec::new();
-                if !nothing {
-                    if !plan.remove.is_empty() {
-                        commands.push(Command::DeleteEntities { sheet_id, ids: plan.remove.clone() });
-                    }
-                    for entity in plan.add {
-                        commands.push(Command::AddEntity { sheet_id, entity });
-                    }
-                }
-                (commands, reply)
+                    .ok_or_else(|| format!("sheet not found: {sheet_id}"))?
+                    .clone();
+                let protected: Vec<Uuid> = project.mech_links.iter().map(|l| l.entity_id).collect();
+                (engine.revision(), sheet, protected)
             };
+            let defs = sheet_symbol_defs(&sheet);
+            let plan = madake_core::route::plan_reroute(&sheet, &defs, options, &protected)?;
+            let before = madake_core::tidy::tidy_metrics(&sheet, &defs);
+            let length_before = total_wire_length_mm(&sheet);
+            let nothing = plan.remove.is_empty() && plan.add.is_empty();
+            let mut after_sheet = sheet.clone();
+            for id in &plan.remove {
+                after_sheet.entities.remove(id);
+            }
+            for e in &plan.add {
+                after_sheet.entities.insert(e.id(), e.clone());
+            }
+            let after = madake_core::tidy::tidy_metrics(&after_sheet, &defs);
+            let length_after = total_wire_length_mm(&after_sheet);
+            // 同じネットが何度も出る (配線のかたまりごとに調べる) ので、(ネット, 理由) の重複を省く。
+            // 「選ばれなかった」ネットは頼まれていないので返さない
+            let mut unchanged: Vec<serde_json::Value> = Vec::new();
+            let mut seen = std::collections::BTreeSet::new();
+            for (net, reason) in &plan.unchanged {
+                if reason == "not selected" || !seen.insert((net.clone(), reason.clone())) {
+                    continue;
+                }
+                unchanged.push(serde_json::json!({ "net": net, "reason": reason }));
+            }
+            let reply = serde_json::json!({
+                "rerouted": if nothing { Vec::new() } else { plan.rerouted.clone() },
+                "unchanged": unchanged,
+                "before": before,
+                "after": after,
+                "wire_length_mm": { "before": length_before, "after": length_after },
+            });
+            let mut commands = Vec::new();
+            if !nothing {
+                if !plan.remove.is_empty() {
+                    commands.push(Command::DeleteEntities { sheet_id, ids: plan.remove.clone() });
+                }
+                for entity in plan.add {
+                    commands.push(Command::AddEntity { sheet_id, entity });
+                }
+            }
             if commands.is_empty() {
                 return Ok(reply);
             }
-            let patch = engine.execute_batch(commands, origin).map_err(|e| e.to_string())?;
-            (reply, patch)
-        };
-        let _ = self.patches.send(patch);
-        Ok(reply)
+            let patch = {
+                let mut engine = self.engine.lock().unwrap();
+                if engine.revision() != revision {
+                    continue;
+                }
+                engine.execute_batch(commands, origin).map_err(|e| e.to_string())?
+            };
+            let _ = self.patches.send(patch);
+            return Ok(reply);
+        }
+        Err("引き直しの計算中に図面が何度も変わったため、引き直しをやめました。もう一度実行してください".to_string())
     }
 
     /// 整えバリアントの開始: 元シートを`count`枚複製して入れる (1回の編集)。
@@ -1762,15 +1774,17 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "シートの配線を自動で引き直す。接続は変えず、配線を直角の線にして、シンボル・文字・他のネットを避け、曲がりと交差を少なくする(遠回りした配線や分割前の経路を整える)。sheet_id省略で先頭シート。nets=引き直すネット名の並び(省略で全ネット)。options=経路探索の調整(任意)。配線だけの単純なネットが対象で、ケーブルの芯が使う配線・色や線径などが混在する配線・経路が見つからないネットは元のまま残し、unchangedに理由を付けて返す。ネットが物理的に離れた配線のかたまりに分かれているときは、かたまりごとに引き直す。元の配線の線色・線径・品番・線番などは新しい配線へ引き継ぎ、元の長さ(length_m)は新しい配線のうち一番長い1本だけが持つ。消す配線と新しい配線は1回の編集で適用し、undo一発で元のid付きの配線に戻る。返り値は rerouted(引き直したネット名)・unchanged([{net,reason}])・before/after(get_tidy_metricsと同じ数値)・wire_length_mm(前後の配線長の合計)。変える配線が無いときは何も変更しない"
+        description = "シートの配線を自動で引き直す。接続は変えず、配線を直角の線にして、シンボル・文字・他のネットを避け、曲がりと交差を少なくする(遠回りした配線や分割前の経路を整える)。sheet_id省略で先頭シート。nets=引き直すネット名の並び(省略で全ネット)。options=経路探索の調整(任意。grid_mmは0.5〜10mm、費用・すき間・余白は0以上の有限の数。範囲外はエラーで何も変えない)。配線だけの単純なネットが対象で、ケーブルの芯が使う配線・色や線径などが混在する配線・長さの出所(length_source)がまちまちな配線・他のエンティティ(ケーブルの芯・注記の引き出し線・寸法)やFreeCADとの対応付けが指している配線・ピンの引き出し線が他のネットに触れてしまう配線・経路が見つからないネットは元のまま残し、unchangedに理由を付けて返す。引き直しは、配線で物理的につながったかたまりごとに行う。元の配線の線色・線径・品番・線番などは新しい配線へ引き継ぎ、元の長さ(length_m)の合計は新しい配線のうち一番長い1本だけが持つ。名前の無いネットの自動の名前(N001など)は、新しい配線のidが変わるため、引き直しの後に入れ替わることがある。消す配線と新しい配線は1回の編集で適用し、undo一発で元のid付きの配線に戻る。返り値は rerouted(引き直したネット名)・unchanged([{net,reason}])・before/after(get_tidy_metricsと同じ数値)・wire_length_mm(前後の配線長の合計)。変える配線が無いときは何も変更しない"
     )]
     fn reroute_wires(&self, Parameters(p): Parameters<RerouteWiresParams>) -> Result<String, ErrorData> {
-        let sheet_id = self.resolve_sheet(p.sheet_id)?;
+        // 設定はロックを取る前に確かめる (使えない値でエンジンを待たせない)
         let mut options = madake_core::route::RerouteOptions::default();
         options.nets = p.nets;
         if let Some(route) = p.options {
             options.route = route;
         }
+        options.route.validate().map_err(|e| ErrorData::invalid_params(e, None))?;
+        let sheet_id = self.resolve_sheet(p.sheet_id)?;
         let reply = self
             .doc
             .reroute_wires(sheet_id, &options, self.doc.mcp_origin())

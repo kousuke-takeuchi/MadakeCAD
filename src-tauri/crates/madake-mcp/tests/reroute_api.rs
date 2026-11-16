@@ -166,3 +166,65 @@ async fn the_endpoint_rejects_an_unknown_sheet() {
     let (status, _) = post(&router, "/api/v1/route/reroute", json!({"sheet_id": Uuid::new_v4()})).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+/// The reroute tool refuses a grid spacing of zero with an error and changes nothing.
+/// 引き直しのツールは格子の間隔0をエラーで断り、何も変えない。
+#[tokio::test]
+async fn the_tool_refuses_a_zero_grid_and_changes_nothing() {
+    let (doc, bridge, _) = fixture();
+    let sheet = two_parts_one_wire(&doc, &bridge).await;
+    let original = entities_json(&doc);
+    let outcome = bridge.call("reroute_wires", json!({"sheet_id": sheet, "options": {"grid_mm": 0.0}})).await;
+    assert!(outcome.is_error, "{}", outcome.content);
+    assert!(outcome.content.contains("grid_mm"), "{}", outcome.content);
+    assert_eq!(entities_json(&doc), original);
+}
+
+/// POST /api/v1/route/reroute answers 400 with a message naming the setting when a cost is negative.
+/// POST /api/v1/route/reroute は、費用が負のとき、その設定の名前を挙げて400を返す。
+#[tokio::test]
+async fn the_endpoint_refuses_a_negative_cost() {
+    let (doc, bridge, router) = fixture();
+    let sheet = two_parts_one_wire(&doc, &bridge).await;
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/v1/route/reroute")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(&json!({"sheet_id": sheet, "options": {"cross_cost": -2.0}})).unwrap()))
+        .unwrap();
+    let response = router.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(text.contains("cross_cost"), "{text}");
+}
+
+/// A wire that is linked to a FreeCAD object is kept by the reroute, so the link keeps its wire.
+/// FreeCADのオブジェクトと対応付けた配線は引き直さずに残し、対応付けが配線を失わない。
+#[tokio::test]
+async fn a_wire_linked_to_freecad_is_kept() {
+    let (doc, bridge, _) = fixture();
+    let sheet = two_parts_one_wire(&doc, &bridge).await;
+    let wire_id = doc.engine.lock().unwrap().project().sheets[0]
+        .entities
+        .values()
+        .find_map(|e| if let madake_core::Entity::Wire(w) = e { Some(w.id) } else { None })
+        .expect("a wire");
+    let link = madake_core::MechLink {
+        entity_id: wire_id,
+        fcstd_path: "panel.FCStd".into(),
+        object_name: "Wire001".into(),
+        synced_at: String::new(),
+        placement: None,
+    };
+    doc.engine
+        .lock()
+        .unwrap()
+        .execute(madake_core::Command::SetMechLink { link })
+        .expect("link the wire");
+    let reply = call(&bridge, "reroute_wires", json!({"sheet_id": sheet})).await;
+    assert_eq!(reply["rerouted"], json!([]), "{reply}");
+    assert!(reply["unchanged"].as_array().unwrap().iter().any(|u| u["reason"].as_str().unwrap_or("").contains("FreeCAD")), "{reply}");
+    let still_there = doc.engine.lock().unwrap().project().sheets[0].entities.contains_key(&wire_id);
+    assert!(still_there);
+}

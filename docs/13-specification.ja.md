@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3435仕様項目**。
+全6領域・**3455仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -941,7 +941,9 @@
 - ケーブルの区間が使っている配線のネットは、ケーブルが配線を失わないよう、そのまま残す。 <sub>`a_net_used_by_a_cable_run_is_left_unchanged`</sub>
 - 経路が見つからないネットは、古い配線をそのまま残し、理由を知らせる。 <sub>`an_unroutable_net_keeps_its_old_wires`</sub>
 - 同じ図面に2回かけても、同じ配線が同じ順序で得られる。 <sub>`the_result_is_deterministic`</sub>
-- 名前を指定したネットだけを引き直し、ほかのネットは「選ばれていない」と知らせる。存在しない名前もそう知らせる。 <sub>`only_the_named_nets_are_rerouted`</sub>
+- ネットの名前を指定すると、そのネットだけを引き直す。 <sub>`only_the_named_nets_are_rerouted`</sub>
+- ネットの名前を指定すると、配線を持つほかのネットは「選ばれていない」と知らせる。 <sub>`nets_that_are_not_named_are_reported_as_not_selected`</sub>
+- 指定したネットの名前がシートに無いときは「そのネットは無い」と知らせる。 <sub>`an_unknown_net_name_is_reported`</sub>
 - 新しい配線には、古い配線の色・線径・品番・線番・破線・太さ・長さがそのまま引き継がれる。 <sub>`new_wires_keep_the_attributes_of_the_old_wires`</sub>
 - 1つのネットが何本かの配線に引き直されたとき、元の長さは一番長い新しい配線だけが持ち、合計で二重に数えられない。 <sub>`only_the_longest_new_wire_keeps_the_old_length`</sub>
 - 何にもつながっていない配線の端があるネットは、その端が何のためか分からないので、そのまま残す。 <sub>`a_net_with_a_free_wire_end_is_left_unchanged`</sub>
@@ -952,6 +954,21 @@
 - 90度回した部品は、回したあとのピンの向きに配線を出す。下向きになったピンからは、まず下へ線が出る。 <sub>`a_rotated_part_sends_its_wire_out_in_the_turned_direction`</sub>
 - 格子の上にないピンにも、ピンの位置ぴったりから始まる配線がつく。 <sub>`a_wire_at_an_off_grid_pin_starts_exactly_on_the_pin`</sub>
 - そのまま残すネットの配線は動かさず、ほかのネットはそれにつながらないように避けて引かれる。 <sub>`a_net_left_unchanged_is_avoided_by_the_other_nets`</sub>
+- ピンの引き出し線が、引き直さないネットのジャンクションの上で終わってしまうときは、2つのネットはつながらず、ピンのネットはそのまま残る。 <sub>`a_lead_never_ends_on_a_fixed_junction_of_another_net`</sub>
+- ピンの引き出し線が、引き直さないネットの配線の端の上を通ってしまうときは、ピンのネットはそのまま残る。 <sub>`a_lead_never_touches_a_fixed_wire_of_another_net`</sub>
+- ピンの引き出し線が、後で経路が見つからず古い配線を残すことになったネットの配線に触れるときは、ピンのネットもそのまま残る。 <sub>`a_lead_never_touches_the_old_wire_of_a_net_that_keeps_its_wires`</sub>
+- 2つのネットの引き出し線が同じ格子点で終わってしまうときは、先のネットだけを引き直し、後のネットは古い配線を残すので、ネットはつながらない。 <sub>`two_leads_never_end_on_the_same_grid_point`</sub>
+- ネットラベルの引き出し線は、文字だけのラベルでも左向き・右向きのタグのラベルでも、そのラベル自身の文字の中を通らない。 <sub>`a_label_lead_does_not_run_through_its_own_text`</sub>
+- 外形のまわりのすき間が0でも、格子の線から0.008mmだけずれたピンは線の上にあるものとして扱い、新しい配線がそのピンにつながるほど近くを通らない。 <sub>`a_pin_a_hair_off_a_grid_line_is_still_avoided`</sub>
+- ケーブルの芯が割り当てられた配線 (定義線で描いたケーブル) は残し、ケーブルが配線を失わない。 <sub>`a_wire_assigned_to_a_cable_core_is_kept`</sub>
+- 注記の引き出し線が指している配線は残し、引き出し線が行き先を失わない。 <sub>`a_wire_that_a_note_leader_points_at_is_kept`</sub>
+- 外から守るよう渡された配線 (FreeCADのオブジェクトと対応付けた配線など) は残す。 <sub>`a_wire_in_the_protected_ids_is_kept`</sub>
+- 格子の間隔が0のときは、落ちずにエラーで断る。 <sub>`a_zero_grid_is_refused`</sub>
+- 費用が負のときは、その設定の名前を挙げてエラーで断る。 <sub>`a_negative_cost_is_refused`</sub>
+- 古い配線の長さの出所がそろっている3端子のネットは、長さの合計を一番長い新しい配線に持たせる。 <sub>`the_sum_of_the_old_lengths_goes_on_the_longest_new_wire`</sub>
+- 古い配線の長さの出所がまちまち (手入力とFreeCADの計測) なネットは、理由を付けてそのまま残す。 <sub>`a_net_with_lengths_from_different_sources_is_left_unchanged`</sub>
+- 多くのネットが壁に囲まれて経路が見つからない大きなA0の図面でも、すぐに終わり、そのネットは全て古い配線を残す。 <sub>`a_large_sheet_with_many_unroutable_nets_finishes_quickly`</sub>
+- 格子の外のピン・ネットラベル・選ばれていないネットを含む多数の生成した図面で、引き直した後もネットのピンのまとまりは元と同じで、ラベルは配線の上に残る。 <sub>`generated_sheets_with_off_grid_pins_labels_and_fixed_nets_keep_the_same_pin_groups`</sub>
 
 ### search
 
@@ -1765,6 +1782,9 @@
 - 配線の無いシートには空の返事を返し、空のバッチも実行しない。 <sub>`a_sheet_without_wires_gives_an_empty_reply_and_no_edit`</sub>
 - POST /api/v1/route/reroute はツールと同じ形の返事を返し、1回の編集として適用し、undo一発で元のエンティティに戻る。 <sub>`the_endpoint_applies_one_batch_and_one_undo_restores_the_original`</sub>
 - 存在しないシートidを渡すと、エンドポイントは400を返す。 <sub>`the_endpoint_rejects_an_unknown_sheet`</sub>
+- 引き直しのツールは格子の間隔0をエラーで断り、何も変えない。 <sub>`the_tool_refuses_a_zero_grid_and_changes_nothing`</sub>
+- POST /api/v1/route/reroute は、費用が負のとき、その設定の名前を挙げて400を返す。 <sub>`the_endpoint_refuses_a_negative_cost`</sub>
+- FreeCADのオブジェクトと対応付けた配線は引き直さずに残し、対応付けが配線を失わない。 <sub>`a_wire_linked_to_freecad_is_kept`</sub>
 
 ### search_api
 

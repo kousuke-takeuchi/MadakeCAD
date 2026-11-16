@@ -717,6 +717,13 @@ async fn post_route_reroute(
     State(doc): State<SharedDoc>,
     Json(body): Json<RerouteBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    // 設定はロックを取る前に確かめる (使えない値は400)
+    let mut options = madake_core::route::RerouteOptions::default();
+    options.nets = body.nets;
+    if let Some(route) = body.options {
+        options.route = route;
+    }
+    options.route.validate().map_err(bad_request)?;
     let sheet_id = match body.sheet_id {
         Some(id) => id,
         None => doc
@@ -729,11 +736,6 @@ async fn post_route_reroute(
             .map(|s| s.id)
             .ok_or_else(|| bad_request("sheet not found"))?,
     };
-    let mut options = madake_core::route::RerouteOptions::default();
-    options.nets = body.nets;
-    if let Some(route) = body.options {
-        options.route = route;
-    }
     let reply = doc
         .reroute_wires(sheet_id, &options, madake_core::EditOrigin::Mcp)
         .map_err(bad_request)?;

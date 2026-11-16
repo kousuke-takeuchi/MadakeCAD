@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3435 specification clauses** across 6 areas.
+**3455 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -941,7 +941,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A net whose wire is used by a cable run is left as it is, so the cable keeps its wire. <sub>`a_net_used_by_a_cable_run_is_left_unchanged`</sub>
 - A net that cannot be routed keeps its old wires and is reported. <sub>`an_unroutable_net_keeps_its_old_wires`</sub>
 - Running the planner twice on the same sheet gives the same wires, in the same order. <sub>`the_result_is_deterministic`</sub>
-- A net named in the request is rerouted and the others are reported as not selected; an unknown name is reported too. <sub>`only_the_named_nets_are_rerouted`</sub>
+- When nets are named, only those nets are rerouted. <sub>`only_the_named_nets_are_rerouted`</sub>
+- When nets are named, every other net with wires is reported as not selected. <sub>`nets_that_are_not_named_are_reported_as_not_selected`</sub>
+- A requested net name that does not exist on the sheet is reported as no such net. <sub>`an_unknown_net_name_is_reported`</sub>
 - New wires carry the colour, cross-section, part number, wire number, dash, weight and length of the old wires. <sub>`new_wires_keep_the_attributes_of_the_old_wires`</sub>
 - When a net is rebuilt as several wires, only the longest new wire keeps the old length, so totals do not count it twice. <sub>`only_the_longest_new_wire_keeps_the_old_length`</sub>
 - A net with a wire end that touches nothing is left as it is, because the new route could not know what that end is for. <sub>`a_net_with_a_free_wire_end_is_left_unchanged`</sub>
@@ -952,6 +954,21 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A part turned by 90 degrees sends its wire out in the turned pin direction, so the wire first runs down from a pin that points down. <sub>`a_rotated_part_sends_its_wire_out_in_the_turned_direction`</sub>
 - A pin that is not on the routing grid keeps a wire that starts exactly on the pin. <sub>`a_wire_at_an_off_grid_pin_starts_exactly_on_the_pin`</sub>
 - A net that is left unchanged stays where it is and the other nets route around it without touching it. <sub>`a_net_left_unchanged_is_avoided_by_the_other_nets`</sub>
+- When a pin's lead would end on a junction of a net that is not rerouted, that net stays separate: the pin's net is left as it is. <sub>`a_lead_never_ends_on_a_fixed_junction_of_another_net`</sub>
+- When a pin's lead would run over a wire end of a net that is not rerouted, the pin's net is left as it is. <sub>`a_lead_never_touches_a_fixed_wire_of_another_net`</sub>
+- When a pin's lead touches the old wire of a net that later turns out to be unroutable (and so keeps its old wires), the pin's net is left as it is too. <sub>`a_lead_never_touches_the_old_wire_of_a_net_that_keeps_its_wires`</sub>
+- When the leads of two nets would end on the same grid point, only the first net is rerouted and the second keeps its old wires, so the nets stay apart. <sub>`two_leads_never_end_on_the_same_grid_point`</sub>
+- A net label's lead does not run through the label's own text, whether the label is plain or drawn as a tag pointing left or right. <sub>`a_label_lead_does_not_run_through_its_own_text`</sub>
+- With no clearance around outlines, a pin that is 0.008 mm off a grid line counts as on the line, so no new wire passes close enough to join it. <sub>`a_pin_a_hair_off_a_grid_line_is_still_avoided`</sub>
+- A wire that a cable's core is assigned to (a cable drawn as a definition line) is kept, so the cable does not lose its wire. <sub>`a_wire_assigned_to_a_cable_core_is_kept`</sub>
+- A wire that a note's leader points at is kept, so the leader keeps its target. <sub>`a_wire_that_a_note_leader_points_at_is_kept`</sub>
+- A wire named in the extra protected ids (for example one linked to a FreeCAD object) is kept. <sub>`a_wire_in_the_protected_ids_is_kept`</sub>
+- A grid spacing of zero is refused with an error instead of crashing. <sub>`a_zero_grid_is_refused`</sub>
+- A negative cost is refused with an error that names the setting. <sub>`a_negative_cost_is_refused`</sub>
+- A three-terminal net whose old wires carry lengths from the same source puts the sum of those lengths on the longest new wire. <sub>`the_sum_of_the_old_lengths_goes_on_the_longest_new_wire`</sub>
+- A net whose old wires carry lengths from different sources (typed in and measured in FreeCAD) is left as it is, with the reason. <sub>`a_net_with_lengths_from_different_sources_is_left_unchanged`</sub>
+- A large A0 sheet where many nets are walled in and cannot be routed still finishes quickly, and every such net keeps its wires. <sub>`a_large_sheet_with_many_unroutable_nets_finishes_quickly`</sub>
+- For many generated sheets with off-grid pins, net labels and nets that are not selected, the reroute keeps every net's pin group and every label stays on a wire. <sub>`generated_sheets_with_off_grid_pins_labels_and_fixed_nets_keep_the_same_pin_groups`</sub>
 
 ### search
 
@@ -1765,6 +1782,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A sheet with no wires gives an empty reply and no edit, not an empty batch. <sub>`a_sheet_without_wires_gives_an_empty_reply_and_no_edit`</sub>
 - POST /api/v1/route/reroute gives the same reply shape as the tool, applies one batch, and one undo restores the original entities. <sub>`the_endpoint_applies_one_batch_and_one_undo_restores_the_original`</sub>
 - The endpoint answers 400 for a sheet id that does not exist. <sub>`the_endpoint_rejects_an_unknown_sheet`</sub>
+- The reroute tool refuses a grid spacing of zero with an error and changes nothing. <sub>`the_tool_refuses_a_zero_grid_and_changes_nothing`</sub>
+- POST /api/v1/route/reroute answers 400 with a message naming the setting when a cost is negative. <sub>`the_endpoint_refuses_a_negative_cost`</sub>
+- A wire that is linked to a FreeCAD object is kept by the reroute, so the link keeps its wire. <sub>`a_wire_linked_to_freecad_is_kept`</sub>
 
 ### search_api
 
