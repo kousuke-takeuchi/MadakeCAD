@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3477 specification clauses** across 6 areas.
+**3479 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -969,6 +969,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A net whose old wires carry lengths from different sources (typed in and measured in FreeCAD) is left as it is, with the reason. <sub>`a_net_with_lengths_from_different_sources_is_left_unchanged`</sub>
 - A large A0 sheet where many nets are walled in and cannot be routed still finishes quickly, and every such net keeps its wires. <sub>`a_large_sheet_with_many_unroutable_nets_finishes_quickly`</sub>
 - For many generated sheets with off-grid pins, net labels and nets that are not selected, the reroute keeps every net's pin group and every label stays on a wire. <sub>`generated_sheets_with_off_grid_pins_labels_and_fixed_nets_keep_the_same_pin_groups`</sub>
+- Collecting the wires of a sheet sorts two simple clusters into routable units and keeps none. <sub>`collecting_finds_simple_clusters_as_units`</sub>
+- A cluster with a free end is kept, and the kept record lists its wire and the reason. <sub>`collecting_records_a_free_end_cluster`</sub>
 
 ### search
 

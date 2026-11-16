@@ -759,26 +759,72 @@ pub struct ReroutePlan {
 ///
 /// ネットは同名のネットラベルで離れたかたまりをつなぐので、かたまりごとに別々に引き直す
 /// (離れたかたまりを新しい配線でつなぐと、図面の見た目が変わるため)。
-struct Unit {
-    net: String,
-    wires: Vec<EntityId>,
-    junctions: Vec<EntityId>,
-    template: Wire,
-    old_lines: Vec<Vec<Point>>,
-    old_junctions: Vec<Point>,
+pub(crate) struct RouteUnit {
+    pub net: String,
+    pub wires: Vec<EntityId>,
+    pub junctions: Vec<EntityId>,
+    pub template: Wire,
+    pub old_lines: Vec<Vec<Point>>,
+    pub old_junctions: Vec<Point>,
     /// 端子 (ピン・ラベル) の位置と向き。位置順。
-    terms: Vec<(Point, Option<Dir>)>,
-    leads: Vec<Lead>,
+    pub terms: Vec<(Point, Option<Dir>)>,
+    pub leads: Vec<Lead>,
 }
 
 /// 経路が使う場所。他のネットの探索に対する占有を表す。
-struct UnitRoute {
-    segs: Vec<(Point, Point)>,
-    nodes: HashMap<usize, u8>,
+pub(crate) struct UnitRoute {
+    pub segs: Vec<(Point, Point)>,
+    pub nodes: HashMap<usize, u8>,
     /// 経路が収まる格子の範囲 (x0, y0, x1, y1)。
-    bbox: (i64, i64, i64, i64),
+    pub bbox: (i64, i64, i64, i64),
     /// 端子ごとの引き出し線の点列 (ピンの位置から)。
-    leads: Vec<Vec<Point>>,
+    pub leads: Vec<Vec<Point>>,
+}
+
+/// 引き直さずに残したかたまりの理由 (かたまり単位で決まるもの)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum KeepReason {
+    NoPath,
+    Pointed,
+    Mixed,
+    LengthSources,
+    FreeEnd,
+    FewTerminals,
+}
+
+impl KeepReason {
+    /// 今までの返り値と同じ英語の理由。
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            KeepReason::NoPath => "a wire has no path",
+            KeepReason::Pointed => "another entity points at a wire or junction here (cable core, note leader, dimension or FreeCAD link)",
+            KeepReason::Mixed => "wires differ in colour, cross-section, part number, wire number, dash or weight",
+            KeepReason::LengthSources => "wires carry lengths from different sources (length_source)",
+            KeepReason::FreeEnd => "a wire has a free end that touches nothing",
+            KeepReason::FewTerminals => "fewer than two terminals",
+        }
+    }
+}
+
+/// 引き直さずに残した、配線で物理的につながった1かたまり。
+#[derive(Debug, Clone)]
+pub(crate) struct KeptCluster {
+    pub net: String,
+    pub wires: Vec<EntityId>,
+    pub junctions: Vec<EntityId>,
+    /// かたまりの上のピンとラベルの位置と向き (ラベルはNone)。
+    pub terms: Vec<(Point, Option<Dir>)>,
+    pub reason: KeepReason,
+}
+
+/// 引き直しの単位の収集結果。
+pub(crate) struct Collected {
+    pub units: Vec<RouteUnit>,
+    /// 動かない配線 (ネット単位で残した配線と、かたまり単位で残した配線)。
+    pub fixed_wires: Vec<EntityId>,
+    pub kept: Vec<KeptCluster>,
+    /// (ネット名, 理由) — ネット単位 (選ばれていない・ポートの接点で共有・ケーブル) と、かたまり単位の理由。
+    pub unchanged: Vec<(String, String)>,
 }
 
 /// 配線の線分を格子の占有に直す。(格子点, 辺のビット, 通れない印) の並び。
@@ -889,7 +935,7 @@ fn remove_route(occ: &mut Occ, r: &UnitRoute) {
 }
 
 /// 1つの単位の木を作る。最初に中心に最も近い端子を木の根にし、残りを近い順に木へつなぐ。
-fn route_unit(grid: &RouteGrid, occ: &Occ, searcher: &mut Searcher, unit: &Unit) -> Option<UnitRoute> {
+fn route_unit(grid: &RouteGrid, occ: &Occ, searcher: &mut Searcher, unit: &RouteUnit) -> Option<UnitRoute> {
     let n = unit.terms.len();
     let (cx, cy) = (
         unit.terms.iter().map(|t| t.0.x).sum::<f64>() / n as f64,
@@ -999,7 +1045,7 @@ fn quant(q: Point) -> (i64, i64) {
 
 /// 経路の線分から、配線とジャンクションを作る。端子とジャンクション (3方向以上の点) の間を1本の配線にし、
 /// 途中の一直線上の点は省く。
-fn emit(unit: &Unit, route: &UnitRoute) -> Vec<Entity> {
+pub(crate) fn emit(unit: &RouteUnit, route: &UnitRoute) -> Vec<Entity> {
     use std::collections::BTreeMap;
     use std::collections::BTreeSet;
     let mut keys: BTreeMap<(i64, i64), usize> = BTreeMap::new();
@@ -1131,7 +1177,7 @@ fn clusters(wires: &[&Wire], anchors: &[Point]) -> Vec<Vec<usize>> {
 }
 
 /// 端子の引き出し線。向きの分からない端子 (ラベル) は、外へ出られる最も短い向きを選ぶ。
-fn make_lead(grid: &RouteGrid, pos: Point, dir: Option<Dir>) -> Option<Lead> {
+pub(crate) fn make_lead(grid: &RouteGrid, pos: Point, dir: Option<Dir>) -> Option<Lead> {
     match dir {
         Some(_) => grid.lead(pos, dir),
         None => grid.lead(pos, None).or_else(|| {
@@ -1145,21 +1191,14 @@ fn make_lead(grid: &RouteGrid, pos: Point, dir: Option<Dir>) -> Option<Lead> {
     }
 }
 
-/// シートの配線を、接続を変えずに引き直す計画を作る。図面は書き換えない。
+/// 引き直しの単位を集める。ネット単位・かたまり単位で引き直さないものは、理由と一緒に記録する。
 ///
-/// ネットごと、配線で物理的につながったかたまりごとに、ピン・ネットラベル・ネット名シンボルのピンを
-/// 端子とする木を格子の上に引く。引き直さないネット (ケーブルの芯・属性がまちまち・端が浮いている・
-/// 選ばれていない) の配線は動かない障害物として扱う。経路が見つからないかたまりは古い配線を残す。
-///
-/// `protected`は、シートの外から指されている配線・ジャンクションのid (FreeCADとの対応付け
-/// [`crate::model::Project::mech_links`] など)。シートの中のエンティティが指すもの ([`Entity::refs`]) と
-/// 合わせて、これらを含むかたまりは消さずにそのまま残す。設定が使えない値ならエラー (日本語の理由)。
-pub fn plan_reroute(sheet: &Sheet, defs: &[SymbolDef], opts: &RerouteOptions, protected: &[EntityId]) -> Result<ReroutePlan, String> {
-    use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
-    opts.route.validate()?;
-    let mut plan = ReroutePlan::default();
+/// 図面は書き換えない。`protected`の意味は [`plan_reroute`] と同じ。
+pub(crate) fn collect_route_units(sheet: &Sheet, defs: &[SymbolDef], opts: &RerouteOptions, protected: &[EntityId]) -> Collected {
+    use std::collections::{BTreeMap, HashSet};
+    let mut unchanged: Vec<(String, String)> = Vec::new();
+    let mut kept: Vec<KeptCluster> = Vec::new();
     let nets = extract_netlist(sheet, defs);
-    let grid = RouteGrid::build(sheet, defs, &opts.route);
     let pins = pin_points(sheet, defs);
     let labels: Vec<Point> = sheet.entities.values().filter_map(|e| if let Entity::NetLabel(l) = e { Some(l.at) } else { None }).collect();
     let junctions: Vec<(EntityId, Point)> =
@@ -1194,7 +1233,7 @@ pub fn plan_reroute(sheet: &Sheet, defs: &[SymbolDef], opts: &RerouteOptions, pr
     // 指されているid。消すと指す先が無くなるので、これを含むかたまりは動かさない
     let pointed: HashSet<EntityId> = sheet.entities.values().flat_map(|e| e.refs()).chain(protected.iter().copied()).collect();
 
-    let mut units: Vec<Unit> = Vec::new();
+    let mut units: Vec<RouteUnit> = Vec::new();
     let mut fixed_wires: Vec<EntityId> = Vec::new();
     for net in &nets {
         if net.wire_ids.is_empty() {
@@ -1210,55 +1249,16 @@ pub fn plan_reroute(sheet: &Sheet, defs: &[SymbolDef], opts: &RerouteOptions, pr
             None
         };
         if let Some(r) = reason {
-            plan.unchanged.push((net.name.clone(), r));
+            unchanged.push((net.name.clone(), r));
             fixed_wires.extend(net.wire_ids.iter().copied());
             continue;
         }
         let net_wires: Vec<&Wire> = net.wire_ids.iter().filter_map(|id| wires.get(id).copied()).collect();
         for group in clusters(&net_wires, &anchors) {
             let ws: Vec<&Wire> = group.iter().map(|&i| net_wires[i]).collect();
-            let keep = |plan: &mut ReroutePlan, fixed: &mut Vec<EntityId>, why: &str| {
-                plan.unchanged.push((net.name.clone(), why.to_string()));
-                fixed.extend(ws.iter().map(|w| w.id));
-            };
             let t = ws[0];
-            if ws.iter().any(|w| w.points.len() < 2) {
-                keep(&mut plan, &mut fixed_wires, "a wire has no path");
-                continue;
-            }
             let on_group = |q: Point| ws.iter().any(|w| on_wire(w, &q));
             let group_junctions: Vec<(EntityId, Point)> = junctions.iter().filter(|j| on_group(j.1)).copied().collect();
-            if ws.iter().any(|w| pointed.contains(&w.id)) || group_junctions.iter().any(|j| pointed.contains(&j.0)) {
-                keep(
-                    &mut plan,
-                    &mut fixed_wires,
-                    "another entity points at a wire or junction here (cable core, note leader, dimension or FreeCAD link)",
-                );
-                continue;
-            }
-            let mixed = ws.iter().any(|w| {
-                w.color != t.color || w.sq != t.sq || w.part_no != t.part_no || w.net != t.net || w.dashed != t.dashed || w.weight_mm != t.weight_mm
-            });
-            if mixed {
-                keep(&mut plan, &mut fixed_wires, "wires differ in colour, cross-section, part number, wire number, dash or weight");
-                continue;
-            }
-            let free = ws.iter().any(|w| {
-                [w.points[0], *w.points.last().unwrap()].iter().any(|&e| {
-                    !attached(e, w.id, &all_ends, &anchors)
-                })
-            });
-            if free {
-                keep(&mut plan, &mut fixed_wires, "a wire has a free end that touches nothing");
-                continue;
-            }
-            // 長さ: 長さを持つ古い配線の出所がそろっていれば、合計を一番長い新しい配線に持たせる ([`emit`])。
-            // 出所がまちまちなら、どちらの出所として持たせても誤りになるので動かさない
-            let with_len: Vec<&&Wire> = ws.iter().filter(|w| w.length_m.is_some()).collect();
-            if with_len.iter().any(|w| w.length_source != with_len[0].length_source) {
-                keep(&mut plan, &mut fixed_wires, "wires carry lengths from different sources (length_source)");
-                continue;
-            }
             // 端子: 配線の上にあるピンとラベル。同じ位置ならピン (向きを持つ) が先
             let mut terms: Vec<(Point, Option<Dir>)> = Vec::new();
             for q in &pins {
@@ -1272,11 +1272,54 @@ pub fn plan_reroute(sheet: &Sheet, defs: &[SymbolDef], opts: &RerouteOptions, pr
                 }
             }
             terms.sort_by_key(|t| quant(t.0));
-            if terms.len() < 2 {
-                keep(&mut plan, &mut fixed_wires, "fewer than two terminals");
+            // 残すかたまり: 理由と一緒に記録し、配線は動かない障害物にする
+            let mut keep = |reason: KeepReason| {
+                unchanged.push((net.name.clone(), reason.as_str().to_string()));
+                fixed_wires.extend(ws.iter().map(|w| w.id));
+                kept.push(KeptCluster {
+                    net: net.name.clone(),
+                    wires: ws.iter().map(|w| w.id).collect(),
+                    junctions: group_junctions.iter().map(|j| j.0).collect(),
+                    terms: terms.clone(),
+                    reason,
+                });
+            };
+            if ws.iter().any(|w| w.points.len() < 2) {
+                keep(KeepReason::NoPath);
                 continue;
             }
-            units.push(Unit {
+            if ws.iter().any(|w| pointed.contains(&w.id)) || group_junctions.iter().any(|j| pointed.contains(&j.0)) {
+                keep(KeepReason::Pointed);
+                continue;
+            }
+            let mixed = ws.iter().any(|w| {
+                w.color != t.color || w.sq != t.sq || w.part_no != t.part_no || w.net != t.net || w.dashed != t.dashed || w.weight_mm != t.weight_mm
+            });
+            if mixed {
+                keep(KeepReason::Mixed);
+                continue;
+            }
+            let free = ws.iter().any(|w| {
+                [w.points[0], *w.points.last().unwrap()].iter().any(|&e| {
+                    !attached(e, w.id, &all_ends, &anchors)
+                })
+            });
+            if free {
+                keep(KeepReason::FreeEnd);
+                continue;
+            }
+            // 長さ: 長さを持つ古い配線の出所がそろっていれば、合計を一番長い新しい配線に持たせる ([`emit`])。
+            // 出所がまちまちなら、どちらの出所として持たせても誤りになるので動かさない
+            let with_len: Vec<&&Wire> = ws.iter().filter(|w| w.length_m.is_some()).collect();
+            if with_len.iter().any(|w| w.length_source != with_len[0].length_source) {
+                keep(KeepReason::LengthSources);
+                continue;
+            }
+            if terms.len() < 2 {
+                keep(KeepReason::FewTerminals);
+                continue;
+            }
+            units.push(RouteUnit {
                 net: net.name.clone(),
                 wires: ws.iter().map(|w| w.id).collect(),
                 junctions: group_junctions.iter().map(|j| j.0).collect(),
@@ -1300,28 +1343,30 @@ pub fn plan_reroute(sheet: &Sheet, defs: &[SymbolDef], opts: &RerouteOptions, pr
     }
     for name in &opts.nets {
         if !nets.iter().any(|n| &n.name == name) {
-            plan.unchanged.push((name.clone(), "no such net".to_string()));
+            unchanged.push((name.clone(), "no such net".to_string()));
         }
     }
+    Collected { units, fixed_wires, kept, unchanged }
+}
 
+
+/// 単位の並びを格子の上に引く。返り値は単位ごとに、引けた経路か、諦めた理由。
+/// `fixed_lines`/`fixed_spots`は動かない配線の点列とジャンクションの位置 (占有と、引き出し線の接触の検査に使う)。
+pub(crate) fn route_units(
+    grid: &RouteGrid,
+    units: &mut [RouteUnit],
+    mut fixed_lines: Vec<Vec<Point>>,
+    mut fixed_spots: Vec<Point>,
+) -> Vec<Result<UnitRoute, &'static str>> {
+    use std::collections::VecDeque;
     // 動かない配線と、引き直さないネットのジャンクション
-    let mut occ = Occ::new(&grid);
-    for id in &fixed_wires {
-        if let Some(w) = wires.get(id) {
-            apply_raster(&mut occ, &rasterize(&grid, &w.points));
-        }
+    let mut occ = Occ::new(grid);
+    for line in &fixed_lines {
+        apply_raster(&mut occ, &rasterize(grid, line));
     }
-    let moving: HashSet<EntityId> = units.iter().flat_map(|u| u.junctions.iter().copied()).collect();
-    for &(id, at) in &junctions {
-        if !moving.contains(&id) {
-            apply_raster(&mut occ, &block_point(&grid, at));
-        }
+    for &at in &fixed_spots {
+        apply_raster(&mut occ, &block_point(grid, at));
     }
-
-    // 動かない配線とジャンクションの形 (引き出し線がこれに触れるとネットがつながってしまう)。
-    // 経路を諦めた単位の古い配線も、後で足していく
-    let mut fixed_lines: Vec<Vec<Point>> = fixed_wires.iter().filter_map(|id| wires.get(id)).map(|w| w.points.clone()).collect();
-    let mut fixed_spots: Vec<Point> = junctions.iter().filter(|j| !moving.contains(&j.0)).map(|j| j.1).collect();
 
     // 引き出し線。出られない端子のある単位は引き直せない。引き出し線が動かない配線・ジャンクション・
     // 他の単位の引き出し線に触れる単位も引き直さない (A* は引き出し線の終わりの点を占有の検査から外すため、
@@ -1330,7 +1375,7 @@ pub fn plan_reroute(sheet: &Sheet, defs: &[SymbolDef], opts: &RerouteOptions, pr
     let mut why: Vec<Option<&'static str>> = vec![None; units.len()];
     let mut accepted_leads: Vec<Vec<Point>> = Vec::new();
     for i in 0..units.len() {
-        let leads: Option<Vec<Lead>> = units[i].terms.iter().map(|&(pos, dir)| make_lead(&grid, pos, dir)).collect();
+        let leads: Option<Vec<Lead>> = units[i].terms.iter().map(|&(pos, dir)| make_lead(grid, pos, dir)).collect();
         let Some(leads) = leads else {
             failed[i] = true;
             continue;
@@ -1353,7 +1398,7 @@ pub fn plan_reroute(sheet: &Sheet, defs: &[SymbolDef], opts: &RerouteOptions, pr
     }
 
     // 順序: 端子が少なく、範囲が小さい単位から。同点は名前と位置で決める
-    let span = |u: &Unit| -> i64 {
+    let span = |u: &RouteUnit| -> i64 {
         let (x0, x1) = u.terms.iter().fold((f64::MAX, f64::MIN), |(a, b), t| (a.min(t.0.x), b.max(t.0.x)));
         let (y0, y1) = u.terms.iter().fold((f64::MAX, f64::MIN), |(a, b), t| (a.min(t.0.y), b.max(t.0.y)));
         ((x1 - x0 + y1 - y0) * 1000.0).round() as i64
@@ -1364,7 +1409,7 @@ pub fn plan_reroute(sheet: &Sheet, defs: &[SymbolDef], opts: &RerouteOptions, pr
         (ua.terms.len(), span(ua), &ua.net, quant(ua.terms[0].0), a).cmp(&(ub.terms.len(), span(ub), &ub.net, quant(ub.terms[0].0), b))
     });
 
-    let mut searcher = Searcher::new(&grid);
+    let mut searcher = Searcher::new(grid);
     let mut routes: Vec<Option<UnitRoute>> = (0..units.len()).map(|_| None).collect();
     let mut tries: Vec<u32> = vec![0; units.len()];
     let mut routed: Vec<usize> = Vec::new();
@@ -1373,7 +1418,7 @@ pub fn plan_reroute(sheet: &Sheet, defs: &[SymbolDef], opts: &RerouteOptions, pr
 
     // 経路を諦めた単位: 古い配線を動かない障害物にし、それとぶつかる経路は引き直しに回す
     let settle_failed = |first: usize,
-                         units: &[Unit],
+                         units: &[RouteUnit],
                          occ: &mut Occ,
                          routes: &mut Vec<Option<UnitRoute>>,
                          routed: &mut Vec<usize>,
@@ -1388,10 +1433,10 @@ pub fn plan_reroute(sheet: &Sheet, defs: &[SymbolDef], opts: &RerouteOptions, pr
             failed[u] = true;
             let mut entries: Vec<(usize, u8, bool)> = Vec::new();
             for line in &units[u].old_lines {
-                entries.extend(rasterize(&grid, line));
+                entries.extend(rasterize(grid, line));
             }
             for &q in &units[u].old_junctions {
-                entries.extend(block_point(&grid, q));
+                entries.extend(block_point(grid, q));
             }
             let (old_lines, old_spots) = (&units[u].old_lines, &units[u].old_junctions);
             let hit: Vec<(usize, bool)> = routed
@@ -1451,7 +1496,7 @@ pub fn plan_reroute(sheet: &Sheet, defs: &[SymbolDef], opts: &RerouteOptions, pr
             queue.retain(|&x| !failed[x]);
             continue;
         }
-        if let Some(r) = route_unit(&grid, &occ, &mut searcher, &units[u]) {
+        if let Some(r) = route_unit(grid, &occ, &mut searcher, &units[u]) {
             add_route(&mut occ, &r);
             routes[u] = Some(r);
             routed.push(u);
@@ -1484,7 +1529,7 @@ pub fn plan_reroute(sheet: &Sheet, defs: &[SymbolDef], opts: &RerouteOptions, pr
             let rv = routes[v].take().expect("routed");
             remove_route(&mut occ, &rv);
             routed.remove(at);
-            if let Some(r) = route_unit(&grid, &occ, &mut searcher, &units[u]) {
+            if let Some(r) = route_unit(grid, &occ, &mut searcher, &units[u]) {
                 add_route(&mut occ, &r);
                 routes[u] = Some(r);
                 routed.push(u);
@@ -1506,23 +1551,61 @@ pub fn plan_reroute(sheet: &Sheet, defs: &[SymbolDef], opts: &RerouteOptions, pr
             queue.retain(|&x| !failed[x]);
         }
     }
-
     // 結果
+    routes
+        .into_iter()
+        .zip(failed)
+        .zip(why)
+        .map(|((r, f), w)| match (r, f) {
+            (Some(route), false) => Ok(route),
+            _ => Err(w.unwrap_or("no route found; the old wires are kept")),
+        })
+        .collect()
+}
+
+/// シートの配線を、接続を変えずに引き直す計画を作る。図面は書き換えない。
+///
+/// ネットごと、配線で物理的につながったかたまりごとに、ピン・ネットラベル・ネット名シンボルのピンを
+/// 端子とする木を格子の上に引く。引き直さないネット (ケーブルの芯・属性がまちまち・端が浮いている・
+/// 選ばれていない) の配線は動かない障害物として扱う。経路が見つからないかたまりは古い配線を残す。
+///
+/// `protected`は、シートの外から指されている配線・ジャンクションのid (FreeCADとの対応付け
+/// [`crate::model::Project::mech_links`] など)。シートの中のエンティティが指すもの ([`Entity::refs`]) と
+/// 合わせて、これらを含むかたまりは消さずにそのまま残す。設定が使えない値ならエラー (日本語の理由)。
+pub fn plan_reroute(sheet: &Sheet, defs: &[SymbolDef], opts: &RerouteOptions, protected: &[EntityId]) -> Result<ReroutePlan, String> {
+    use std::collections::{BTreeSet, HashSet};
+    opts.route.validate()?;
+    let grid = RouteGrid::build(sheet, defs, &opts.route);
+    let mut c = collect_route_units(sheet, defs, opts, protected);
+    let fixed_lines: Vec<Vec<Point>> = c
+        .fixed_wires
+        .iter()
+        .filter_map(|id| if let Some(Entity::Wire(w)) = sheet.entities.get(id) { Some(w.points.clone()) } else { None })
+        .collect();
+    let moving: HashSet<EntityId> = c.units.iter().flat_map(|u| u.junctions.iter().copied()).collect();
+    let fixed_spots: Vec<Point> = sheet
+        .entities
+        .values()
+        .filter_map(|e| if let Entity::Junction(j) = e { (!moving.contains(&j.id)).then_some(j.at) } else { None })
+        .collect();
+    let results = route_units(&grid, &mut c.units, fixed_lines, fixed_spots);
+    let mut plan = ReroutePlan { unchanged: c.unchanged, ..Default::default() };
     let mut names: BTreeSet<String> = BTreeSet::new();
-    for (i, u) in units.iter().enumerate() {
-        match (&routes[i], failed[i]) {
-            (Some(r), false) => {
+    for (u, r) in c.units.iter().zip(results) {
+        match r {
+            Ok(route) => {
                 plan.remove.extend(u.wires.iter().copied());
                 plan.remove.extend(u.junctions.iter().copied());
-                plan.add.extend(emit(u, r));
+                plan.add.extend(emit(u, &route));
                 names.insert(u.net.clone());
             }
-            _ => plan.unchanged.push((u.net.clone(), why[i].unwrap_or("no route found; the old wires are kept").to_string())),
+            Err(why) => plan.unchanged.push((u.net.clone(), why.to_string())),
         }
     }
     plan.rerouted = names.into_iter().collect();
     Ok(plan)
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -2752,5 +2835,37 @@ mod tests {
         // 生成した図面が、引き直し・選ばれていないネット・ラベルを実際に含んでいること
         eprintln!("rerouted {rerouted}, not selected {fixed}, labels {label_count}");
         assert!(rerouted > 0 && fixed > 0 && label_count > 0, "rerouted {rerouted}, not selected {fixed}, labels {label_count}");
+    }
+
+    /// Collecting the wires of a sheet sorts two simple clusters into routable units and keeps none.
+    /// シートの配線を集めると、単純な2つのかたまりは引き直せる単位になり、残すものは無い。
+    #[test]
+    fn collecting_finds_simple_clusters_as_units() {
+        let mut sheet = new_sheet();
+        place(&mut sheet, "box2", (50.0, 50.0), "A1");
+        place(&mut sheet, "box2", (100.0, 50.0), "A2");
+        place(&mut sheet, "box2", (50.0, 100.0), "A3");
+        place(&mut sheet, "box2", (100.0, 100.0), "A4");
+        old_wire(&mut sheet, &[(60.0, 50.0), (90.0, 50.0)]);
+        old_wire(&mut sheet, &[(60.0, 100.0), (90.0, 100.0)]);
+        let c = collect_route_units(&sheet, &defs(), &RerouteOptions::default(), &[]);
+        assert_eq!(c.units.len(), 2);
+        assert!(c.kept.is_empty());
+        assert!(c.fixed_wires.is_empty());
+    }
+
+    /// A cluster with a free end is kept, and the kept record lists its wire and the reason.
+    /// 端が浮いたかたまりは残され、残した記録にその配線と理由が入る。
+    #[test]
+    fn collecting_records_a_free_end_cluster() {
+        let mut sheet = new_sheet();
+        place(&mut sheet, "box2", (50.0, 50.0), "A1");
+        let w = old_wire(&mut sheet, &[(60.0, 50.0), (80.0, 50.0)]);
+        let c = collect_route_units(&sheet, &defs(), &RerouteOptions::default(), &[]);
+        assert!(c.units.is_empty());
+        assert_eq!(c.kept.len(), 1);
+        assert_eq!(c.kept[0].wires, vec![w]);
+        assert_eq!(c.kept[0].reason, KeepReason::FreeEnd);
+        assert_eq!(c.kept[0].terms.len(), 1);
     }
 }

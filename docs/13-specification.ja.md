@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3477仕様項目**。
+全6領域・**3479仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -969,6 +969,8 @@
 - 古い配線の長さの出所がまちまち (手入力とFreeCADの計測) なネットは、理由を付けてそのまま残す。 <sub>`a_net_with_lengths_from_different_sources_is_left_unchanged`</sub>
 - 多くのネットが壁に囲まれて経路が見つからない大きなA0の図面でも、すぐに終わり、そのネットは全て古い配線を残す。 <sub>`a_large_sheet_with_many_unroutable_nets_finishes_quickly`</sub>
 - 格子の外のピン・ネットラベル・選ばれていないネットを含む多数の生成した図面で、引き直した後もネットのピンのまとまりは元と同じで、ラベルは配線の上に残る。 <sub>`generated_sheets_with_off_grid_pins_labels_and_fixed_nets_keep_the_same_pin_groups`</sub>
+- シートの配線を集めると、単純な2つのかたまりは引き直せる単位になり、残すものは無い。 <sub>`collecting_finds_simple_clusters_as_units`</sub>
+- 端が浮いたかたまりは残され、残した記録にその配線と理由が入る。 <sub>`collecting_records_a_free_end_cluster`</sub>
 
 ### search
 
