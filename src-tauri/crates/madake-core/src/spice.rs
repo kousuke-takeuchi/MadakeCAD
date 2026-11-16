@@ -51,6 +51,8 @@ pub enum ElementKind {
     Label,
     /// 短絡指定 (ネットから接地へ)。ネット名付き。
     Short(String),
+    /// 接地につながっていない回路 (絶縁された変換器の出力など) の負極を接地へ結ぶ基準。電流は数えない。
+    Tie,
 }
 
 /// デッキ中の抵抗素子1つ。電流はノード電圧差/ohmsで後計算する。
@@ -137,8 +139,8 @@ enum Node {
 /// 抵抗以外の素子 (ノード名が決まってから書く)。
 enum Extra {
     /// 電圧源 (+, −, 電圧)。
-    Volt { name: String, plus: Node, minus: Node, volts: f64 },
-    /// 電流源。電流は from から素子を通って to へ流れる。
+    Volt { name: String, plus: Node, minus: Node, volts: f64, owner: (EntityId, String) },
+    /// 負荷の電流源 (端子電圧 1V 以上で定電流)。電流は from から素子を通って to へ流れる。
     Amp { name: String, from: Node, to: Node, amps: f64 },
     /// 変換器の入力 (定電力の電流源)。出力側の電圧源の電流から入力電流を決める。
     ConverterInput { name: String, from: Node, to: Node, out_src: String, out_p: Node, out_m: Node, eta: f64 },
@@ -164,7 +166,7 @@ pub fn build_deck_with(
     let mut has_roles = false;
     let mut attachments: Vec<crate::geometry::Point> = Vec::new(); // ワイヤ分割点になる点
     let mut labels: BTreeMap<&str, Vec<(EntityId, crate::geometry::Point)>> = BTreeMap::new();
-    let pin_of = |pins: &[(String, Point)], no: &str| pins.iter().find(|(n, _)| n == no).map(|(_, p)| *p);
+    let pin_of = |pins: &[(String, Point)], no: &str| pins.iter().find(|(n, _)| n.trim() == no.trim()).map(|(_, p)| *p);
     for e in sheet.entities.values() {
         match e {
             Entity::Symbol(s) => {
@@ -214,7 +216,7 @@ pub fn build_deck_with(
     };
     let (voltage, gnd_key) = if let Some((s, _, pins)) = batteries.first() {
         let minus = pins.last().map(|(_, p)| *p).expect("battery has pins");
-        (parse_number(&s.value).unwrap_or(24.0), node_key(minus))
+        (source_volts(s), node_key(minus))
     } else if let Some((s, _, _, m)) = role_sources.first() {
         (source_volts(s), node_key(*m))
     } else {
@@ -335,7 +337,7 @@ pub fn build_deck_with(
         // 同一ピン番号の複数接続点(端子台・コネクタの左右)は内部短絡
         let mut by_no: BTreeMap<&str, Vec<crate::geometry::Point>> = BTreeMap::new();
         for (no, p) in &pins {
-            by_no.entry(no.as_str()).or_default().push(*p);
+            by_no.entry(no.trim()).or_default().push(*p);
         }
         for (no, pts) in &by_no {
             for pair in pts.windows(2) {
@@ -344,7 +346,16 @@ pub fn build_deck_with(
                 }
             }
         }
-        let first_of = |no: &str| by_no.get(no).map(|v| v[0]);
+        let first_of = |no: &str| by_no.get(no.trim()).map(|v| v[0]);
+        // 役割が使うピンが見つからなければ、黙って落とさず知らせる
+        if let Some(sim) = &def.sim {
+            if let Some(missing) = sim.pins.iter().find(|n| first_of(n).is_none()) {
+                warnings.push(format!(
+                    "{}: シミュレーションの役割が使うピン{missing}が見つからないため、この部品を除きました",
+                    if s.reference.is_empty() { def.id.as_str() } else { s.reference.as_str() }
+                ));
+            }
+        }
         let is_open = opts.open_switches.iter().any(|r| r == &s.reference);
         if let Some(sim) = &def.sim {
             match sim.role {
@@ -375,6 +386,7 @@ pub fn build_deck_with(
                         plus: Node::Internal(inner.clone()),
                         minus: Node::Key(node_key(m)),
                         volts: source_volts(s),
+                        owner: (s.id, s.reference.clone()),
                     });
                     push(inner, key(p), r, ElementKind::Source, &mut used_keys);
                 }
@@ -386,7 +398,7 @@ pub fn build_deck_with(
                             let inner = next_internal("l");
                             used_keys.insert(node_key(m));
                             extras.push(Extra::Amp {
-                                name: format!("I{}", inner.to_uppercase()),
+                                name: format!("B{}", inner.to_uppercase()),
                                 from: Node::Internal(inner.clone()),
                                 to: Node::Key(node_key(m)),
                                 amps,
@@ -401,7 +413,17 @@ pub fn build_deck_with(
                     let Some(ends) = ends.filter(|e| e.len() == 4) else { continue };
                     let (ip, im, op, om) = (ends[0], ends[1], ends[2], ends[3]);
                     let v_out = opts.number(s, "v_out").or_else(|| parse_number(&s.value)).unwrap_or(12.0);
-                    let eta = opts.number(s, "eta").filter(|e| *e > 0.0 && *e <= 1.0).unwrap_or(DEFAULT_ETA);
+                    let eta = match opts.number(s, "eta") {
+                        Some(e) if e > 0.0 && e <= 1.0 => e,
+                        Some(e) => {
+                            warnings.push(format!(
+                                "{}: 効率 eta={e} は 0より大きく1以下でないため {DEFAULT_ETA} を使いました",
+                                s.reference
+                            ));
+                            DEFAULT_ETA
+                        }
+                        None => DEFAULT_ETA,
+                    };
                     let (ci, co) = (next_internal("ci"), next_internal("co"));
                     let out_src = format!("V{}", co.to_uppercase());
                     used_keys.insert(node_key(im));
@@ -411,6 +433,7 @@ pub fn build_deck_with(
                         plus: Node::Internal(co.clone()),
                         minus: Node::Key(node_key(om)),
                         volts: v_out,
+                        owner: (s.id, s.reference.clone()),
                     });
                     extras.push(Extra::ConverterInput {
                         name: format!("B{}", ci.to_uppercase()),
@@ -467,6 +490,61 @@ pub fn build_deck_with(
                 ohms: BRIDGE_OHMS,
                 kind: ElementKind::Label,
             });
+        }
+    }
+
+    // 接地につながっていない回路の基準: 電圧源 (電源・変換器の出力) の負極が接地へ届かなければ 1mΩ で結ぶ。
+    // 絶縁された変換器の出力が漏れ抵抗だけで決まる変な電位にならないようにする (共通の帰路を持つ機器と同じ扱い)
+    {
+        let gnd = format!("{gnd_key:?}");
+        let mut parent: BTreeMap<String, String> = BTreeMap::new();
+        fn find(parent: &mut BTreeMap<String, String>, x: &str) -> String {
+            let p = parent.get(x).cloned().unwrap_or_else(|| x.to_string());
+            if p == x {
+                return p;
+            }
+            let r = find(parent, &p);
+            parent.insert(x.to_string(), r.clone());
+            r
+        }
+        let mut union = |parent: &mut BTreeMap<String, String>, a: &str, b: &str| {
+            let (ra, rb) = (find(parent, a), find(parent, b));
+            if ra != rb {
+                parent.insert(ra, rb);
+            }
+        };
+        let raw = |n: &Node| match n {
+            Node::Key(k) => format!("{k:?}"),
+            Node::Internal(s) => s.clone(),
+        };
+        for el in wire_elements.iter().chain(component_elements.iter()) {
+            union(&mut parent, &el.node_a, &el.node_b);
+        }
+        if let Some((s, _, pins)) = batteries.first() {
+            let _ = s;
+            union(&mut parent, &format!("{:?}", node_key(pins[0].1)), &gnd);
+        }
+        for x in &extras {
+            if let Extra::Volt { plus, minus, .. } = x {
+                union(&mut parent, &raw(plus), &raw(minus));
+            }
+        }
+        for x in &extras {
+            let Extra::Volt { minus, owner, .. } = x else { continue };
+            let m = raw(minus);
+            if find(&mut parent, &m) != find(&mut parent, &gnd) {
+                union(&mut parent, &m, &gnd);
+                used_keys.insert(gnd_key);
+                component_elements.push(SpiceElement {
+                    entity_id: owner.0,
+                    name: next_name(&mut seq),
+                    node_a: m,
+                    node_b: gnd.clone(),
+                    ohms: BRIDGE_OHMS,
+                    kind: ElementKind::Tie,
+                });
+                warnings.push(format!("{}: 接地につながっていない回路のため、負極を接地の基準にしました", owner.1));
+            }
         }
     }
 
@@ -545,7 +623,7 @@ pub fn build_deck_with(
     // デッキ本文
     let mut deck = String::from("* MadakeCAD verification\n");
     for (i, (s, _, pins)) in batteries.iter().enumerate() {
-        let v = parse_number(&s.value).unwrap_or(24.0);
+        let v = source_volts(s);
         let plus = names
             .get(&node_key(pins[0].1))
             .cloned()
@@ -558,11 +636,13 @@ pub fn build_deck_with(
     }
     for x in &extras {
         match x {
-            Extra::Volt { name, plus, minus, volts } => {
+            Extra::Volt { name, plus, minus, volts, .. } => {
                 deck.push_str(&format!("{name} {} {} DC {volts}\n", node_name(plus), node_name(minus)));
             }
             Extra::Amp { name, from, to, amps } => {
-                deck.push_str(&format!("{name} {} {} DC {amps}\n", node_name(from), node_name(to)));
+                // 定電流。ただし端子電圧が 1V を下回ると電流も比例して減る (経路が切れたとき電圧が暴れないように)
+                let (f, t) = (node_name(from), node_name(to));
+                deck.push_str(&format!("{name} {f} {t} I = {amps}*min(max(v({f},{t}),0),1)\n"));
             }
             Extra::ConverterInput { name, from, to, out_src, out_p, out_m, eta } => {
                 // 入力電流 = 出力電力 / (効率 × 入力電圧)。電圧源の電流は流れ込む向きが正なので符号を反転
@@ -846,7 +926,7 @@ mod tests {
         let deck = build_deck(&sheet, &defs).unwrap();
         assert!((deck.voltage - 12.0).abs() < 1e-9, "電圧は値の文字から");
         assert!(deck.deck.lines().any(|l| l.starts_with('V') && l.contains(" DC 12")), "{}", deck.deck);
-        assert!(deck.deck.lines().any(|l| l.starts_with('I') && l.ends_with("DC 2")), "{}", deck.deck);
+        assert!(deck.deck.lines().any(|l| l.starts_with("BL") && l.contains("I = 2*")), "{}", deck.deck);
         assert!(deck.deck.contains(".options rshunt="), "{}", deck.deck);
         assert_eq!(deck.load_terminals.len(), 1);
         // 負荷の − から電線1本で電源の − (接地 0) へ戻る
@@ -856,6 +936,23 @@ mod tests {
             "{}",
             deck.deck
         );
+    }
+
+    /// When a built-in battery and a user source are both on the sheet, ground is the battery's minus pin.
+    /// 同梱の battery と電源の役割のユーザーシンボルが両方あるときは、battery の負極が接地になる。
+    #[test]
+    fn a_built_in_battery_is_ground_before_a_user_source() {
+        let defs: Vec<SymbolDef> = sheet_symbol_defs(&sheet_with(vec![symbol("battery", "BT1", 0.0, 0.0, "DC24V")]))
+            .into_iter()
+            .chain([role_symbol("u_src", "source", &[("+", 0.0), ("-", 10.0)], &["+", "-"])])
+            .collect();
+        let sheet = sheet_with(vec![
+            symbol("u_src", "BT2", 100.0, 100.0, "12"),
+            symbol("battery", "BT1", 0.0, 0.0, "DC24V"),
+        ]);
+        let deck = build_deck(&sheet, &defs).unwrap();
+        assert!((deck.voltage - 24.0).abs() < 1e-9, "{}", deck.deck);
+        assert!(deck.deck.lines().any(|l| l.starts_with("V1 ") && l.contains(" 0 DC 24")), "{}", deck.deck);
     }
 
     /// A drawing with only built-in symbols gets the same deck as before (no shunt option is added).

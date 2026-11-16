@@ -68,7 +68,7 @@ cargo run -p madake-cli -- status                    # 接続確認+概要 (carg
 cargo run -p madake-cli -- netlist [--sheet <ID>]
 cargo run -p madake-cli -- verify [--sheet <ID>]     # 図面検証 (ERC+電気検証)
 cargo run -p madake-cli -- parts [<検索語>] [--category <c>]  # 部品DB検索
-cargo run -p madake-cli -- sim [--open SW1,K1]       # DC動作点シミュレーション
+cargo run -p madake-cli -- sim [--open SW1,K1] [--set M1.current_a=40] [--short P24]  # DC動作点シミュレーション (属性の置き換え・地絡・定格超過)
 cargo run -p madake-cli -- renumber [--sheet <ID>] [--mode append|renumber] [--start N]  # 線番の自動採番
 cargo run -p madake-cli -- terminals [--sheet <ID>]  # 端子台一覧 (参照記号・極数・ジャンパ・entity id)
 cargo run -p madake-cli -- export svg|pdf|dxf|kicad <path> [--sheet <ID>]   # dxf=ACADE/EPLAN向け、kicad=.kicad_sch

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3376 specification clauses** across 6 areas.
+**3383 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -981,6 +981,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A connector symbol with no role still passes current through its same-numbered pins, and a pin current above pin_rating_a is reported with the pin number. <sub>`a_connector_pin_above_its_rating_is_a_finding`</sub>
 - A wire carrying more than the ampacity of its size is an error; a wire thicker than the ampacity table is not judged and is only noted when its current exceeds the table. <sub>`wire_currents_are_checked_against_their_size`</sub>
 - Simulation options can be sent with any field left out; an empty object means "the drawing as it is". <sub>`simulation_options_default_to_the_drawing_as_it_is`</sub>
+- An isolated converter output (its return not tied to the input side) is referenced to ground at its minus, so its nets read 0 V and 12 V instead of floating values, and the result says so. <sub>`an_isolated_converter_output_is_referenced_to_ground`</sub>
+- A converter without eta uses 90 % efficiency, and an eta outside 0 to 1 also falls back to 90 % with a warning. <sub>`a_converter_without_a_valid_efficiency_uses_ninety_percent`</sub>
+- Opening a part with the fuse role (a blown fuse or an open breaker) cuts the load current. <sub>`opening_a_fuse_role_part_cuts_the_current`</sub>
+- An override reaches every part that shares the reference (for example a relay coil and its contact drawn apart). <sub>`an_override_reaches_every_part_with_the_reference`</sub>
+- The built-in battery's voltage can be overridden too (attribute voltage), for example to run at a low state of charge. <sub>`the_built_in_battery_voltage_can_be_overridden`</sub>
+- A part whose role names a pin the placed symbol does not have is left out with a warning instead of vanishing silently. <sub>`a_role_pin_that_is_missing_is_a_warning`</sub>
 
 ### SPICE netlist generation
 
@@ -990,6 +996,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A return path through two ground marks (symbols with a net name) with no wire between them is one connected node in the deck. <sub>`a_return_path_through_two_ground_marks_is_one_node`</sub>
 - A drawing without a power source cannot be converted (explicit NoSource error). <sub>`no_battery_is_an_error`</sub>
 - A drawing whose only source is a user symbol with the source role can be converted: the source's minus pin is ground, the load becomes a constant current source, and every node gets a high-value shunt so isolated parts still solve. <sub>`a_user_source_and_load_become_spice_sources`</sub>
+- When a built-in battery and a user source are both on the sheet, ground is the battery's minus pin. <sub>`a_built_in_battery_is_ground_before_a_user_source`</sub>
 - A drawing with only built-in symbols gets the same deck as before (no shunt option is added). <sub>`a_built_in_only_drawing_gets_no_shunt_option`</sub>
 - A two-pole breaker with the fuse role and pins numbered 1 to 4 conducts per pole (1-2 and 3-4), never between the poles, as built-in multi-pole devices do. <sub>`a_two_pole_protective_device_conducts_per_pole`</sub>
 - A symbol with the "none" role takes no part in the circuit: it neither bridges its pins nor acts as a load. <sub>`a_symbol_with_no_role_adds_no_element`</sub>

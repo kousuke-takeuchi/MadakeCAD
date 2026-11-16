@@ -26,12 +26,16 @@ global voltage, so a drawing with two supply voltages (for example 24 V and a 12
    bridges, e.g. a connector with feed-through pins).
 3. **SPICE model** for symbols with a role:
    - source: `V` + series `r_int_ohm` (default 1 mΩ);
-   - load: constant current source `I` (`current_a`) with a 1 mΩ series sense resistor; without `current_a` the
+   - load: constant current (`current_a`) with a 1 mΩ series sense resistor, as a behavioural source that scales
+     the current down below 1 V across the load (an opened path then reads 0 A instead of absurd voltages); without `current_a` the
      existing 1 MΩ placeholder;
    - converter: output = `V` of `v_out` + 1 mΩ; input = behavioural current source drawing
      `P_out / (eta * V_in)` (`eta` default 0.9);
-   - several sources are allowed; every node gets a 1 GΩ shunt to ground (`.options rshunt`) so isolated
-     sub-circuits (for example a converter output that is not tied to the input return) still solve.
+   - several sources are allowed; every node gets a 1 GΩ shunt to ground (`.options rshunt`), and the minus of a
+     source or converter output whose circuit does not reach ground is tied to ground through 1 mΩ (reported as a
+     warning), so an isolated converter output reads 0 V / `v_out` and a short on it closes.
+   - built-in loads keep the old model (resistor `V / I` with the first source's voltage); only loads with a role
+     are constant current. The built-in battery also takes a `voltage` override.
    Ground is the minus pin of the first source (built-in battery first).
 4. **Scenarios** (`SimOptions`): `open_switches` (existing), `overrides` (`reference -> {attr: value}`, applied to
    every symbol with that reference), `shorts` (net names joined to ground through 1 mΩ). The CLI
@@ -41,7 +45,8 @@ global voltage, so a drawing with two supply voltages (for example 24 V and a 12
    `sim.fuse_rating` (current above `rating_a`), `sim.pin_rating` (bridge current above `pin_rating_a`),
    `sim.source_overload` (above `i_max_a`), `sim.converter_overload` (output above `i_out_a`),
    `sim.load_voltage` (load terminal voltage below `v_min`), `sim.wire_ampacity` (wire current above the
-   ampacity of its `sq`; wires thicker than the table are reported as unchecked). The verifier's existing
+   ampacity of its `sq`), `sim.wire_unchecked` (Info: a wire thicker than the ampacity table carries more than the
+   table's largest value). Role pins that are not found and an `eta` outside (0, 1] are warnings. The verifier's existing
    simulated fuse check also covers symbols with the `fuse` role.
 
 ## Out of scope

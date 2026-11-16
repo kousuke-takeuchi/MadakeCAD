@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3376仕様項目**。
+全6領域・**3383仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -981,6 +981,12 @@
 - 役割「なし」のコネクタでも同じ番号のピンは電流を通し、属性 pin_rating_a を超えるピン電流はピン番号付きで指摘される。 <sub>`a_connector_pin_above_its_rating_is_a_finding`</sub>
 - 太さの許容電流を超えて流れる電線はエラーになる。許容電流の表より太い電線は判定せず、電流が表の最大を超えたときだけ情報で知らせる。 <sub>`wire_currents_are_checked_against_their_size`</sub>
 - シミュレーションの条件はどの項目も省略して送れる。空のオブジェクトは「図面のまま」を意味する。 <sub>`simulation_options_default_to_the_drawing_as_it_is`</sub>
+- 絶縁された変換器の出力 (帰路が入力側とつながっていない) は負極を接地の基準にするので、ネットは浮いた値でなく 0V と 12V になり、結果にもそう書かれる。 <sub>`an_isolated_converter_output_is_referenced_to_ground`</sub>
+- eta の無い変換器は効率 90% で計算し、0〜1 の外の eta も注意を出して 90% にする。 <sub>`a_converter_without_a_valid_efficiency_uses_ninety_percent`</sub>
+- ヒューズの役割の部品を開路にすると (切れたヒューズ・切ったブレーカー)、負荷の電流は止まる。 <sub>`opening_a_fuse_role_part_cuts_the_current`</sub>
+- 置き換えは、同じ参照記号を持つ全ての部品に効く (例: 離して描いたリレーのコイルと接点)。 <sub>`an_override_reaches_every_part_with_the_reference`</sub>
+- 同梱の battery の電圧も置き換えられる (属性 voltage)。例: 残量が少ないときの電圧で計算する。 <sub>`the_built_in_battery_voltage_can_be_overridden`</sub>
+- 役割が指すピンを持たない部品は、黙って消さず、注意を出して計算から除く。 <sub>`a_role_pin_that_is_missing_is_a_warning`</sub>
 
 ### SPICEネットリスト生成
 
@@ -990,6 +996,7 @@
 - 間に配線の無い2つの接地の印 (ネット名を持つシンボル) を通る帰り道は、デッキでも1つにつながったノードになる。 <sub>`a_return_path_through_two_ground_marks_is_one_node`</sub>
 - 電源の無い図面は変換できない(明示的なNoSourceエラー)。 <sub>`no_battery_is_an_error`</sub>
 - 電源が「電源の役割を付けたユーザーシンボル」だけの図面も変換できる: 電源の負極が接地になり、負荷は定電流源になり、浮いた部分も解けるよう全ノードに大きな漏れ抵抗が入る。 <sub>`a_user_source_and_load_become_spice_sources`</sub>
+- 同梱の battery と電源の役割のユーザーシンボルが両方あるときは、battery の負極が接地になる。 <sub>`a_built_in_battery_is_ground_before_a_user_source`</sub>
 - 同梱シンボルだけの図面は、これまでと同じデッキになる (漏れ抵抗の指定は足さない)。 <sub>`a_built_in_only_drawing_gets_no_shunt_option`</sub>
 - ヒューズの役割を付けたピン番号1〜4の2極ブレーカーは、同梱の多極機器と同じく極ごと (1-2 と 3-4) に導通し、極どうしはつながない。 <sub>`a_two_pole_protective_device_conducts_per_pole`</sub>
 - 役割「なし」のシンボルは回路に加わらない: ピンどうしをつながず、負荷にもならない。 <sub>`a_symbol_with_no_role_adds_no_element`</sub>

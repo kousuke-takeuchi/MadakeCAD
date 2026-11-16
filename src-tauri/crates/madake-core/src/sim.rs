@@ -182,7 +182,7 @@ pub fn simulate_op_opts_with(
     // 部品電流・電力: 部品由来の橋/負荷素子から算出
     let mut per_component: BTreeMap<EntityId, (f64, f64)> = BTreeMap::new();
     for el in &deck.component_elements {
-        if matches!(el.kind, ElementKind::Label | ElementKind::Short(_)) {
+        if matches!(el.kind, ElementKind::Label | ElementKind::Short(_) | ElementKind::Tie) {
             continue;
         }
         let dv = (volt_of(&el.node_a) - volt_of(&el.node_b)).abs();
@@ -808,5 +808,102 @@ mod tests {
         let o: SimOptions = serde_json::from_str(r#"{"overrides":{"M1":{"current_a":"40"}},"shorts":["P24"]}"#).unwrap();
         assert_eq!(o.overrides["M1"]["current_a"], "40");
         assert_eq!(o.shorts, vec!["P24".to_string()]);
+    }
+
+    /// 変換器 U1 (24V → 12V) と、出力側の負荷 LD1。出力の帰路は入力側とつながっていない (絶縁型)。
+    fn converter_sheet(conv_attrs: &[(&str, &str)]) -> Sheet {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        place(&mut sheet, "t_src", "BT1", 0.0, 100.0, &[("voltage", "24")]);
+        place(&mut sheet, "t_conv", "U1", 20.0, 100.0, conv_attrs);
+        place(&mut sheet, "t_load", "LD1", 60.0, 100.0, &[("current_a", "4")]);
+        add_wire(&mut sheet, &[(0.0, 100.0), (20.0, 100.0)], 0.75, None);
+        add_wire(&mut sheet, &[(0.0, 110.0), (20.0, 110.0)], 0.75, None);
+        add_wire(&mut sheet, &[(40.0, 100.0), (60.0, 100.0)], 0.75, None);
+        add_wire(&mut sheet, &[(40.0, 110.0), (60.0, 110.0)], 0.75, None);
+        sheet
+    }
+
+    /// An isolated converter output (its return not tied to the input side) is referenced to ground at its minus, so its nets read 0 V and 12 V instead of floating values, and the result says so.
+    /// 絶縁された変換器の出力 (帰路が入力側とつながっていない) は負極を接地の基準にするので、ネットは浮いた値でなく 0V と 12V になり、結果にもそう書かれる。
+    #[test]
+    fn an_isolated_converter_output_is_referenced_to_ground() {
+        let sheet = converter_sheet(&[("v_out", "12")]);
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        let mut volts: Vec<f64> = r.nets.iter().map(|n| n.volts_max).collect();
+        volts.sort_by(f64::total_cmp);
+        assert!(volts.iter().all(|v| *v > -0.01), "{volts:?}");
+        assert!(volts.iter().any(|v| (v - 12.0).abs() < 0.05), "{volts:?}");
+        assert!(r.warnings.iter().any(|w| w.contains("U1") && w.contains("接地")), "{:?}", r.warnings);
+        // 出力の短絡は事故電流になる (帰路が接地の基準を通って閉じる)
+        let nets = crate::netlist::extract_netlist(&sheet, &role_defs());
+        let out = nets.iter().find(|n| n.pins.iter().any(|p| p.reference == "LD1" && p.pin == "+")).unwrap().name.clone();
+        let Some(r) = run(&sheet, &SimOptions { shorts: vec![out], ..Default::default() }) else { return };
+        assert!(amps(&r, "U1") > 1000.0, "{:?}", r.components);
+    }
+
+    /// A converter without eta uses 90 % efficiency, and an eta outside 0 to 1 also falls back to 90 % with a warning.
+    /// eta の無い変換器は効率 90% で計算し、0〜1 の外の eta も注意を出して 90% にする。
+    #[test]
+    fn a_converter_without_a_valid_efficiency_uses_ninety_percent() {
+        // 12V × 4A / (0.9 × 24V) = 2.22A
+        let Some(r) = run(&converter_sheet(&[("v_out", "12")]), &SimOptions::default()) else { return };
+        assert!((amps(&r, "BT1") - 2.222).abs() < 0.02, "{:?}", r.components);
+        let Some(r) = run(&converter_sheet(&[("v_out", "12"), ("eta", "85")]), &SimOptions::default()) else { return };
+        assert!((amps(&r, "BT1") - 2.222).abs() < 0.02, "{:?}", r.components);
+        assert!(r.warnings.iter().any(|w| w.contains("eta=85")), "{:?}", r.warnings);
+    }
+
+    /// Opening a part with the fuse role (a blown fuse or an open breaker) cuts the load current.
+    /// ヒューズの役割の部品を開路にすると (切れたヒューズ・切ったブレーカー)、負荷の電流は止まる。
+    #[test]
+    fn opening_a_fuse_role_part_cuts_the_current() {
+        let sheet = role_series(&[("voltage", "24")], &[("rating_a", "10")], &[("current_a", "2")]);
+        let Some(r) = run(&sheet, &SimOptions { open_switches: vec!["F1".into()], ..Default::default() }) else { return };
+        assert!(amps(&r, "BT1") < 1e-3, "{:?}", r.components);
+        assert!(amps(&r, "LD1") < 1e-3, "{:?}", r.components);
+        // 経路が切れても電圧は暴れない (負荷は端子電圧が無くなると電流も止まる)
+        assert!(r.nets.iter().all(|n| n.volts_min > -1.0 && n.volts_max < 25.0), "{:?}", r.nets);
+    }
+
+    /// An override reaches every part that shares the reference (for example a relay coil and its contact drawn apart).
+    /// 置き換えは、同じ参照記号を持つ全ての部品に効く (例: 離して描いたリレーのコイルと接点)。
+    #[test]
+    fn an_override_reaches_every_part_with_the_reference() {
+        let mut sheet = role_series(&[("voltage", "24")], &[], &[("current_a", "1")]);
+        place(&mut sheet, "t_load", "LD1", 80.0, 100.0, &[("current_a", "1")]);
+        add_wire(&mut sheet, &[(50.0, 100.0), (80.0, 100.0)], 0.75, None);
+        add_wire(&mut sheet, &[(80.0, 110.0), (50.0, 110.0)], 0.75, None);
+        let mut opts = SimOptions::default();
+        opts.overrides.insert("LD1".into(), [("current_a".to_string(), "3".to_string())].into_iter().collect());
+        let Some(r) = run(&sheet, &opts) else { return };
+        assert!((amps(&r, "BT1") - 6.0).abs() < 0.02, "{:?}", r.components);
+    }
+
+    /// The built-in battery's voltage can be overridden too (attribute voltage), for example to run at a low state of charge.
+    /// 同梱の battery の電圧も置き換えられる (属性 voltage)。例: 残量が少ないときの電圧で計算する。
+    #[test]
+    fn the_built_in_battery_voltage_can_be_overridden() {
+        let Some(exe) = crate::ngspice::find_ngspice() else { return };
+        let sheet = series_circuit("2");
+        let mut opts = SimOptions::default();
+        opts.overrides.insert("BT1".into(), [("voltage".to_string(), "20".to_string())].into_iter().collect());
+        let r = simulate_op_opts_with(&exe, &sheet, &sheet_symbol_defs(&sheet), &opts).unwrap();
+        assert!((r.voltage - 20.0).abs() < 1e-9);
+        let vmax = r.nets.iter().map(|n| n.volts_max).fold(0.0, f64::max);
+        assert!((vmax - 20.0).abs() < 0.05, "{vmax}");
+    }
+
+    /// A part whose role names a pin the placed symbol does not have is left out with a warning instead of vanishing silently.
+    /// 役割が指すピンを持たない部品は、黙って消さず、注意を出して計算から除く。
+    #[test]
+    fn a_role_pin_that_is_missing_is_a_warning() {
+        let mut defs = role_defs();
+        defs.push(role_def("t_bad", SimRole::Load, &[("1", 0.0, 0.0), ("2", 0.0, 10.0)], &["1", "9"]));
+        let mut sheet = role_series(&[("voltage", "24")], &[], &[("current_a", "2")]);
+        place(&mut sheet, "t_bad", "LD9", 90.0, 100.0, &[("current_a", "5")]);
+        let Some(exe) = crate::ngspice::find_ngspice() else { return };
+        let r = simulate_op_opts_with(&exe, &sheet, &defs, &SimOptions::default()).unwrap();
+        assert!(r.warnings.iter().any(|w| w.contains("LD9") && w.contains("ピン9")), "{:?}", r.warnings);
+        assert!((amps(&r, "BT1") - 2.0).abs() < 0.02);
     }
 }
