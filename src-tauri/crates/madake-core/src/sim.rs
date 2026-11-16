@@ -906,4 +906,38 @@ mod tests {
         assert!(r.warnings.iter().any(|w| w.contains("LD9") && w.contains("ピン9")), "{:?}", r.warnings);
         assert!((amps(&r, "BT1") - 2.0).abs() < 0.02);
     }
+
+    /// A converter with i_limit_a holds its output current at the limit when its output is shorted, instead of an ideal source driving an endless current; below the limit it behaves as before.
+    /// i_limit_a を持つ変換器は、出力を短絡すると出力電流が上限で止まる (理想電源のように際限なく流さない)。上限より下ではこれまでどおり動く。
+    #[test]
+    fn a_current_limited_converter_stops_at_its_limit() {
+        let sheet = converter_sheet(&[("v_out", "12"), ("eta", "0.8"), ("i_limit_a", "6")]);
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        assert!((amps(&r, "LD1") - 4.0).abs() < 0.02, "{:?}", r.components);
+        assert!((amps(&r, "BT1") - 2.5).abs() < 0.05, "{:?}", r.components);
+        let nets = crate::netlist::extract_netlist(&sheet, &role_defs());
+        let out = nets.iter().find(|n| n.pins.iter().any(|p| p.reference == "LD1" && p.pin == "+")).unwrap().name.clone();
+        let Some(r) = run(&sheet, &SimOptions { shorts: vec![out], ..Default::default() }) else { return };
+        // 上限 6A をわずかに超えた所で止まる (超えた分だけ出力電圧を急に下げる特性)
+        let u1 = amps(&r, "U1");
+        assert!((6.0..6.3).contains(&u1), "{:?}", r.components);
+    }
+
+    /// A converter with v_in_min stops (no output, no input current) when its input voltage is below that value, like a real converter's undervoltage lockout.
+    /// v_in_min を持つ変換器は、入力電圧がその値より低いと止まる (出力も入力電流も無い)。実際の変換器の低電圧停止と同じ。
+    #[test]
+    fn a_converter_below_its_minimum_input_voltage_stops() {
+        let mut sheet = converter_sheet(&[("v_out", "12"), ("v_in_min", "18")]);
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        assert!((amps(&r, "LD1") - 4.0).abs() < 0.05, "24V では動く: {:?}", r.components);
+        for e in sheet.entities.values_mut() {
+            if let Entity::Symbol(s) = e {
+                if s.reference == "BT1" {
+                    s.attrs.insert("voltage".into(), "15".into());
+                }
+            }
+        }
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        assert!(amps(&r, "BT1") < 0.01 && amps(&r, "LD1") < 0.01, "{:?}", r.components);
+    }
 }

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3383仕様項目**。
+全6領域・**3385仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -987,6 +987,8 @@
 - 置き換えは、同じ参照記号を持つ全ての部品に効く (例: 離して描いたリレーのコイルと接点)。 <sub>`an_override_reaches_every_part_with_the_reference`</sub>
 - 同梱の battery の電圧も置き換えられる (属性 voltage)。例: 残量が少ないときの電圧で計算する。 <sub>`the_built_in_battery_voltage_can_be_overridden`</sub>
 - 役割が指すピンを持たない部品は、黙って消さず、注意を出して計算から除く。 <sub>`a_role_pin_that_is_missing_is_a_warning`</sub>
+- i_limit_a を持つ変換器は、出力を短絡すると出力電流が上限で止まる (理想電源のように際限なく流さない)。上限より下ではこれまでどおり動く。 <sub>`a_current_limited_converter_stops_at_its_limit`</sub>
+- v_in_min を持つ変換器は、入力電圧がその値より低いと止まる (出力も入力電流も無い)。実際の変換器の低電圧停止と同じ。 <sub>`a_converter_below_its_minimum_input_voltage_stops`</sub>
 
 ### SPICEネットリスト生成
 

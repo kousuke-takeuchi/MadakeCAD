@@ -678,7 +678,7 @@ export interface SymbolDef {
   free_pins?: boolean;
   /** このシンボルが載るネットの名前 (接地の印など)。置いたシンボルのピンが、その名前のネットラベルと同じ働きをする。 */
   net?: string;
-  /** シミュレーションでの役割と、役割が使うピン番号。値は置いた部品の属性 (voltage / current_a / rating_a / v_out / eta など)。 */
+  /** シミュレーションでの役割と、役割が使うピン番号。値は置いた部品の属性 (voltage / current_a / rating_a / v_out / eta / i_limit_a / v_in_min など)。 */
   sim?: SymbolSimSpec;
 }
 

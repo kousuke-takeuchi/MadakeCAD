@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3383 specification clauses** across 6 areas.
+**3385 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -987,6 +987,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - An override reaches every part that shares the reference (for example a relay coil and its contact drawn apart). <sub>`an_override_reaches_every_part_with_the_reference`</sub>
 - The built-in battery's voltage can be overridden too (attribute voltage), for example to run at a low state of charge. <sub>`the_built_in_battery_voltage_can_be_overridden`</sub>
 - A part whose role names a pin the placed symbol does not have is left out with a warning instead of vanishing silently. <sub>`a_role_pin_that_is_missing_is_a_warning`</sub>
+- A converter with i_limit_a holds its output current at the limit when its output is shorted, instead of an ideal source driving an endless current; below the limit it behaves as before. <sub>`a_current_limited_converter_stops_at_its_limit`</sub>
+- A converter with v_in_min stops (no output, no input current) when its input voltage is below that value, like a real converter's undervoltage lockout. <sub>`a_converter_below_its_minimum_input_voltage_stops`</sub>
 
 ### SPICE netlist generation
 

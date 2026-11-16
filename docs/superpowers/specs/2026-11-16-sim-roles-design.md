@@ -22,7 +22,8 @@ global voltage, so a drawing with two supply voltages (for example 24 V and a 12
    Without `sim` the current category rules apply unchanged.
 2. **Values are instance attributes** (`attrs`, set with the existing attribute command):
    `voltage`, `r_int_ohm`, `i_max_a` (source); `current_a`, `v_min` (load); `rating_a` (fuse; falls back to the
-   value text); `v_out`, `eta`, `i_out_a` (converter); `pin_rating_a` (any symbol: current per pin through its
+   value text); `v_out`, `eta`, `i_out_a` (converter rating), `i_limit_a` (converter current limit), `v_in_min`
+   (converter undervoltage lockout); `pin_rating_a` (any symbol: current per pin through its
    bridges, e.g. a connector with feed-through pins).
 3. **SPICE model** for symbols with a role:
    - source: `V` + series `r_int_ohm` (default 1 mΩ);
@@ -30,7 +31,9 @@ global voltage, so a drawing with two supply voltages (for example 24 V and a 12
      the current down below 1 V across the load (an opened path then reads 0 A instead of absurd voltages); without `current_a` the
      existing 1 MΩ placeholder;
    - converter: output = `V` of `v_out` + 1 mΩ; input = behavioural current source drawing
-     `P_out / (eta * V_in)` (`eta` default 0.9);
+     `P_out / (eta * V_in)` (`eta` default 0.9); with `i_limit_a` or `v_in_min` the output is a behavioural voltage
+     source that drops steeply (100 V per A) above the limit and goes to 0 below the input minimum, measured by a
+     0 V sense source (a current-source form does not converge);
    - several sources are allowed; every node gets a 1 GΩ shunt to ground (`.options rshunt`), and the minus of a
      source or converter output whose circuit does not reach ground is tied to ground through 1 mΩ (reported as a
      warning), so an isolated converter output reads 0 V / `v_out` and a short on it closes.

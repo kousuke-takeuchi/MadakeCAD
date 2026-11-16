@@ -139,11 +139,43 @@ enum Node {
 /// 抵抗以外の素子 (ノード名が決まってから書く)。
 enum Extra {
     /// 電圧源 (+, −, 電圧)。
-    Volt { name: String, plus: Node, minus: Node, volts: f64, owner: (EntityId, String) },
+    Volt { name: String, plus: Node, minus: Node, volts: f64, owner: (EntityId, String), limit: Option<OutLimit> },
     /// 負荷の電流源 (端子電圧 1V 以上で定電流)。電流は from から素子を通って to へ流れる。
     Amp { name: String, from: Node, to: Node, amps: f64 },
     /// 変換器の入力 (定電力の電流源)。出力側の電圧源の電流から入力電流を決める。
-    ConverterInput { name: String, from: Node, to: Node, out_src: String, out_p: Node, out_m: Node, eta: f64 },
+    ConverterInput {
+        name: String,
+        from: Node,
+        to: Node,
+        out_src: String,
+        out_p: Node,
+        out_m: Node,
+        eta: f64,
+        limit: Option<OutLimit>,
+    },
+}
+
+/// 変換器の出力の制限 (電流制限・入力の低電圧停止)。あれば出力は電圧源でなく電流源の式になる。
+#[derive(Debug, Clone)]
+struct OutLimit {
+    /// 出力電流の上限 (A)。
+    amps: f64,
+    /// 入力電圧の下限 (V、0 なら無し)。下回ると出力も入力も止まる。
+    v_in_min: f64,
+    /// 入力の + / − ノード (低電圧停止の判定に使う)。
+    in_p: Node,
+    in_m: Node,
+}
+
+/// 電流制限つき変換器の出力電圧の式。出力電流 (0V の検出電源 `sense` の電流) が上限を超えた分だけ
+/// 電圧を急に下げる (1A 超えるごとに 100V)。入力が下限を下回ると出力電圧も 0 にする。
+/// 電流源の式で書くと動作点の反復が振動して解けないため、電圧源の式にしている。
+fn limited_out_voltage(volts: f64, sense: &str, lim: &OutLimit, in_p: &str, in_m: &str) -> String {
+    let mut expr = format!("({volts}-100*max(i({sense})-{},0))", lim.amps);
+    if lim.v_in_min > 0.0 {
+        expr = format!("{expr}*min(max(v({in_p},{in_m})-{}+1,0),1)", lim.v_in_min);
+    }
+    expr
 }
 
 /// オプション付きでSPICEデッキを組み立てる。
@@ -387,6 +419,7 @@ pub fn build_deck_with(
                         minus: Node::Key(node_key(m)),
                         volts: source_volts(s),
                         owner: (s.id, s.reference.clone()),
+                        limit: None,
                     });
                     push(inner, key(p), r, ElementKind::Source, &mut used_keys);
                 }
@@ -425,6 +458,15 @@ pub fn build_deck_with(
                         None => DEFAULT_ETA,
                     };
                     let (ci, co) = (next_internal("ci"), next_internal("co"));
+                    // 電流制限 (i_limit_a) か入力の低電圧停止 (v_in_min) があれば、出力は制限つきの電流源
+                    let i_limit = opts.number(s, "i_limit_a").filter(|a| *a > 0.0);
+                    let v_in_min = opts.number(s, "v_in_min").filter(|v| *v > 0.0).unwrap_or(0.0);
+                    let limit = (i_limit.is_some() || v_in_min > 0.0).then(|| OutLimit {
+                        amps: i_limit.unwrap_or(1e6),
+                        v_in_min,
+                        in_p: Node::Internal(ci.clone()),
+                        in_m: Node::Key(node_key(im)),
+                    });
                     let out_src = format!("V{}", co.to_uppercase());
                     used_keys.insert(node_key(im));
                     used_keys.insert(node_key(om));
@@ -434,6 +476,7 @@ pub fn build_deck_with(
                         minus: Node::Key(node_key(om)),
                         volts: v_out,
                         owner: (s.id, s.reference.clone()),
+                        limit: limit.clone(),
                     });
                     extras.push(Extra::ConverterInput {
                         name: format!("B{}", ci.to_uppercase()),
@@ -443,6 +486,7 @@ pub fn build_deck_with(
                         out_p: Node::Internal(co.clone()),
                         out_m: Node::Key(node_key(om)),
                         eta,
+                        limit: limit.clone(),
                     });
                     push(key(ip), ci, BRIDGE_OHMS, ElementKind::ConverterIn, &mut used_keys);
                     push(co, key(op), BRIDGE_OHMS, ElementKind::ConverterOut, &mut used_keys);
@@ -636,22 +680,31 @@ pub fn build_deck_with(
     }
     for x in &extras {
         match x {
-            Extra::Volt { name, plus, minus, volts, .. } => {
+            Extra::Volt { name, plus, minus, volts, limit: None, .. } => {
                 deck.push_str(&format!("{name} {} {} DC {volts}\n", node_name(plus), node_name(minus)));
+            }
+            Extra::Volt { name, plus, minus, volts, limit: Some(lim), .. } => {
+                // 式の電圧源 (内部ノード {plus}x) → 0V の検出電源 (name) → 出力。検出電源の電流が出力電流
+                let (p, m) = (node_name(plus), node_name(minus));
+                let v = limited_out_voltage(*volts, name, lim, &node_name(&lim.in_p), &node_name(&lim.in_m));
+                deck.push_str(&format!("B{name} {p}x {m} V = {v}\n"));
+                deck.push_str(&format!("{name} {p}x {p} DC 0\n"));
             }
             Extra::Amp { name, from, to, amps } => {
                 // 定電流。ただし端子電圧が 1V を下回ると電流も比例して減る (経路が切れたとき電圧が暴れないように)
                 let (f, t) = (node_name(from), node_name(to));
                 deck.push_str(&format!("{name} {f} {t} I = {amps}*min(max(v({f},{t}),0),1)\n"));
             }
-            Extra::ConverterInput { name, from, to, out_src, out_p, out_m, eta } => {
+            Extra::ConverterInput { name, from, to, out_src, out_p, out_m, eta, limit } => {
                 // 入力電流 = 出力電力 / (効率 × 入力電圧)。電圧源の電流は流れ込む向きが正なので符号を反転
                 let (f, t) = (node_name(from), node_name(to));
-                deck.push_str(&format!(
-                    "{name} {f} {t} I = max(v({},{}),0)*max(-i({out_src}),0)/({eta}*max(v({f},{t}),1))\n",
-                    node_name(out_p),
-                    node_name(out_m),
-                ));
+                let (op, om) = (node_name(out_p), node_name(out_m));
+                // 理想の出力電圧源は流れ込む向きが正なので反転。制限つきは検出電源 (出力へ流れ出る向きが正)
+                let out_i = match limit {
+                    None => format!("max(-i({out_src}),0)"),
+                    Some(_) => format!("max(i({out_src}),0)"),
+                };
+                deck.push_str(&format!("{name} {f} {t} I = max(v({op},{om}),0)*{out_i}/({eta}*max(v({f},{t}),1))\n"));
             }
         }
     }

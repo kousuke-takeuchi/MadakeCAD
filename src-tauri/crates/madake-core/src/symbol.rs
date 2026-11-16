@@ -47,7 +47,7 @@ pub enum SimRole {
     Fuse,
     /// 導通 (スイッチ・接点・ジャンパ。pins の扱いはヒューズと同じ)。
     Conductor,
-    /// DC/DC 変換器 (pins = [入力+, 入力−, 出力+, 出力−])。属性 v_out / eta / i_out_a。
+    /// DC/DC 変換器 (pins = [入力+, 入力−, 出力+, 出力−])。属性 v_out / eta / i_out_a / i_limit_a / v_in_min。
     Converter,
     /// 電気的に何もしない (同じ番号の貫通ピンだけはつながる)。
     None,

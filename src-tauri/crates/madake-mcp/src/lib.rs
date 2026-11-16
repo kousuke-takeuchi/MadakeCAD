@@ -1849,7 +1849,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "DC動作点シミュレーション(ngspice)を実行し、各ネットの電圧(min/max)・各部品の電流/電力を返す。open_switchesでスイッチ/接点を開路にしたwhat-if解析ができる。overridesで部品の属性をその1回だけ置き換え (例: 拘束電流)、shortsでネットを接地へ短絡させる。電源は同梱のbatteryか、シンボル定義のsim.roleがsourceの部品 (属性voltage/r_int_ohm/i_max_a)。負荷は属性current_a (sim.role loadは定電流、v_min)、ヒューズはrating_a、変換器はv_out/eta/i_out_a、コネクタのピン定格はpin_rating_a。findingsに定格超過 (sim.fuse_rating/pin_rating/source_overload/converter_overload/load_voltage/wire_ampacity) を重い順に返す"
+        description = "DC動作点シミュレーション(ngspice)を実行し、各ネットの電圧(min/max)・各部品の電流/電力を返す。open_switchesでスイッチ/接点を開路にしたwhat-if解析ができる。overridesで部品の属性をその1回だけ置き換え (例: 拘束電流)、shortsでネットを接地へ短絡させる。電源は同梱のbatteryか、シンボル定義のsim.roleがsourceの部品 (属性voltage/r_int_ohm/i_max_a)。負荷は属性current_a (sim.role loadは定電流、v_min)、ヒューズはrating_a、変換器はv_out/eta/i_out_a/i_limit_a(電流制限)/v_in_min(入力の低電圧停止)、コネクタのピン定格はpin_rating_a。findingsに定格超過 (sim.fuse_rating/pin_rating/source_overload/converter_overload/load_voltage/wire_ampacity) を重い順に返す"
     )]
     fn simulate_op(
         &self,
