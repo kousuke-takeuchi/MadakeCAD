@@ -49,7 +49,10 @@ passed through. All options are validated before the engine lock is taken.
   - net labels whose only wire goes to a pin of this symbol;
   - free texts and leader lines whose anchor lies within 3 mm of the symbol's bounds (and not closer to
     another symbol).
-- A unit moves rigidly (translation only).
+- A unit moves rigidly (translation only). Every move is a multiple of 2.5 mm so pins stay on the grid.
+- Alignment uses the main symbol's origin (`at`), not its outline, so equal parts line up pin to pin.
+  An alignment move that would make two units overlap where they did not before is skipped.
+- Labels and one-pin symbols that are not satellites of one symbol are units of their own.
 
 ### How positions are computed
 
@@ -63,8 +66,9 @@ passed through. All options are validated before the engine lock is taken.
    edges. Units move by the map of their aligned anchor. Everything that is not part of a unit
    (enclosure shapes, free texts far from symbols, sheet notes) has each point mapped through `fx`/`fy`,
    so outlines stretch with their contents and nothing changes order.
-6. If the result does not fit inside the frame, the gaps are reduced towards `channel_mm` first and then
-   proportionally; if it still does not fit, the command refuses with a message (nothing changes).
+6. The result must stay inside the frame and out of the title block (when the original content was out
+   of it). If it does not, the gaps above `channel_mm` are reduced to `channel_mm` and the layout is
+   tried again; if it still does not fit, the command refuses with a message (nothing changes).
 
 ### Wires
 
@@ -75,9 +79,21 @@ passed through. All options are validated before the engine lock is taken.
   gets a short lead and a net label with the cluster's net name, so connectivity is kept. When that name
   is not unique to the cluster across the project (for example automatic N001 names or names shared by
   other clusters), a fresh name `ARR_<n>` is used. The reply lists these clusters.
-- Clusters that reroute would leave unchanged for a reason other than "no route" (cable cores, mixed
-  attributes, wires referenced by other entities, free ends) make the whole arrange refuse, because their
-  wires cannot follow the moved symbols; the reply names them.
+- Clusters that reroute would not route are handled by what they touch:
+  - all their terminals belong to one unit (or they touch no terminal at all): the wires move with that
+    unit (or through `fx`/`fy`), unchanged in shape; this covers stubs with a free end;
+  - they touch several units and differ in colour, cross-section or another wire attribute, have a free
+    end, or have fewer than two terminals: they are connected by labels as above, each lead taking the
+    attributes of the old wire at that terminal;
+  - they are used by a cable, shared by several nets (port contacts), pointed at by another entity or a
+    FreeCAD link, carry lengths from different sources, or hold labels with different names: the whole
+    arrange refuses and the reply names them.
+- The fallback name: the cluster's label name when it has labels (those labels are then deleted, since
+  the new labels carry the same name); else the net name of a net-name symbol in the cluster; else a fresh
+  `ARR_<n>` not used by any label or net-name symbol in the project.
+- Sheets that hold cables (`Cable`) or panel-layout entities are refused.
+- Before returning, the plan is applied to a copy of the sheet and the pin partition (which pins share a
+  net) is compared with the original; any difference refuses with nothing changed.
 
 ### Reply
 
@@ -86,10 +102,12 @@ after: TidyMetrics, wire_length_mm: {before, after}, size_mm: {before:[w,h], aft
 
 ## Code shape
 
-- `src-tauri/crates/madake-core/src/arrange.rs`: units, bands, maps, fit, `plan_arrange(sheet, defs,
-  &ArrangeOptions, protected) -> Result<ArrangePlan, String>`.
-- `route.rs` gains a function that routes recorded clusters on a given sheet
-  (`plan_route_clusters`), shared by reroute and arrange, and the label fallback.
+- `src-tauri/crates/madake-core/src/arrange.rs`: units, bands, maps, fit,
+  `plan_arrange(sheet, defs, &ArrangeOptions, &ArrangeContext) -> Result<ArrangePlan, String>`, where the
+  context carries the protected ids, the frame area, the title block area and the names already used in
+  the project.
+- `route.rs` is split into collecting the clusters (`collect_route_units`) and routing them on a grid
+  (`route_units`), shared by reroute and arrange; reroute's behaviour does not change.
 - MCP, Link API and CLI follow the reroute entry points (plan outside the lock where reroute does,
   options validated first, one batch, one undo).
 
