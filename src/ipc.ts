@@ -420,6 +420,8 @@ export interface Project {
   mech_links?: MechLink[];
   /** PLC I/O図面の生成設定 (生成ダイアログで「プロジェクトに保存」したもの。format v14)。 */
   plc_generate?: PlcSheetOptions | null;
+  /** シミュレーションの計算ケース (v27)。無ければ空。 */
+  sim_cases?: SimCase[];
   /** 図面の文字の書体 (同梱ストロークフォント。format v21)。未設定はシステムの書体。 */
   text_font?: TextFont | null;
 }
@@ -499,6 +501,8 @@ export type Command =
   | { type: "set_frame_template"; frame_template: string | null }
   | { type: "set_text_font"; text_font: TextFont | null }
   | { type: "set_plc_sheet_options"; options: PlcSheetOptions | null }
+  | { type: "set_sim_case"; case: SimCase; at?: number }
+  | { type: "remove_sim_case"; id: string }
   | { type: "add_cable"; sheet_id: string; cable: Cable }
   | { type: "align_footprints"; sheet_id: string; ids: string[]; mode: AlignMode }
   | {
@@ -621,6 +625,7 @@ export type PatchOp =
   | { op: "frame_template_changed"; frame_template: string | null }
   | { op: "text_font_changed"; text_font: TextFont | null }
   | { op: "plc_sheet_options_changed"; options: PlcSheetOptions | null }
+  | { op: "sim_cases_replaced"; cases: SimCase[] }
   /** プロジェクト名・番号が変わった (G16)。表題欄側は各シートの`sheet_meta_updated`で届く。 */
   | { op: "project_meta_changed"; name: string; no: string | null }
   | { op: "mech_links_replaced"; mech_links: MechLink[] };
@@ -804,6 +809,21 @@ export interface EntityLoad {
   limit: number | null;
   limit_kind: "wire_ampacity" | "fuse_rating" | "pin_rating" | "source_max" | "converter_out" | null;
   ratio: number | null;
+}
+
+/** 短絡の場所: 電線 (始点) か部品のピン。 */
+export type FaultTarget = { wire_id: string } | { entity_id: string; pin: string };
+
+/** 計算ケースの故障: 接地への短絡か電線の断線。 */
+export type SimFault = { kind: "short"; target: FaultTarget } | { kind: "open"; wire_id: string };
+
+/** シミュレーションの計算ケース (名前付きの条件の組)。 */
+export interface SimCase {
+  id: string;
+  name: string;
+  open_switches: string[];
+  overrides: Record<string, Record<string, string>>;
+  faults: SimFault[];
 }
 
 /** シミュレーションの条件 (開路以外)。overrides は 参照記号 → {属性: 値}、shorts は接地へ短絡させるネット名。 */

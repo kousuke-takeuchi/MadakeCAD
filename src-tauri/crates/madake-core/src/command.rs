@@ -132,6 +132,15 @@ pub enum Command {
         #[serde(default)]
         options: Option<crate::plc::PlcSheetOptions>,
     },
+    /// シミュレーションの計算ケースを足す・置き換える (同じ id があれば置き換え)。名前は空・重複不可。
+    /// 逆コマンドは置き換え前のケース、新規なら RemoveSimCase。`at` は削除を戻すときの挿入位置。
+    SetSimCase {
+        case: crate::model::SimCase,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        at: Option<usize>,
+    },
+    /// 計算ケースを消す。逆コマンドは消したケースを同じ位置へ戻す SetSimCase。
+    RemoveSimCase { id: uuid::Uuid },
     /// 図枠テンプレートの差し替え (プロジェクト単位。M4仕様 §9)。全シートの図枠・
     /// 表題欄・改訂欄が一括で変わる。nullで既定 (`jis-a3`) へ戻す。
     /// 逆コマンドは差し替え前のid。
@@ -325,6 +334,8 @@ pub enum PatchOp {
     TextFontChanged { text_font: Option<crate::model::TextFont> },
     /// PLC I/O図面の生成設定 (プロジェクトに保存したもの) が変わった。
     PlcSheetOptionsChanged { options: Option<crate::plc::PlcSheetOptions> },
+    /// 計算ケースの一覧が変わった (全体を送る)。
+    SimCasesReplaced { cases: Vec<crate::model::SimCase> },
     /// プロジェクト名・番号が変わった (G16)。表題欄側の変更は各シートの
     /// [`PatchOp::SheetMetaUpdated`]で別に届く。
     ProjectMetaChanged { name: String, no: Option<String> },
@@ -1012,6 +1023,39 @@ impl Engine {
                 Ok((
                     vec![PatchOp::PlcSheetOptionsChanged { options: options.clone() }],
                     vec![Command::SetPlcSheetOptions { options: old }],
+                ))
+            }
+            Command::SetSimCase { case, at } => {
+                let name = case.name.trim();
+                if name.is_empty() {
+                    return Err(CoreError::InvalidCommand("計算ケースの名前が空です".into()));
+                }
+                if self.project.sim_cases.iter().any(|c| c.id != case.id && c.name.trim() == name) {
+                    return Err(CoreError::InvalidCommand(format!("計算ケース「{name}」は既にあります")));
+                }
+                let mut stored = case.clone();
+                stored.name = name.to_string();
+                let inverse = match self.project.sim_cases.iter().position(|c| c.id == case.id) {
+                    Some(i) => {
+                        let old = std::mem::replace(&mut self.project.sim_cases[i], stored);
+                        Command::SetSimCase { case: old, at: None }
+                    }
+                    None => {
+                        let len = self.project.sim_cases.len();
+                        self.project.sim_cases.insert(at.unwrap_or(len).min(len), stored);
+                        Command::RemoveSimCase { id: case.id }
+                    }
+                };
+                Ok((vec![PatchOp::SimCasesReplaced { cases: self.project.sim_cases.clone() }], vec![inverse]))
+            }
+            Command::RemoveSimCase { id } => {
+                let Some(i) = self.project.sim_cases.iter().position(|c| c.id == *id) else {
+                    return Err(CoreError::InvalidCommand(format!("計算ケース {id} がありません")));
+                };
+                let old = self.project.sim_cases.remove(i);
+                Ok((
+                    vec![PatchOp::SimCasesReplaced { cases: self.project.sim_cases.clone() }],
+                    vec![Command::SetSimCase { case: old, at: Some(i) }],
                 ))
             }
             Command::SetFrameTemplate { frame_template } => {
@@ -5616,5 +5660,77 @@ mod tests {
         let err = engine.execute(Command::AddEntity { sheet_id, entity: note(Some(0.1)) }).expect_err("範囲外は断る");
         assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("text stretch")), "{err:?}");
         engine.execute(Command::AddEntity { sheet_id, entity: note(Some(1.18)) }).unwrap();
+    }
+
+    fn sim_case(name: &str) -> crate::model::SimCase {
+        crate::model::SimCase {
+            id: Uuid::new_v4(),
+            name: name.into(),
+            open_switches: vec![],
+            overrides: [("M1".to_string(), [("current_a".to_string(), "40".to_string())].into_iter().collect())]
+                .into_iter()
+                .collect(),
+            faults: vec![],
+        }
+    }
+
+    /// SetSimCase saves a new study case with the project, and undo removes it again.
+    /// SetSimCase は新しい計算ケースをプロジェクトに保存し、undo で消える。
+    #[test]
+    fn set_sim_case_adds_a_case_and_undo_removes_it() {
+        let mut engine = Engine::new(Project::new("t"));
+        let case = sim_case("Motor max");
+        let patch = engine.execute(Command::SetSimCase { at: None, case: case.clone() }).unwrap();
+        assert!(matches!(&patch.ops[0], PatchOp::SimCasesReplaced { cases } if cases == &vec![case.clone()]));
+        assert_eq!(engine.project().sim_cases, vec![case]);
+        engine.undo().unwrap();
+        assert!(engine.project().sim_cases.is_empty());
+    }
+
+    /// SetSimCase with the id of an existing case replaces it in place, and undo brings the old case back.
+    /// 既にあるケースの id で SetSimCase すると、その場で置き換わり、undo で元のケースに戻る。
+    #[test]
+    fn set_sim_case_replaces_a_case_and_undo_restores_it() {
+        let mut engine = Engine::new(Project::new("t"));
+        let a = sim_case("A");
+        let b = sim_case("B");
+        engine.execute(Command::SetSimCase { at: None, case: a.clone() }).unwrap();
+        engine.execute(Command::SetSimCase { at: None, case: b.clone() }).unwrap();
+        let mut renamed = a.clone();
+        renamed.name = "A2".into();
+        engine.execute(Command::SetSimCase { at: None, case: renamed.clone() }).unwrap();
+        assert_eq!(engine.project().sim_cases, vec![renamed, b.clone()]);
+        engine.undo().unwrap();
+        assert_eq!(engine.project().sim_cases, vec![a, b]);
+    }
+
+    /// A case with an empty name, or with the name of another case, is refused and nothing changes.
+    /// 名前が空のケースと、ほかのケースと同じ名前のケースは断られ、何も変わらない。
+    #[test]
+    fn set_sim_case_refuses_empty_and_duplicate_names() {
+        let mut engine = Engine::new(Project::new("t"));
+        engine.execute(Command::SetSimCase { at: None, case: sim_case("A") }).unwrap();
+        for bad in ["", "  ", " A "] {
+            let err = engine.execute(Command::SetSimCase { at: None, case: sim_case(bad) }).unwrap_err();
+            assert!(matches!(err, CoreError::InvalidCommand(_)), "{bad:?}: {err:?}");
+        }
+        assert_eq!(engine.project().sim_cases.len(), 1);
+    }
+
+    /// RemoveSimCase deletes a case, and undo puts it back at the same position.
+    /// RemoveSimCase はケースを消し、undo で同じ位置に戻す。
+    #[test]
+    fn remove_sim_case_and_undo_restores_the_position() {
+        let mut engine = Engine::new(Project::new("t"));
+        let (a, b, c) = (sim_case("A"), sim_case("B"), sim_case("C"));
+        for x in [&a, &b, &c] {
+            engine.execute(Command::SetSimCase { at: None, case: x.clone() }).unwrap();
+        }
+        engine.execute(Command::RemoveSimCase { id: b.id }).unwrap();
+        assert_eq!(engine.project().sim_cases, vec![a.clone(), c.clone()]);
+        engine.undo().unwrap();
+        assert_eq!(engine.project().sim_cases, vec![a, b, c]);
+        let err = engine.execute(Command::RemoveSimCase { id: Uuid::new_v4() }).unwrap_err();
+        assert!(matches!(err, CoreError::InvalidCommand(_)));
     }
 }

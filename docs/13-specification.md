@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3539 specification clauses** across 6 areas.
+**3544 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -346,6 +346,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A letter spacing outside 0.3 to 3 is refused on the text font and on a note; a value inside is kept and saved. <sub>`letter_spacing_is_checked_on_the_font_and_on_notes`</sub>
 - The sheet wire style also stores the "hide wire numbers" switch, and undo puts it back. <sub>`set_sheet_wire_style_stores_hidden_wire_numbers`</sub>
 - A horizontal stretch outside 0.3 to 3 is refused on the text font and on a note; a value inside is kept and saved. <sub>`text_stretch_is_checked_on_the_font_and_on_notes`</sub>
+- SetSimCase saves a new study case with the project, and undo removes it again. <sub>`set_sim_case_adds_a_case_and_undo_removes_it`</sub>
+- SetSimCase with the id of an existing case replaces it in place, and undo brings the old case back. <sub>`set_sim_case_replaces_a_case_and_undo_restores_it`</sub>
+- A case with an empty name, or with the name of another case, is refused and nothing changes. <sub>`set_sim_case_refuses_empty_and_duplicate_names`</sub>
+- RemoveSimCase deletes a case, and undo puts it back at the same position. <sub>`remove_sim_case_and_undo_restores_the_position`</sub>
 
 ### connector
 
@@ -466,7 +470,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 26, the version that added the sheet switch that hides wire numbers. <sub>`the_current_format_version_is_twenty_six`</sub>
+- The current file format version is 27, the version that added simulation study cases. <sub>`the_current_format_version_is_twenty_seven`</sub>
 - A version 23 project file opens in this build and becomes the current version; its sheets get the default wire weight and still show their wire notes. <sub>`a_version_23_file_opens_as_the_current_version`</sub>
 - A version 22 project file opens in this build and becomes the current version; its blocks keep their attributes and pins unchanged. <sub>`a_version_22_file_opens_as_the_current_version`</sub>
 - A version 21 project file opens in this build and becomes the current version; its blocks keep their attributes and their 5 mm pins. <sub>`a_version_21_file_opens_as_the_current_version`</sub>
@@ -495,6 +499,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Regression test (already passes): a version 18 file with a port block opens unchanged apart from being moved up to the current version. <sub>`a_version_18_file_loads_unchanged`</sub>
 - A block whose pins have only connectors (no contacts) is also saved under the kind "port_block" and comes back with its connectors, IPC/MCP JSON still says "symbol", and once its connectors are removed it is saved as "symbol" again. <sub>`a_block_with_connectors_is_saved_as_port_block`</sub>
 - A version 24 project file opens in this build and becomes the current version; wires stay solid at the sheet's weight, outlines keep their weight and the text font has no fixed pen. <sub>`a_version_24_file_opens_as_the_current_version`</sub>
+- A version 26 project file opens as version 27 with no study cases, and study cases survive save and load. <sub>`sim_cases_load_from_old_files_and_round_trip`</sub>
 
 ### KiCad import / export
 

@@ -262,6 +262,9 @@ export const useDocumentStore = defineStore("document", {
           case "plc_sheet_options_changed":
             if (this.project) this.project.plc_generate = op.options;
             break;
+          case "sim_cases_replaced":
+            if (this.project) this.project.sim_cases = op.cases;
+            break;
           case "project_meta_changed":
             if (this.project) {
               this.project.name = op.name;

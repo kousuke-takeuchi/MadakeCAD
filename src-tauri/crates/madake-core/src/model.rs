@@ -75,7 +75,8 @@ pub type SheetId = Uuid;
 ///   ([`Shape::arrow_end`])、書体のペンの太さ ([`TextFont::pen_mm`])、ブロックの属性 `block_leads`、シンボルの属性
 ///   `caption_layout`。形式24のビルドは版番号で断る。使っていないファイルは版番号以外これまでと同じ
 /// - v26: シートの線番を描かない設定 ([`Sheet::hide_wire_numbers`])。形式25のビルドは版番号で断る。使っていないファイルは版番号以外これまでと同じ
-pub const FORMAT_VERSION: u32 = 26;
+/// - v27: シミュレーションの計算ケース ([`Project::sim_cases`])。形式26のビルドは版番号で断る。使っていないファイルは版番号以外これまでと同じ
+pub const FORMAT_VERSION: u32 = 27;
 
 fn is_false(b: &bool) -> bool {
     !*b
@@ -145,6 +146,45 @@ pub struct Project {
     /// 次に生成ダイアログを開いたときの初期値になる。`None`=保存なし (既定値)。
     #[serde(default)]
     pub plc_generate: Option<crate::plc::PlcSheetOptions>,
+    /// シミュレーションの計算ケース (v27)。名前付きの条件 (開路・属性の置き換え・故障) の組。
+    /// 「通常」(条件なし) は保存しない。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sim_cases: Vec<SimCase>,
+}
+
+/// シミュレーションの計算ケース。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct SimCase {
+    pub id: Uuid,
+    /// ケースの名前 (空不可、プロジェクト内で重複不可)。
+    pub name: String,
+    /// 開路として扱う導通部品の参照記号。
+    #[serde(default)]
+    pub open_switches: Vec<String>,
+    /// 部品の属性の置き換え (参照記号 → {属性: 値})。
+    #[serde(default)]
+    pub overrides: BTreeMap<String, BTreeMap<String, String>>,
+    /// 故障 (短絡・断線)。ネット名でなく電線・ピンの id で覚える (図面を編集しても指す先が変わらない)。
+    #[serde(default)]
+    pub faults: Vec<SimFault>,
+}
+
+/// 計算ケースの故障1つ。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SimFault {
+    /// 接地 (0V) への短絡。
+    Short { target: FaultTarget },
+    /// 電線の断線 (その電線を回路から外す)。
+    Open { wire_id: Uuid },
+}
+
+/// 短絡の場所: 電線 (始点) か、部品のピン。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(untagged)]
+pub enum FaultTarget {
+    Pin { entity_id: Uuid, pin: String },
+    Wire { wire_id: Uuid },
 }
 
 /// エンティティ (シンボル・配線) とFreeCADオブジェクトの対応 (M5仕様 M5-2)。
@@ -202,6 +242,7 @@ impl Project {
             no: None,
             mech_links: Vec::new(),
             plc_generate: None,
+            sim_cases: Vec::new(),
         }
     }
 

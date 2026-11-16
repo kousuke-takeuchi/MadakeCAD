@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3539仕様項目**。
+全6領域・**3544仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -346,6 +346,10 @@
 - 0.3〜3 の外の字間は、書体でも注記でも断る。範囲内の値は保存される。 <sub>`letter_spacing_is_checked_on_the_font_and_on_notes`</sub>
 - シートの配線の描き方は「線番を描かない」も保存し、元に戻すと前の値に戻る。 <sub>`set_sheet_wire_style_stores_hidden_wire_numbers`</sub>
 - 0.3〜3 の外の横の伸縮率は、書体でも注記でも断る。範囲内の値は保存される。 <sub>`text_stretch_is_checked_on_the_font_and_on_notes`</sub>
+- SetSimCase は新しい計算ケースをプロジェクトに保存し、undo で消える。 <sub>`set_sim_case_adds_a_case_and_undo_removes_it`</sub>
+- 既にあるケースの id で SetSimCase すると、その場で置き換わり、undo で元のケースに戻る。 <sub>`set_sim_case_replaces_a_case_and_undo_restores_it`</sub>
+- 名前が空のケースと、ほかのケースと同じ名前のケースは断られ、何も変わらない。 <sub>`set_sim_case_refuses_empty_and_duplicate_names`</sub>
+- RemoveSimCase はケースを消し、undo で同じ位置に戻す。 <sub>`remove_sim_case_and_undo_restores_the_position`</sub>
 
 ### connector
 
@@ -466,7 +470,7 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは26 (シートの線番を描かない設定を追加した版) である。 <sub>`the_current_format_version_is_twenty_six`</sub>
+- 現行のファイル形式バージョンは27 (シミュレーションの計算ケースを追加した版) である。 <sub>`the_current_format_version_is_twenty_seven`</sub>
 - 形式23のプロジェクトファイルはこのビルドで開け、現行の形式になる。シートの配線は既定の太さで、配線注記も出たままになる。 <sub>`a_version_23_file_opens_as_the_current_version`</sub>
 - 形式22のプロジェクトファイルはこのビルドで開け、現行の形式になる。ブロックの属性とピンはそのまま残る。 <sub>`a_version_22_file_opens_as_the_current_version`</sub>
 - 形式21のプロジェクトファイルはこのビルドで開け、現行の形式になる。ブロックの属性と5mm間隔のピンはそのまま残る。 <sub>`a_version_21_file_opens_as_the_current_version`</sub>
@@ -495,6 +499,7 @@
 - 回帰テスト (最初から通る): ポートのブロックを含む形式18のファイルは、現行版へ上がる以外そのまま開ける。 <sub>`a_version_18_file_loads_unchanged`</sub>
 - 接点が無くコネクタだけを持つブロックも種類「port_block」で保存され、読み直すとコネクタ付きで戻り、IPC・MCP の JSON は「symbol」のまま。コネクタを消せばまた「symbol」で保存される。 <sub>`a_block_with_connectors_is_saved_as_port_block`</sub>
 - 形式24のプロジェクトファイルはこのビルドで開け、現行の形式になる。配線は実線・シートの太さのまま、外形の太さも変わらず、書体のペンの太さは未設定になる。 <sub>`a_version_24_file_opens_as_the_current_version`</sub>
+- 版 26 のプロジェクトは計算ケースなしの版 27 として開き、計算ケースは保存して開き直しても残る。 <sub>`sim_cases_load_from_old_files_and_round_trip`</sub>
 
 ### KiCadインポート / エクスポート
 

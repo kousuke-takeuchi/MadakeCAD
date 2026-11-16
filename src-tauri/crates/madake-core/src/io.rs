@@ -413,15 +413,15 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 26, the version that added the sheet switch that hides wire numbers.
-    /// 現行のファイル形式バージョンは26 (シートの線番を描かない設定を追加した版) である。
+    /// The current file format version is 27, the version that added simulation study cases.
+    /// 現行のファイル形式バージョンは27 (シミュレーションの計算ケースを追加した版) である。
     #[test]
-    fn the_current_format_version_is_twenty_six() {
-        assert_eq!(FORMAT_VERSION, 26);
+    fn the_current_format_version_is_twenty_seven() {
+        assert_eq!(FORMAT_VERSION, 27);
         let mut old = Project::new("x");
-        old.format_version = 25;
+        old.format_version = 26;
         migrate(&mut old);
-        assert_eq!(old.format_version, 26);
+        assert_eq!(old.format_version, 27);
     }
 
     /// A version 23 project file opens in this build and becomes the current version; its sheets get the default wire weight and still show their wire notes.
@@ -1046,5 +1046,33 @@ mod tests {
         assert!((sheet.weight_of(w) - 0.35).abs() < 1e-9 && (sheet.symbol_weight_mm() - 0.3).abs() < 1e-9);
         assert!(!sheet.vivid_wire_colors);
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A version 26 project file opens as version 27 with no study cases, and study cases survive save and load.
+    /// 版 26 のプロジェクトは計算ケースなしの版 27 として開き、計算ケースは保存して開き直しても残る。
+    #[test]
+    fn sim_cases_load_from_old_files_and_round_trip() {
+        let mut p = Project::new("t");
+        p.format_version = 26;
+        let mut text = serde_json::to_value(&p).unwrap();
+        text.as_object_mut().unwrap().remove("sim_cases");
+        let mut old: Project = serde_json::from_value(text).unwrap();
+        migrate(&mut old);
+        assert_eq!(old.format_version, 27);
+        assert!(old.sim_cases.is_empty());
+        let mut p = Project::new("t");
+        p.sim_cases.push(SimCase {
+            id: Uuid::new_v4(),
+            name: "Short".into(),
+            open_switches: vec![],
+            overrides: Default::default(),
+            faults: vec![
+                SimFault::Short { target: FaultTarget::Pin { entity_id: Uuid::new_v4(), pin: "2".into() } },
+                SimFault::Open { wire_id: Uuid::new_v4() },
+            ],
+        });
+        let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert_eq!(back.sim_cases, p.sim_cases);
+        assert!(!serde_json::to_string(&Project::new("t")).unwrap().contains("sim_cases"));
     }
 }
