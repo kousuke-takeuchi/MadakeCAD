@@ -1125,7 +1125,15 @@ pub fn plan_reroute(sheet: &Sheet, defs: &[SymbolDef], opts: &RerouteOptions) ->
                 net: net.name.clone(),
                 wires: ws.iter().map(|w| w.id).collect(),
                 junctions: junctions.iter().filter(|j| on_group(j.1)).map(|j| j.0).collect(),
-                template: (*t).clone(),
+                template: {
+                    // 長さは、かたまりの中で長さを持つ最初の配線のものを使う (id順の先頭が長さを持つとは限らない)
+                    let mut template = (*t).clone();
+                    if let Some(w) = ws.iter().find(|w| w.length_m.is_some()) {
+                        template.length_m = w.length_m;
+                        template.length_source = w.length_source;
+                    }
+                    template
+                },
                 old_lines: ws.iter().map(|w| w.points.clone()).collect(),
                 old_junctions: junctions.iter().filter(|j| on_group(j.1)).map(|j| j.1).collect(),
                 terms,
@@ -1949,7 +1957,7 @@ mod tests {
         let plan = run(&sheet);
         let wires = added_wires(&plan);
         assert!(!wires.is_empty());
-        for w in wires {
+        for w in &wires {
             assert_eq!(
                 (w.color.as_str(), w.sq, w.part_no.as_deref(), w.net.as_deref(), w.dashed, w.weight_mm),
                 ("red", 1.5, Some("WIRE-15"), Some("W7"), true, Some(0.5))
@@ -1966,7 +1974,8 @@ mod tests {
         place(&mut sheet, "box2", (50.0, 50.0), "R1");
         place(&mut sheet, "box2", (100.0, 70.0), "R2");
         place(&mut sheet, "box2", (100.0, 30.0), "R3");
-        let a = old_wire(&mut sheet, &[(60.0, 50.0), (75.0, 50.0), (75.0, 70.0), (90.0, 70.0)]);
+        let a = old_wire(&mut sheet, &[(60.0, 50.0), (75.0, 50.0)]);
+        old_wire(&mut sheet, &[(75.0, 50.0), (75.0, 70.0), (90.0, 70.0)]);
         old_wire(&mut sheet, &[(75.0, 50.0), (75.0, 30.0), (90.0, 30.0)]);
         if let Some(Entity::Wire(w)) = sheet.entities.get_mut(&a) {
             w.length_m = Some(3.0);
