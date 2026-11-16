@@ -759,6 +759,7 @@ pub struct ReroutePlan {
 ///
 /// ネットは同名のネットラベルで離れたかたまりをつなぐので、かたまりごとに別々に引き直す
 /// (離れたかたまりを新しい配線でつなぐと、図面の見た目が変わるため)。
+#[derive(Clone)]
 pub(crate) struct RouteUnit {
     pub net: String,
     pub wires: Vec<EntityId>,

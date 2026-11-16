@@ -792,6 +792,11 @@ fn key_groups(keys: &[f64], tol: f64) -> Vec<Vec<usize>> {
 }
 
 /// 組 (ids) を新しい外接矩形 (newb) へ動かすと、今まで重なっていなかった2つの単位が重なるか。
+/// 2つの外接矩形が同じだけ動いたか。
+fn same_shift(a0: &Bounds, a1: &Bounds, b0: &Bounds, b1: &Bounds) -> bool {
+    ((a1.0 - a0.0) - (b1.0 - b0.0)).abs() < EPS && ((a1.1 - a0.1) - (b1.1 - b0.1)).abs() < EPS
+}
+
 fn creates_overlap(cur: &[Bounds], ids: &[usize], newb: &[Bounds]) -> bool {
     for (p, &i) in ids.iter().enumerate() {
         for j in 0..cur.len() {
@@ -803,9 +808,16 @@ fn creates_overlap(cur: &[Bounds], ids: &[usize], newb: &[Bounds]) -> bool {
                     if j > i && overlap(&newb[p], &newb[q]) && !overlap(&cur[i], &cur[j]) {
                         return true;
                     }
+                    // もともと重なっている組は、互いの位置を変えない (ピンどうし・ピンと印が触れてしまうため)
+                    if overlap(&cur[i], &cur[j]) && !same_shift(&cur[i], &newb[p], &cur[j], &newb[q]) {
+                        return true;
+                    }
                 }
                 None => {
                     if overlap(&newb[p], &cur[j]) && !overlap(&cur[i], &cur[j]) {
+                        return true;
+                    }
+                    if overlap(&cur[i], &cur[j]) {
                         return true;
                     }
                 }
@@ -960,6 +972,8 @@ struct FallbackName {
     template: Option<NetLabel>,
     /// 新しく作った `ARR_<n>` の名前か。
     fresh: bool,
+    /// 短い線を出さない端子の元の位置 (消すネット名シンボルのピン。新しいラベルが同じ名前を持つ)。
+    skip: Vec<Point>,
 }
 
 /// ラベルでつなぐときの名前と、消すラベルのid。
@@ -975,25 +989,45 @@ fn fallback_name(
     taken: &mut BTreeSet<String>,
 ) -> FallbackName {
     let labels = cluster_labels(sheet, wires);
-    if let Some(first) = labels.first() {
-        let has_pin = terms.iter().any(|t| t.1.is_some());
-        let delete: Vec<EntityId> = if has_pin { labels.iter().map(|l| l.0).filter(|id| !pointed.contains(id)).collect() } else { vec![] };
+    let at: Vec<Point> = terms.iter().map(|t| t.0).collect();
+    // ネット名シンボル (電源マーク) のピンの端子: (位置, シンボルid, 名前)
+    let marks: Vec<(Point, EntityId, String)> = at
+        .iter()
+        .flat_map(|t| pins.iter().filter(move |p| near(p.pos, *t)))
+        .filter_map(|p| match sheet.entities.get(&p.entity) {
+            Some(Entity::Symbol(s)) => idx.get(s).and_then(|d| d.net_name().map(|n| (p.pos, s.id, n.to_string()))),
+            _ => None,
+        })
+        .collect();
+    // 印でないピンの端子があれば、同じ名前のラベルと印は新しいラベルに置き換える (消す)
+    let has_pin = terms.iter().any(|t| t.1.is_some() && !marks.iter().any(|m| near(m.0, t.0)));
+    let (name, template) = if let Some(first) = labels.first() {
         let template = match sheet.entities.get(&labels[0].0) {
             Some(Entity::NetLabel(l)) => Some(l.clone()),
             _ => None,
         };
-        return FallbackName { name: first.1.clone(), delete, template, fresh: false };
-    }
-    let at: Vec<Point> = terms.iter().map(|t| t.0).collect();
-    if let Some(n) = term_symbol_names(sheet, idx, pins, &at).into_iter().next() {
-        return FallbackName { name: n, delete: vec![], template: None, fresh: false };
+        (Some(first.1.clone()), template)
+    } else {
+        (marks.iter().map(|m| m.2.clone()).min(), None)
+    };
+    if let Some(name) = name {
+        let mut delete: Vec<EntityId> = Vec::new();
+        let mut skip: Vec<Point> = Vec::new();
+        if has_pin {
+            delete.extend(labels.iter().map(|l| l.0).filter(|id| !pointed.contains(id)));
+            for m in marks.iter().filter(|m| m.2 == name && !pointed.contains(&m.1)) {
+                delete.push(m.1);
+                skip.push(m.0);
+            }
+        }
+        return FallbackName { name, delete, template, fresh: false, skip };
     }
     let mut n = 1;
     loop {
         let name = format!("ARR_{n}");
         if !taken.contains(&name) {
             taken.insert(name.clone());
-            return FallbackName { name, delete: vec![], template: None, fresh: true };
+            return FallbackName { name, delete: vec![], template: None, fresh: true, skip: vec![] };
         }
         n += 1;
     }
@@ -1036,21 +1070,75 @@ struct Stub {
     name: String,
 }
 
-/// ラベルでつなぐ短い線とラベル。ピンから引き出し線の先 (なければ向きへ2.5mm) まで線を引き、その先にラベルを置く。
-/// ラベルの向きと属性は、消したラベルがあればその先頭に倣う。
-fn stub_entities(grid: &RouteGrid, fb: &Fallback) -> (Vec<Entity>, Vec<Stub>) {
+/// 点と線分の距離。
+fn seg_dist(p: Point, a: Point, b: Point) -> f64 {
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
+    let l2 = dx * dx + dy * dy;
+    let t = if l2 < 1e-12 { 0.0 } else { (((p.x - a.x) * dx + (p.y - a.y) * dy) / l2).clamp(0.0, 1.0) };
+    (p.x - a.x - t * dx).hypot(p.y - a.y - t * dy)
+}
+
+/// 短い線 (点列) が、他の線・点 (ピン・ラベル・ジャンクション) に触れるか。始点 (自分のピン) は数えない。
+fn stub_hits(pts: &[Point], lines: &[Vec<Point>], spots: &[Point]) -> bool {
+    const TOUCH: f64 = 0.3;
+    let start = pts[0];
+    let segs: Vec<(Point, Point)> = pts.windows(2).map(|w| (w[0], w[1])).collect();
+    let on_me = |q: Point| segs.iter().any(|&(a, b)| seg_dist(q, a, b) < TOUCH);
+    if spots.iter().any(|&q| !near(q, start) && on_me(q)) {
+        return true;
+    }
+    for line in lines {
+        // 他の線の頂点が自分に乗る・自分の頂点が他の線に乗る・線分どうしが交わる
+        if line.iter().any(|&q| !near(q, start) && on_me(q)) {
+            return true;
+        }
+        for w in line.windows(2) {
+            if pts.iter().any(|&q| !near(q, start) && seg_dist(q, w[0], w[1]) < TOUCH) {
+                return true;
+            }
+            if segs.iter().any(|&(a, b)| crosses(a, b, w[0], w[1])) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 軸に平行な2本の線分が、端以外で交わるか。
+fn crosses(a: Point, b: Point, c: Point, d: Point) -> bool {
+    let h1 = (a.y - b.y).abs() < 1e-9;
+    let h2 = (c.y - d.y).abs() < 1e-9;
+    if h1 == h2 {
+        return false;
+    }
+    let ((hx0, hx1, hy), (vx, vy0, vy1)) = if h1 {
+        ((a.x.min(b.x), a.x.max(b.x), a.y), (c.x, c.y.min(d.y), c.y.max(d.y)))
+    } else {
+        ((c.x.min(d.x), c.x.max(d.x), c.y), (a.x, a.y.min(b.y), a.y.max(b.y)))
+    };
+    vx > hx0 + 1e-6 && vx < hx1 - 1e-6 && hy > vy0 + 1e-6 && hy < vy1 - 1e-6
+}
+
+/// ラベルでつなぐ短い線とラベル。ピンの向きへまっすぐ 2.5・5・7.5 mm の線を順に試し、他の線・ピン・ラベルに
+/// 触れない最初のものを使う (どれも触れるなら引き出し線、それもなければ 2.5 mm。検算が断る)。
+/// 置いた線と端は `lines`・`spots` に足し、次の短い線が避ける。ラベルの向きと属性は、消したラベルがあればその先頭に倣う。
+fn stub_entities(grid: &RouteGrid, fb: &Fallback, lines: &mut Vec<Vec<Point>>, spots: &mut Vec<Point>) -> (Vec<Entity>, Vec<Stub>) {
     let mut out = Vec::new();
     let mut stubs = Vec::new();
     for (pos, dir, attrs) in &fb.terms {
         let Some(dir) = dir else { continue };
-        let pts = match make_lead(grid, *pos, Some(*dir)) {
-            Some(l) if l.points.len() >= 2 => simplify(l.points),
-            _ => {
-                let (sx, sy) = dir_step(*dir);
-                vec![*pos, pos.translated(sx * STUB_MM, sy * STUB_MM)]
+        let (sx, sy) = dir_step(*dir);
+        let mut cands: Vec<Vec<Point>> =
+            [1.0, 2.0, 3.0].iter().map(|k| vec![*pos, pos.translated(sx * STUB_MM * k, sy * STUB_MM * k)]).collect();
+        if let Some(l) = make_lead(grid, *pos, Some(*dir)) {
+            if l.points.len() >= 2 {
+                cands.push(simplify(l.points));
             }
-        };
+        }
+        let pts = cands.iter().find(|c| !stub_hits(c, lines, spots)).cloned().unwrap_or_else(|| cands[0].clone());
         let end = *pts.last().expect("2点以上");
+        lines.push(pts.clone());
+        spots.push(end);
         let (wire, label) = (uuid::Uuid::new_v4(), uuid::Uuid::new_v4());
         let (rotation, label_attrs) = fb.template.as_ref().map_or((0, Default::default()), |t| (t.rotation, t.attrs.clone()));
         out.push(Entity::Wire(Wire { id: wire, points: pts, ..attrs.clone() }));
@@ -1067,6 +1155,24 @@ fn pin_partition(sheet: &Sheet, defs: &[SymbolDef]) -> BTreeSet<BTreeSet<(Entity
         .filter(|n| !n.pins.is_empty())
         .map(|n| n.pins.iter().map(|p| (p.entity_id, p.pin.clone())).collect())
         .collect()
+}
+
+/// ピンの分け方の違いを、参照記号.ピン番号で短く書く (前だけにある組と後だけにある組を3つまで)。
+fn partition_diff(sheet: &Sheet, before: &BTreeSet<BTreeSet<(EntityId, String)>>, after: &BTreeSet<BTreeSet<(EntityId, String)>>) -> String {
+    let name = |(id, pin): &(EntityId, String)| -> String {
+        match sheet.entities.get(id) {
+            Some(Entity::Symbol(s)) if !s.reference.is_empty() => format!("{}.{pin}", s.reference),
+            _ => format!("{}.{pin}", &id.to_string()[..8]),
+        }
+    };
+    let show = |set: Vec<&BTreeSet<(EntityId, String)>>| -> String {
+        set.iter().take(3).map(|g| g.iter().take(6).map(name).collect::<Vec<_>>().join(" ")).collect::<Vec<_>>().join(" / ")
+    };
+    format!(
+        "前: {} 後: {}",
+        show(before.difference(after).collect()),
+        show(after.difference(before).collect())
+    )
 }
 
 /// ネットごとの (ピンの集合, 名前の集合) の並び (ピンの無いネットも含む、整列済み)。
@@ -1108,15 +1214,31 @@ fn check_stubs(after: &Sheet, defs: &[SymbolDef], stubs: &[Stub]) -> Result<(), 
         let Some(start) = w.points.first().copied() else { continue };
         let own: BTreeSet<EntityId> = stubs.iter().filter(|o| o.name == s.name).flat_map(|o| [o.wire, o.label]).collect();
         let ends = |x: &Wire| -> Vec<Point> { [x.points.first(), x.points.last()].into_iter().flatten().copied().collect() };
-        let touched = after.entities.values().any(|e| match e {
-            _ if own.contains(&e.id()) => false,
-            Entity::Wire(o) => ends(o).iter().any(|q| on_wire(w, q)) || ends(w).iter().any(|q| on_wire(o, q)),
-            Entity::Junction(j) => on_wire(w, &j.at),
-            Entity::NetLabel(l) => on_wire(w, &l.at),
-            _ => false,
-        }) || pp.iter().any(|q| on_wire(w, &q.pos) && !near(q.pos, start));
-        if touched {
-            return Err(format!("並べ直しの検算で、ラベル {} の引き出し線が他の配線やピンに触れたため、何も変えませんでした", s.name));
+        let hit = after.entities.values().find_map(|e| {
+            let t = match e {
+                _ if own.contains(&e.id()) => false,
+                Entity::Wire(o) => ends(o).iter().any(|q| on_wire(w, q)) || ends(w).iter().any(|q| on_wire(o, q)),
+                Entity::Junction(j) => on_wire(w, &j.at),
+                Entity::NetLabel(l) => on_wire(w, &l.at),
+                _ => false,
+            };
+            t.then(|| match e {
+                Entity::NetLabel(l) => format!("ラベル {}", l.name),
+                Entity::Junction(_) => "ジャンクション".to_string(),
+                _ => "配線".to_string(),
+            })
+        });
+        let hit = hit.or_else(|| {
+            pp.iter().find(|q| on_wire(w, &q.pos) && !near(q.pos, start)).map(|q| {
+                let r = if q.reference.is_empty() { "ピン".to_string() } else { q.reference.clone() };
+                format!("{r}.{}", q.number)
+            })
+        });
+        if let Some(h) = hit {
+            return Err(format!(
+                "並べ直しの検算で、ラベル {} の引き出し線 ({:.1}, {:.1}) が {h} に触れたため、何も変えませんでした",
+                s.name, start.x, start.y
+            ));
         }
     }
     Ok(())
@@ -1124,10 +1246,25 @@ fn check_stubs(after: &Sheet, defs: &[SymbolDef], stubs: &[Stub]) -> Result<(), 
 
 /// 検算: 計画を当てた写しで、ピンの分け方・ネットごとの名前 (新しい `ARR_<n>` を除く)・ラベルでつなぐ短い線の孤立を確かめる。
 fn verify_after(before: &Sheet, after: &Sheet, defs: &[SymbolDef], fresh: &BTreeSet<String>, stubs: &[Stub]) -> Result<(), String> {
-    if pin_partition(before, defs) != pin_partition(after, defs) {
-        return Err("並べ直しの検算で接続が変わったため、何も変えませんでした".into());
+    // 計画で消したシンボル (新しいラベルに置き換えた電源マーク) のピンは、前の分け方から外して比べる
+    let pb: BTreeSet<BTreeSet<(EntityId, String)>> = pin_partition(before, defs)
+        .into_iter()
+        .map(|g| g.into_iter().filter(|p| after.entities.contains_key(&p.0)).collect::<BTreeSet<_>>())
+        .filter(|g| !g.is_empty())
+        .collect();
+    let pa = pin_partition(after, defs);
+    if pb != pa {
+        return Err(format!("並べ直しの検算で接続が変わったため、何も変えませんでした ({})", partition_diff(before, &pb, &pa)));
     }
-    if name_key(before, defs, fresh) != name_key(after, defs, fresh) {
+    let mut nb: Vec<(BTreeSet<(EntityId, String)>, BTreeSet<String>)> = name_key(before, defs, fresh)
+        .into_iter()
+        .map(|(g, n)| (g.into_iter().filter(|p| after.entities.contains_key(&p.0)).collect::<BTreeSet<_>>(), n))
+        .filter(|(g, n)| !(g.is_empty() && n.is_empty()))
+        .collect();
+    nb.sort();
+    let na: Vec<(BTreeSet<(EntityId, String)>, BTreeSet<String>)> =
+        name_key(after, defs, fresh).into_iter().filter(|(g, n)| !(g.is_empty() && n.is_empty())).collect();
+    if nb != na {
         return Err("並べ直しの検算でネットの名前 (ラベル・ネット名シンボル) が変わったため、何も変えませんでした".into());
     }
     // 配線の無いピンの上のラベル・ネット名シンボルはネットリストに出ないので、位置の重なりで比べる
@@ -1135,8 +1272,23 @@ fn verify_after(before: &Sheet, after: &Sheet, defs: &[SymbolDef], fresh: &BTree
     let both = |set: &BTreeSet<(EntityId, EntityId, String)>, other: &Sheet| -> BTreeSet<(EntityId, EntityId, String)> {
         set.iter().filter(|c| other.entities.contains_key(&c.0) && other.entities.contains_key(&c.1)).cloned().collect()
     };
-    if both(&pb, after) != both(&pa, before) {
-        return Err("並べ直しの検算で、ピンの上のラベルやネット名シンボルが離れたため、何も変えませんでした".into());
+    let (xb, xa) = (both(&pb, after), both(&pa, before));
+    if xb != xa {
+        let name = |id: &EntityId| -> String {
+            match before.entities.get(id) {
+                Some(Entity::Symbol(s)) if !s.reference.is_empty() => s.reference.clone(),
+                Some(Entity::Symbol(s)) => s.symbol_id.clone(),
+                Some(Entity::NetLabel(l)) => format!("ラベル {}", l.name),
+                _ => id.to_string()[..8].to_string(),
+            }
+        };
+        let gone: Vec<String> = xb.difference(&xa).take(3).map(|c| format!("{} と {}.{}", name(&c.0), name(&c.1), c.2)).collect();
+        let new: Vec<String> = xa.difference(&xb).take(3).map(|c| format!("{} と {}.{}", name(&c.0), name(&c.1), c.2)).collect();
+        return Err(format!(
+            "並べ直しの検算で、ピンの上のラベルやネット名シンボルが離れたため、何も変えませんでした (離れた: {} / 新しく重なった: {})",
+            gone.join(", "),
+            new.join(", ")
+        ));
     }
     check_stubs(after, defs, stubs)
 }
@@ -1159,6 +1311,11 @@ fn pin_contacts(sheet: &Sheet, defs: &[SymbolDef]) -> BTreeSet<(EntityId, Entity
         }
     }
     out
+}
+
+/// 端子が全て同じ単位のものか (それなら配線はその単位と一緒に形を変えずに動かせる。部品と電源マークの間の線など)。
+fn single_unit(owns: &[usize]) -> bool {
+    owns.first().is_some_and(|f| owns.iter().all(|o| o == f))
 }
 
 /// 端子の単位が全て動かず、配線とジャンクションの全ての点が写像で動かないか (それなら元の配線をそのまま残せる)。
@@ -1254,7 +1411,7 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
     let arrange_with = |max_gap: f64| {
         let lay = layout(&us, opts, max_gap);
         let stays: Vec<bool> =
-            c.units.iter().zip(&unit_terms).map(|(u, owns)| unit_stays(sheet, &u.wires, &u.junctions, owns, &lay)).collect();
+            c.units.iter().zip(&unit_terms).map(|(u, owns)| single_unit(owns) || unit_stays(sheet, &u.wires, &u.junctions, owns, &lay)).collect();
         let mut rigid = rigid.clone();
         let mut dropped = dropped.clone();
         for ((u, owns), s) in c.units.iter().zip(&unit_terms).zip(&stays) {
@@ -1307,6 +1464,17 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
         moved.entities.values().filter_map(|e| if let Entity::Junction(j) = e { Some(j.at) } else { None }).collect();
     let mut add: Vec<Entity> = Vec::new();
     let mut stubs: Vec<Stub> = Vec::new();
+    // 短い線が避けるもの: 動かした後の配線・ピン・ラベル・ジャンクション (置いた短い線も足していく)
+    let mut stub_lines: Vec<Vec<Point>> = fixed_lines.clone();
+    let mut stub_spots: Vec<Point> = pin_points(&moved, defs)
+        .iter()
+        .map(|q| q.pos)
+        .chain(moved.entities.values().filter_map(|e| match e {
+            Entity::NetLabel(l) => Some(l.at),
+            Entity::Junction(j) => Some(j.at),
+            _ => None,
+        }))
+        .collect();
     let mut remove: BTreeSet<EntityId> = deleted.clone();
     let mut labelled: Vec<(String, String)> = Vec::new();
     for (ci, name) in kept_fallbacks {
@@ -1316,10 +1484,11 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
             .terms
             .iter()
             .zip(&owns)
+            .filter(|(t, _)| !name.skip.iter().any(|q| near(*q, t.0)))
             .map(|(t, &o)| (t.0.translated(lay.dx[o], lay.dy[o]), t.1, old_wire_at(sheet, &k.wires, t.0)))
             .collect();
         let fb = Fallback { net: k.net.clone(), name: name.name, terms, template: name.template };
-        let (es, ss) = stub_entities(&grid, &fb);
+        let (es, ss) = stub_entities(&grid, &fb, &mut stub_lines, &mut stub_spots);
         for e in es {
             if let Entity::Wire(w) = &e {
                 fixed_lines.push(w.points.clone());
@@ -1331,34 +1500,64 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
         labelled.push((fb.net, fb.name));
     }
 
-    // 配線の引き直し。引けなかった単位はラベルでつなぐ
-    let results = route_units(&grid, &mut route, fixed_lines, fixed_spots);
-    let mut routed: BTreeSet<String> = BTreeSet::new();
-    for ((u, r), trip) in route.iter().zip(results).zip(&trips) {
-        remove.extend(u.wires.iter().chain(&u.junctions).copied());
-        match r {
-            Ok(r) => {
-                add.extend(emit(u, &r));
-                routed.insert(u.net.clone());
-            }
-            Err(_) => {
-                let old_terms: Vec<(Point, Option<Dir>)> = trip.iter().map(|t| (t.0, t.2)).collect();
-                let name = fallback_name(sheet, &idx, &pins, &u.wires, &old_terms, &pointed, &mut taken);
-                if name.fresh {
-                    fresh.insert(name.name.clone());
+    // 配線の引き直し。引けなかった単位はラベルでつなぐ。ラベルでつなぐ短い線は他の配線が避けられるよう、
+    // 動かない配線として置いてから、残りの単位を引き直す (新しく引けない単位が出なくなるまで)
+    let mut names: BTreeMap<usize, FallbackName> = BTreeMap::new();
+    let mut stub_parts: BTreeMap<usize, (Vec<Entity>, Vec<Stub>)> = BTreeMap::new();
+    let mut outcome: Vec<Option<crate::route::UnitRoute>> = Vec::new();
+    for _round in 0..8 {
+        let mut lines = fixed_lines.clone();
+        for (es, _) in stub_parts.values() {
+            for e in es {
+                if let Entity::Wire(w) = e {
+                    lines.push(w.points.clone());
                 }
-                deleted.extend(name.delete.iter().copied());
-                remove.extend(name.delete.iter().copied());
-                let mut attrs = u.template.clone();
-                attrs.length_m = None;
-                attrs.length_source = Default::default();
-                let terms = trip.iter().map(|t| (t.1, t.2, attrs.clone())).collect();
-                let fb = Fallback { net: u.net.clone(), name: name.name, terms, template: name.template };
-                let (es, ss) = stub_entities(&grid, &fb);
-                add.extend(es);
-                stubs.extend(ss);
-                labelled.push((fb.net, fb.name));
             }
+        }
+        let live: Vec<usize> = (0..route.len()).filter(|i| !stub_parts.contains_key(i)).collect();
+        let mut batch: Vec<RouteUnit> = live.iter().map(|&i| route[i].clone()).collect();
+        let results = route_units(&grid, &mut batch, lines, fixed_spots.clone());
+        outcome = (0..route.len()).map(|_| None).collect();
+        let mut new_failed = false;
+        for (&i, r) in live.iter().zip(results) {
+            match r {
+                Ok(r) => outcome[i] = Some(r),
+                Err(_) => {
+                    new_failed = true;
+                    let u = &route[i];
+                    let trip = &trips[i];
+                    let old_terms: Vec<(Point, Option<Dir>)> = trip.iter().map(|t| (t.0, t.2)).collect();
+                    let name = fallback_name(sheet, &idx, &pins, &u.wires, &old_terms, &pointed, &mut taken);
+                    let mut attrs = u.template.clone();
+                    attrs.length_m = None;
+                    attrs.length_source = Default::default();
+                    let terms = trip.iter().filter(|t| !name.skip.iter().any(|q| near(*q, t.0))).map(|t| (t.1, t.2, attrs.clone())).collect();
+                    let fb = Fallback { net: u.net.clone(), name: name.name.clone(), terms, template: name.template.clone() };
+                    stub_parts.insert(i, stub_entities(&grid, &fb, &mut stub_lines, &mut stub_spots));
+                    names.insert(i, name);
+                }
+            }
+        }
+        if !new_failed {
+            break;
+        }
+    }
+    let mut routed: BTreeSet<String> = BTreeSet::new();
+    for (i, u) in route.iter().enumerate() {
+        remove.extend(u.wires.iter().chain(&u.junctions).copied());
+        if let Some((es, ss)) = stub_parts.remove(&i) {
+            let name = names.remove(&i).expect("名前は引けなかった単位ごとに決めてある");
+            if name.fresh {
+                fresh.insert(name.name.clone());
+            }
+            deleted.extend(name.delete.iter().copied());
+            remove.extend(name.delete.iter().copied());
+            add.extend(es);
+            stubs.extend(ss);
+            labelled.push((u.net.clone(), name.name));
+        } else if let Some(r) = &outcome[i] {
+            add.extend(emit(u, r));
+            routed.insert(u.net.clone());
         }
     }
 
@@ -2337,10 +2536,20 @@ mod tests {
             planned += 1;
             let after = apply(&sh, &plan);
             let fresh: BTreeSet<String> = plan.labelled.iter().map(|l| l.1.clone()).filter(|n| n.starts_with("ARR_")).collect();
-            assert_eq!(pin_partition(&sh, &defs()), pin_partition(&after, &defs()), "seed {seed}");
-            assert_eq!(name_key(&sh, &defs(), &fresh), name_key(&after, &defs(), &fresh), "seed {seed}");
+            assert_eq!(kept_partition(&sh, &after), pin_partition(&after, &defs()), "seed {seed}");
+            let names = |s: &Sheet| -> BTreeSet<String> { name_key(s, &defs(), &fresh).into_iter().flat_map(|k| k.1).collect() };
+            assert_eq!(names(&sh), names(&after), "seed {seed}");
         }
         assert!(planned >= 4, "only {planned} of 16 generated sheets were arranged");
+    }
+
+    /// The pin partition before arrange, leaving out pins of symbols the plan deleted (marks replaced by labels).
+    fn kept_partition(before: &Sheet, after: &Sheet) -> BTreeSet<BTreeSet<(EntityId, String)>> {
+        pin_partition(before, &defs())
+            .into_iter()
+            .map(|g| g.into_iter().filter(|p| after.entities.contains_key(&p.0)).collect::<BTreeSet<_>>())
+            .filter(|g| !g.is_empty())
+            .collect()
     }
 
     /// A walled box wired to a far box, placed at a vertical offset so that two such sheets can be combined.
@@ -2395,7 +2604,10 @@ mod tests {
         assert_eq!(plan.labelled.len(), 1, "{:?}", plan.labelled);
         assert_eq!(plan.labelled[0].1, "GND");
         let after = apply(&sh, &plan);
-        assert_eq!(pin_partition(&sh, &defs()), pin_partition(&after, &defs()));
+        assert_eq!(kept_partition(&sh, &after), pin_partition(&after, &defs()));
+        let marks = after.entities.values().filter(|e| matches!(e, Entity::Symbol(s) if s.symbol_id == "gnd")).count();
+        let labels = after.entities.values().filter(|e| matches!(e, Entity::NetLabel(l) if l.name == "GND")).count();
+        assert_eq!((marks, labels), (0, 2), "the ground mark is replaced by GND labels");
     }
 
     /// An alignment move that would make two units overlap where they did not before is skipped.
