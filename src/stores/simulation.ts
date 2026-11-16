@@ -77,6 +77,8 @@ export const useSimulationStore = defineStore("simulation", {
   actions: {
     async run(sheetId: string | null) {
       this.running = true;
+      // 計算を始めたときの図面の revision (計算中に編集されたら、結果は最初から古い)
+      const revisionAtStart = useDocumentStore().revision;
       try {
         this.result = await ipc.simulateOp(sheetId, this.openSwitches, {
           overrides: this.overrides,
@@ -85,7 +87,7 @@ export const useSimulationStore = defineStore("simulation", {
         this.error = null;
         // 計算したシート (指定が無ければ先頭シート)。定格超過の行から部品へ移るとき、このシートへ切り替える
         this.sheetId = sheetId ?? useDocumentStore().project?.sheets[0]?.id ?? null;
-        this.resultRevision = useDocumentStore().revision;
+        this.resultRevision = revisionAtStart;
       } catch (e) {
         this.result = null;
         this.resultRevision = null;

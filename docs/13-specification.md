@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3476 specification clauses** across 6 areas.
+**3477 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -3802,6 +3802,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - a failed run leaves no overlay from the previous result <sub>`simulation store`</sub>
 - turning off the drawing toggle or closing the panel hides the overlay <sub>`simulation store`</sub>
 - the selected wire or part's values can be looked up <sub>`simulation store`</sub>
+- an edit made while the simulation runs marks its result stale <sub>`simulation store`</sub>
 
 ### Start templates
 

@@ -220,4 +220,16 @@ describe("simulation store", () => {
     expect(store.selectedLoad?.amps).toBe(12);
     expect(store.loadOf("w1")?.limit).toBe(10);
   });
+
+  // ja: 計算中に図面を編集すると、その結果は最初から古いとみなされる (計算を始めたときの図面で判定する)
+  it("an edit made while the simulation runs marks its result stale", async () => {
+    const doc = docWith(["w1"]);
+    const store = useSimulationStore();
+    vi.spyOn(ipc, "simulateOp").mockImplementation(async () => {
+      doc.revision = 6;
+      return withLoads(["w1"]);
+    });
+    await store.run("s1");
+    expect(store.stale).toBe(true);
+  });
 });
