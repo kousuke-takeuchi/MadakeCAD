@@ -39,7 +39,7 @@ existing commands** (`delete_entities` + `add_entity`), the same pattern `connec
 - Default: every net on the sheet that is made only of plain wires and junctions.
 - `nets`: only the named nets (net names as the netlist reports them).
 - A net is **left unchanged** (and listed in the reply with the reason) when it:
-  - has a wire that belongs to a cable run, a harness core or a mate pair;
+  - has a wire that a cable run's cores refer to (`Cable::is_run`), so the cable keeps its wires;
   - has wires with different colour, cross-section, part number, wire number, dash or weight (the
     reroute cannot know which new segment should carry which attribute);
   - cannot be routed (no path found) — its old wires stay.
@@ -61,9 +61,9 @@ recreated where the new route needs them.
 - A route never passes over a pin of another net, never runs along (overlaps) a wire of another net, and
   never passes through a symbol outline or a text box. Crossing another net at right angles is allowed
   but costs.
-- Attributes of the old wires (colour, cross-section, part number, wire number, dash, weight, length)
-  are copied to every new segment of the net. `length_m` is cleared when it came from geometry
-  (`length_source` derived) and kept when it was entered by hand.
+- Attributes of the old wires (colour, cross-section, part number, wire number, dash, weight, length and
+  its source) are copied to every new segment of the net. The schematic route does not define the
+  physical length, so `length_m` is kept as it was.
 
 ### Reply
 
