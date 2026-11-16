@@ -24,6 +24,18 @@ pub struct SymbolDef {
     /// グリッドに乗らない他の図面を写すとき、ピン間隔をその図面のとおりにするために使う。
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub free_pins: bool,
+    /// このシンボルが載るネットの名前 (接地の印・電源の印)。置いたシンボルの全てのピンが、その名前の
+    /// ネットラベルと同じ働きをする: 同じ名前を持つシンボルどうし、同じ名前のネットラベルとも1つのネットになる。
+    /// 無い・空白だけなら普通のシンボル。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub net: Option<String>,
+}
+
+impl SymbolDef {
+    /// ネット名 (前後の空白を落としたもの)。無い・空白だけなら None。
+    pub fn net_name(&self) -> Option<&str> {
+        self.net.as_deref().map(str::trim).filter(|n| !n.is_empty())
+    }
 }
 
 /// 属性スロットのキー: 参照記号(TAG1相当)。
@@ -235,6 +247,7 @@ fn sym(
         pins,
         text_slots,
         free_pins: false,
+        net: None,
     }
 }
 

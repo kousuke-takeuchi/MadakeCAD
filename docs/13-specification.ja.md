@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3333仕様項目**。
+全6領域・**3337仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -597,6 +597,9 @@
 - 芯が2つのポートのかたまりを繋ぐと、接点のネットは前のネットで付いた元の名前をそのまま使い、新しい番号は使わない。 <sub>`a_contact_net_across_two_port_clusters_reuses_the_earlier_base`</sub>
 - ネットのピンは「参照記号:ピン」と書き、ポートの接点を運ぶなら「/接点」を添える。 <sub>`a_net_pin_prints_with_its_contact`</sub>
 - free_pins のシンボルのグリッド外の接続点へ引いた配線はつながる: 3.3mm 離れた2つの接続点に終わる2本の配線は、それぞれそのシンボルのピンを持つ別々のネットになる。 <sub>`wires_connect_to_off_grid_pins_of_a_free_pin_symbol`</sub>
+- 定義がネット名を持つシンボル (接地の印) は、間に配線が無くても、そのピンどうしをその名前の1つのネットにまとめる。 <sub>`symbols_with_a_net_name_join_into_one_net`</sub>
+- ネット名が無ければ、同じ印でもつながらない: 配線ごとに別のネットになる。 <sub>`symbols_without_a_net_name_stay_separate`</sub>
+- シンボルのネット名は、離れた場所に置いた同じ名前のネットラベルともつながる。 <sub>`a_symbol_net_name_joins_a_label_of_the_same_name`</sub>
 
 ### ngspiceランナー
 
@@ -1230,6 +1233,7 @@
 - free_pins を付けたユーザーシンボルは、接続点を2.5mmグリッドの外に置け、ほかのシンボルと同じように一覧に出る。指定が無ければ、同じシンボルはグリッド外の接続点を理由に断られる。 <sub>`a_free_pin_symbol_may_leave_the_grid`</sub>
 - free_pins のシンボルでも座標は数でなければならない: 有限の数でない接続点は断る。 <sub>`a_free_pin_symbol_still_needs_finite_coordinates`</sub>
 - free_pins を使わないシンボルは、その指定を書き出さない。これまでのシンボルファイルは変わらない。 <sub>`free_pins_is_written_only_when_set`</sub>
+- シンボルのネット名は保存して読み直しても残る。ネット名の無いシンボルは、その項目を書き出さない。 <sub>`a_net_name_is_kept_and_written_only_when_set`</sub>
 
 ### 開始テンプレート
 

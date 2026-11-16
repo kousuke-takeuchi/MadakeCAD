@@ -194,6 +194,8 @@ pub fn normalize(def: &SymbolDef) -> SymbolDef {
         out.name_ja = out.name.clone();
     }
     out.ref_prefix = out.ref_prefix.trim().to_string();
+    // ネット名は前後の空白を落とす。空白だけなら無しにする
+    out.net = out.net_name().map(str::to_string);
     out.category = USER_CATEGORY.to_string();
     let mut keywords: Vec<String> = Vec::new();
     for k in out.keywords.iter() {
@@ -541,6 +543,7 @@ mod tests {
                 height: 2.5,
             }],
             free_pins: false,
+            net: None,
         }
     }
 
@@ -933,5 +936,22 @@ mod tests {
         assert!(!serde_json::to_string(&def).unwrap().contains("free_pins"));
         def.free_pins = true;
         assert!(serde_json::to_string(&def).unwrap().contains("\"free_pins\":true"));
+    }
+
+    /// A symbol's net name is kept through save and load, and a symbol without one is written without the field.
+    /// シンボルのネット名は保存して読み直しても残る。ネット名の無いシンボルは、その項目を書き出さない。
+    #[test]
+    fn a_net_name_is_kept_and_written_only_when_set() {
+        let mut def = sample();
+        assert!(!serde_json::to_string(&def).unwrap().contains("\"net\""));
+        assert_eq!(def.net_name(), None);
+        def.net = Some(" GND ".into());
+        let text = serde_json::to_string(&def).unwrap();
+        let back: SymbolDef = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.net_name(), Some("GND"));
+        assert!(validate(&back).is_empty(), "{:?}", validate(&back));
+        assert_eq!(normalize(&back).net.as_deref(), Some("GND"));
+        def.net = Some("  ".into());
+        assert_eq!(normalize(&def).net, None);
     }
 }

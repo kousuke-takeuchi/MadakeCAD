@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3333 specification clauses** across 6 areas.
+**3337 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -597,6 +597,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - When a core joins two port clusters, the contact net takes the base name a cluster already has from an earlier net, and no new number is used for it. <sub>`a_contact_net_across_two_port_clusters_reuses_the_earlier_base`</sub>
 - A net pin prints as REF:PIN, with /CONTACT added when it carries a port contact. <sub>`a_net_pin_prints_with_its_contact`</sub>
 - Wires drawn to the off-grid connection points of a free-pin symbol connect: two wires ending on its two points 3.3 mm apart give two separate nets, each with that symbol's pin. <sub>`wires_connect_to_off_grid_pins_of_a_free_pin_symbol`</sub>
+- Symbols whose definition carries a net name (a ground mark) join their pins into one net of that name even with no wire between them. <sub>`symbols_with_a_net_name_join_into_one_net`</sub>
+- Without a net name the same marks stay separate: each wire is its own net. <sub>`symbols_without_a_net_name_stay_separate`</sub>
+- A symbol's net name also joins a plain net label of the same name placed elsewhere. <sub>`a_symbol_net_name_joins_a_label_of_the_same_name`</sub>
 
 ### ngspice runner
 
@@ -1230,6 +1233,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A user symbol marked free_pins may place its connection points off the 2.5 mm grid and is listed like any other; without the mark the same symbol is refused for its off-grid point. <sub>`a_free_pin_symbol_may_leave_the_grid`</sub>
 - A free-pin symbol still needs real coordinates: a connection point that is not a finite number is refused. <sub>`a_free_pin_symbol_still_needs_finite_coordinates`</sub>
 - A symbol that does not use free_pins is saved without the mark, so existing symbol files stay as they are. <sub>`free_pins_is_written_only_when_set`</sub>
+- A symbol's net name is kept through save and load, and a symbol without one is written without the field. <sub>`a_net_name_is_kept_and_written_only_when_set`</sub>
 
 ### Start templates
 

@@ -363,9 +363,10 @@ fn build(sheet: &Sheet, symbols: &[SymbolDef], split: bool) -> (Vec<Net>, PortRe
     let defs = crate::symbol::DefIndex::new(symbols);
 
     // ノード列挙 (BTreeMap順なので決定的)
+    let mut implicit: Vec<crate::model::NetLabel> = Vec::new();
     let mut wires = Vec::new();
     let mut junctions = Vec::new();
-    let mut labels = Vec::new();
+    let mut labels: Vec<&crate::model::NetLabel> = Vec::new();
     let mut cables = Vec::new();
     let mut pins: Vec<PinNode> = Vec::new();
     for entity in sheet.entities.values() {
@@ -405,6 +406,26 @@ fn build(sheet: &Sheet, symbols: &[SymbolDef], split: bool) -> (Vec<Net>, PortRe
             | Entity::Dimension(_) => {}
         }
     }
+
+    // ネット名を持つシンボル (接地の印など) のピンは、その名前のネットラベルと同じ働きをする
+    for entity in sheet.entities.values() {
+        if let Entity::Symbol(s) = entity {
+            if let Some(def) = defs.get(s) {
+                if let Some(name) = def.net_name() {
+                    for pin in &def.pins {
+                        implicit.push(crate::model::NetLabel {
+                            id: s.id,
+                            at: transform_local(pin.at, s),
+                            name: name.to_string(),
+                            rotation: 0,
+                            attrs: Default::default(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+    labels.extend(implicit.iter());
 
     // ノード番号: [wires][pins][junctions][labels]。芯はかたまりを作った後で枠どうしを結ぶ
     let wi = 0;
@@ -1129,6 +1150,7 @@ mod tests {
             ],
             text_slots: vec![],
             free_pins: false,
+            net: None,
         };
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
         for e in [
@@ -1680,6 +1702,7 @@ mod tests {
             ],
             text_slots: vec![],
             free_pins: true,
+            net: None,
         };
         let mut sheet = Sheet::new("S", crate::model::PaperSize::A3, crate::model::Orientation::Landscape);
         let inst = Entity::Symbol(crate::model::SymbolInstance {
@@ -1716,5 +1739,86 @@ mod tests {
             .collect();
         assert_eq!(with_pins.len(), 2, "{nets:?}");
         assert!(with_pins.contains(&vec!["CN9.1".to_string()]) && with_pins.contains(&vec!["CN9.2".to_string()]), "{with_pins:?}");
+    }
+
+    fn net_symbol_def(net: Option<&str>) -> crate::symbol::SymbolDef {
+        use crate::symbol::{PinDef, PinDir, Primitive, SymbolDef};
+        SymbolDef {
+            id: "user_ground_mark".into(),
+            name: "Ground mark".into(),
+            name_ja: "接地の印".into(),
+            category: "user".into(),
+            ref_prefix: "GND".into(),
+            keywords: vec![],
+            primitives: vec![Primitive::Line { pts: vec![Point::new(-2.5, 0.0), Point::new(2.5, 0.0)] }],
+            pins: vec![PinDef { number: "1".into(), name: String::new(), at: Point::new(0.0, 0.0), dir: PinDir::Up, contacts: vec![] }],
+            text_slots: vec![],
+            free_pins: false,
+            net: net.map(str::to_string),
+        }
+    }
+
+    fn net_symbol_sheet(with_label: bool) -> Sheet {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        // R1 のピン2 と R2 のピン2 から、それぞれ接地の印へ下ろす。2つの印の間に配線は無い
+        let mut entities = vec![
+            symbol("resistor", "R1", 100.0, 50.0),
+            symbol("resistor", "R2", 100.0, 100.0),
+            symbol("user_ground_mark", "", 120.0, 60.0),
+            symbol("user_ground_mark", "", 120.0, 110.0),
+            wire(&[(107.5, 50.0), (120.0, 50.0), (120.0, 60.0)]),
+            wire(&[(107.5, 100.0), (120.0, 100.0), (120.0, 110.0)]),
+        ];
+        if with_label {
+            entities.push(symbol("resistor", "R3", 100.0, 150.0));
+            entities.push(wire(&[(107.5, 150.0), (130.0, 150.0)]));
+            entities.push(Entity::NetLabel(NetLabel { id: Uuid::new_v4(), at: Point::new(130.0, 150.0), name: "GND".into(), rotation: 0, attrs: Default::default() }));
+        }
+        for e in entities {
+            sheet.entities.insert(e.id(), e);
+        }
+        sheet
+    }
+
+    fn net_of<'a>(nets: &'a [Net], pin: &str) -> &'a Net {
+        nets.iter().find(|n| n.pins.iter().any(|p| format!("{}:{}", p.reference, p.pin) == pin)).expect("net with the pin")
+    }
+
+    /// Symbols whose definition carries a net name (a ground mark) join their pins into one net of that name even with no wire between them.
+    /// 定義がネット名を持つシンボル (接地の印) は、間に配線が無くても、そのピンどうしをその名前の1つのネットにまとめる。
+    #[test]
+    fn symbols_with_a_net_name_join_into_one_net() {
+        let mut symbols = builtin_symbols();
+        symbols.push(net_symbol_def(Some("GND")));
+        let nets = extract_netlist(&net_symbol_sheet(false), &symbols);
+        let net = net_of(&nets, "R1:2");
+        assert!(net.pins.iter().any(|p| p.reference == "R2" && p.pin == "2"), "{net:?}");
+        assert_eq!(net.name, "GND");
+        assert_eq!(net.label.as_deref(), Some("GND"));
+    }
+
+    /// Without a net name the same marks stay separate: each wire is its own net.
+    /// ネット名が無ければ、同じ印でもつながらない: 配線ごとに別のネットになる。
+    #[test]
+    fn symbols_without_a_net_name_stay_separate() {
+        for net in [None, Some("   ")] {
+            let mut symbols = builtin_symbols();
+            symbols.push(net_symbol_def(net));
+            let nets = extract_netlist(&net_symbol_sheet(false), &symbols);
+            let n = net_of(&nets, "R1:2");
+            assert!(!n.pins.iter().any(|p| p.reference == "R2"), "{n:?}");
+            assert_eq!(n.label, None);
+        }
+    }
+
+    /// A symbol's net name also joins a plain net label of the same name placed elsewhere.
+    /// シンボルのネット名は、離れた場所に置いた同じ名前のネットラベルともつながる。
+    #[test]
+    fn a_symbol_net_name_joins_a_label_of_the_same_name() {
+        let mut symbols = builtin_symbols();
+        symbols.push(net_symbol_def(Some("GND")));
+        let nets = extract_netlist(&net_symbol_sheet(true), &symbols);
+        let net = net_of(&nets, "R3:2");
+        assert!(net.pins.iter().any(|p| p.reference == "R1") && net.pins.iter().any(|p| p.reference == "R2"), "{net:?}");
     }
 }

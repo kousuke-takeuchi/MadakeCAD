@@ -1159,6 +1159,7 @@ mod tests {
             pins: vec![PinDef { number: "1".into(), name: String::new(), at: Point::new(0.0, 0.0), dir: PinDir::Left, contacts: vec![] }],
             text_slots: vec![],
             free_pins: true,
+            net: None,
         };
         let mut defs = builtin_symbols();
         defs.push(def);

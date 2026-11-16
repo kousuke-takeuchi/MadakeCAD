@@ -1463,6 +1463,20 @@ step away from the original.
 then be anywhere. Wires and instances were never bound to the grid. Bundled symbols and
 blocks stay on the grid.
 
+### G48 — Ground marks do not join into one net · required for a correct netlist
+
+**Closed 2026-11-16** (`net` on symbol definitions; no format change).
+
+**Current behaviour (verified).** Only net labels joined nets that have no wire between
+them. A circuit drawing marks every return to ground with the same small mark, so each of
+those wires came out as its own net, and a label drawn at every mark would add text that the
+original does not show.
+
+**What closed it.** A symbol definition may carry `net` (for example `"GND"`). Every pin of
+every placed instance then acts like a net label of that name: instances with the same name
+are one net, together with plain labels of that name, and the net takes that name. Nothing
+is drawn for it. A missing or blank name is an ordinary symbol; bundled symbols carry none.
+
 ## Summary by impact
 
 | Impact | Gaps |
