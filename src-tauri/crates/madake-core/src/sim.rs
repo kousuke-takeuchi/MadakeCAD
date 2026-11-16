@@ -77,6 +77,41 @@ pub struct SimFinding {
     pub message: String,
 }
 
+
+/// 電線か部品か。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum LoadKind {
+    Wire,
+    Component,
+}
+
+/// 負荷率の限度の種類。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum LimitKind {
+    WireAmpacity,
+    FuseRating,
+    PinRating,
+    SourceMax,
+    ConverterOut,
+}
+
+/// 電線・部品1つの電流・電圧・限度 (図面に重ねる表示とプローブに使う)。
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
+pub struct EntityLoad {
+    pub entity_id: EntityId,
+    pub kind: LoadKind,
+    /// 電線は区間の最大、部品は素子の最大 (A)。
+    pub amps: f64,
+    /// 電線は [始点, 終点]、部品はピンの順の電圧 (V)。
+    pub volts: Vec<f64>,
+    pub limit: Option<f64>,
+    pub limit_kind: Option<LimitKind>,
+    /// amps / limit。
+    pub ratio: Option<f64>,
+}
+
 #[derive(Debug, Serialize, schemars::JsonSchema)]
 pub struct SimOpResult {
     /// 電源電圧 (V)。最初の電源の電圧。
@@ -86,6 +121,8 @@ pub struct SimOpResult {
     pub warnings: Vec<String>,
     /// 定格を超えた所 (重い順: エラー → 警告 → 情報)。
     pub findings: Vec<SimFinding>,
+    /// 電線・部品ごとの電流・電圧・限度・負荷率 (図面に重ねる表示とプローブ)。電線が先、それぞれ id 順。
+    pub loads: Vec<EntityLoad>,
 }
 
 /// DC動作点を解く。`open_switches`の参照記号の導通部品は開路として扱う。
@@ -215,6 +252,7 @@ pub fn simulate_op_opts_with(
     components.sort_by(|a, b| a.reference.cmp(&b.reference));
 
     let findings = findings(sheet, symbols, &deck_opts, &deck, &volt_of, &amps_of);
+    let loads = loads(sheet, symbols, &deck_opts, &deck, &volt_of, &amps_of);
 
     Ok(SimOpResult {
         voltage: deck.voltage,
@@ -222,7 +260,98 @@ pub fn simulate_op_opts_with(
         components,
         warnings,
         findings,
+        loads,
     })
+}
+
+
+/// 電線・部品ごとの負荷。限度は判定 (findings) と同じ規則で、部品で複数あれば負荷率の一番高いもの。
+fn loads(
+    sheet: &Sheet,
+    symbols: &[SymbolDef],
+    opts: &crate::spice::DeckOptions,
+    deck: &crate::spice::SpiceDeck,
+    volt_of: &dyn Fn(&str) -> f64,
+    amps_of: &dyn Fn(&crate::spice::SpiceElement) -> f64,
+) -> Vec<EntityLoad> {
+    use crate::verify::{ampacity, parse_number, AMPACITY};
+    let defs: BTreeMap<&str, &SymbolDef> = symbols.iter().map(|d| (d.id.as_str(), d)).collect();
+    let table_max_sq = AMPACITY.last().map(|&(sq, _)| sq).unwrap_or(0.0);
+    let mut out = Vec::new();
+
+    // 電線: 区間を弧長の順に並べてあるので、最初の区間の node_a が始点、最後の区間の node_b が終点
+    let mut by_wire: BTreeMap<EntityId, Vec<&crate::spice::SpiceElement>> = BTreeMap::new();
+    for el in &deck.wire_elements {
+        by_wire.entry(el.entity_id).or_default().push(el);
+    }
+    for (id, els) in by_wire {
+        let Some(Entity::Wire(w)) = sheet.entities.get(&id) else { continue };
+        let amps = els.iter().map(|e| amps_of(e)).fold(0.0, f64::max);
+        let volts = vec![volt_of(&els[0].node_a), volt_of(&els[els.len() - 1].node_b)];
+        let limit = (w.sq > 0.0 && w.sq <= table_max_sq + 1e-9).then(|| ampacity(w.sq));
+        out.push(EntityLoad {
+            entity_id: id,
+            kind: LoadKind::Wire,
+            amps,
+            volts,
+            limit,
+            limit_kind: limit.map(|_| LimitKind::WireAmpacity),
+            ratio: limit.map(|l| amps / l),
+        });
+    }
+
+    // 部品: ラベル橋・短絡・接地の基準は数えない
+    let mut by_symbol: BTreeMap<EntityId, Vec<&crate::spice::SpiceElement>> = BTreeMap::new();
+    for el in &deck.component_elements {
+        if matches!(el.kind, ElementKind::Label | ElementKind::Short(_) | ElementKind::Tie) {
+            continue;
+        }
+        by_symbol.entry(el.entity_id).or_default().push(el);
+    }
+    let pin_nodes: BTreeMap<EntityId, &Vec<(String, String)>> = deck.pin_nodes.iter().map(|(id, l)| (*id, l)).collect();
+    for (id, els) in by_symbol {
+        let Some(Entity::Symbol(s)) = sheet.entities.get(&id) else { continue };
+        let Some(def) = defs.get(s.symbol_id.as_str()) else { continue };
+        let role = def.sim.as_ref().map(|r| r.role);
+        let max_kind = |pred: &dyn Fn(&ElementKind) -> bool| -> f64 {
+            els.iter().filter(|e| pred(&e.kind)).map(|e| amps_of(e)).fold(0.0, f64::max)
+        };
+        let amps = els.iter().map(|e| amps_of(e)).fold(0.0, f64::max);
+        let mut candidates: Vec<(LimitKind, f64, f64)> = Vec::new(); // (種類, 限度, その限度と比べる電流)
+        if role == Some(SimRole::Fuse) || (role.is_none() && def.id == "fuse") {
+            if let Some(r) = opts.number(s, "rating_a").or_else(|| parse_number(&s.value)) {
+                candidates.push((LimitKind::FuseRating, r, max_kind(&|k| matches!(k, ElementKind::Bridge))));
+            }
+        }
+        if let Some(r) = opts.number(s, "pin_rating_a") {
+            candidates.push((LimitKind::PinRating, r, max_kind(&|k| matches!(k, ElementKind::Pin(_) | ElementKind::Bridge))));
+        }
+        if role == Some(SimRole::Source) {
+            if let Some(r) = opts.number(s, "i_max_a") {
+                candidates.push((LimitKind::SourceMax, r, max_kind(&|k| matches!(k, ElementKind::Source))));
+            }
+        }
+        if role == Some(SimRole::Converter) {
+            if let Some(r) = opts.number(s, "i_out_a") {
+                candidates.push((LimitKind::ConverterOut, r, max_kind(&|k| matches!(k, ElementKind::ConverterOut))));
+            }
+        }
+        let best = candidates
+            .into_iter()
+            .filter(|(_, limit, _)| *limit > 0.0)
+            .max_by(|a, b| (a.2 / a.1).total_cmp(&(b.2 / b.1)));
+        let volts = pin_nodes.get(&id).map(|l| l.iter().map(|(_, n)| volt_of(n)).collect()).unwrap_or_default();
+        out.push(EntityLoad {
+            entity_id: id,
+            kind: LoadKind::Component,
+            amps,
+            volts,
+            limit: best.map(|b| b.1),
+            limit_kind: best.map(|b| b.0),
+            ratio: best.map(|b| b.2 / b.1),
+        });
+    }
+    out
 }
 
 /// 定格の判定。属性 (置き換え後) の限度と、シミュレーションの電流・電圧を比べる。
@@ -939,5 +1068,139 @@ mod tests {
         }
         let Some(r) = run(&sheet, &SimOptions::default()) else { return };
         assert!(amps(&r, "BT1") < 0.01 && amps(&r, "LD1") < 0.01, "{:?}", r.components);
+    }
+
+    fn load_of<'a>(r: &'a SimOpResult, id: EntityId) -> &'a EntityLoad {
+        r.loads.iter().find(|l| l.entity_id == id).expect("load entry")
+    }
+
+    fn id_of(sheet: &Sheet, reference: &str) -> EntityId {
+        sheet
+            .entities
+            .values()
+            .find_map(|e| match e {
+                Entity::Symbol(s) if s.reference == reference => Some(s.id),
+                _ => None,
+            })
+            .unwrap()
+    }
+
+    /// Each wire reports its current, the voltage at both ends and, from its size, the ampacity limit and the load ratio.
+    /// 電線ごとに、電流・両端の電圧・太さから決まる許容電流と負荷率が出る。
+    #[test]
+    fn a_wire_load_has_current_end_voltages_and_ampacity() {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        place(&mut sheet, "t_src", "BT1", 0.0, 100.0, &[("voltage", "24")]);
+        place(&mut sheet, "t_load", "LD1", 50.0, 100.0, &[("current_a", "6")]);
+        let w = add_wire(&mut sheet, &[(0.0, 100.0), (50.0, 100.0)], 0.75, Some(10.0));
+        add_wire(&mut sheet, &[(50.0, 110.0), (0.0, 110.0)], 0.75, None);
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        let l = load_of(&r, w);
+        assert_eq!(l.kind, LoadKind::Wire);
+        assert!((l.amps - 6.0).abs() < 0.01, "{l:?}");
+        assert_eq!(l.volts.len(), 2);
+        // 0.0175 × 10m / 0.75sq = 0.233Ω → 6A で 1.4V 落ちる
+        assert!((l.volts[0] - l.volts[1] - 1.4).abs() < 0.05, "{l:?}");
+        assert_eq!(l.limit, Some(12.0));
+        assert_eq!(l.limit_kind, Some(LimitKind::WireAmpacity));
+        assert!((l.ratio.unwrap() - 0.5).abs() < 0.01);
+    }
+
+    /// A wire without a size, or thicker than the ampacity table, still reports its current but has no limit and no ratio.
+    /// 太さの無い電線と、許容電流の表より太い電線も電流は出るが、限度と負荷率は無い。
+    #[test]
+    fn a_wire_without_a_known_ampacity_has_no_limit() {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        place(&mut sheet, "t_src", "BT1", 0.0, 100.0, &[("voltage", "24")]);
+        place(&mut sheet, "t_load", "LD1", 50.0, 100.0, &[("current_a", "6")]);
+        let bare = add_wire(&mut sheet, &[(0.0, 100.0), (50.0, 100.0)], 0.0, None);
+        let thick = add_wire(&mut sheet, &[(50.0, 110.0), (0.0, 110.0)], 8.0, None);
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        for id in [bare, thick] {
+            let l = load_of(&r, id);
+            assert!((l.amps - 6.0).abs() < 0.01 && l.limit.is_none() && l.ratio.is_none(), "{l:?}");
+        }
+    }
+
+    /// A fuse reports its rating as the limit, and the voltage at each of its pins in pin order.
+    /// ヒューズは定格を限度として出し、ピンごとの電圧をピンの順に出す。
+    #[test]
+    fn a_fuse_load_uses_its_rating() {
+        let sheet = role_series(&[("voltage", "24")], &[("rating_a", "5")], &[("current_a", "8")]);
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        let l = load_of(&r, id_of(&sheet, "F1"));
+        assert_eq!(l.kind, LoadKind::Component);
+        assert_eq!((l.limit, l.limit_kind), (Some(5.0), Some(LimitKind::FuseRating)));
+        assert!((l.ratio.unwrap() - 1.6).abs() < 0.01);
+        assert_eq!(l.volts.len(), 2);
+    }
+
+    /// A connector without a role still gets a load entry, limited by its pin rating, because current flows through its same-numbered pins.
+    /// 役割の無いコネクタも、同じ番号のピンを電流が通るので負荷の行が出て、ピン定格が限度になる。
+    #[test]
+    fn a_connector_load_uses_its_pin_rating() {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        place(&mut sheet, "t_src", "BT1", 0.0, 100.0, &[("voltage", "24")]);
+        place(&mut sheet, "t_cn", "CN1", 20.0, 100.0, &[("pin_rating_a", "10")]);
+        place(&mut sheet, "t_load", "LD1", 50.0, 100.0, &[("current_a", "4")]);
+        add_wire(&mut sheet, &[(0.0, 100.0), (20.0, 100.0)], 0.75, None);
+        add_wire(&mut sheet, &[(30.0, 100.0), (50.0, 100.0)], 0.75, None);
+        add_wire(&mut sheet, &[(50.0, 110.0), (0.0, 110.0)], 0.75, None);
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        let l = load_of(&r, id_of(&sheet, "CN1"));
+        assert_eq!((l.limit, l.limit_kind), (Some(10.0), Some(LimitKind::PinRating)));
+        assert!((l.ratio.unwrap() - 0.4).abs() < 0.01);
+    }
+
+    /// A source reports its maximum current as the limit and a converter its rated output current.
+    /// 電源は許容電流を、変換器は定格の出力電流を限度として出す。
+    #[test]
+    fn source_and_converter_loads_use_their_ratings() {
+        let mut sheet = converter_sheet(&[("v_out", "12"), ("eta", "0.8"), ("i_out_a", "5")]);
+        for e in sheet.entities.values_mut() {
+            if let Entity::Symbol(s) = e {
+                if s.reference == "BT1" {
+                    s.attrs.insert("i_max_a".into(), "2".into());
+                }
+            }
+        }
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        let bt = load_of(&r, id_of(&sheet, "BT1"));
+        assert_eq!((bt.limit, bt.limit_kind), (Some(2.0), Some(LimitKind::SourceMax)));
+        assert!((bt.ratio.unwrap() - 1.25).abs() < 0.02, "{bt:?}");
+        let u1 = load_of(&r, id_of(&sheet, "U1"));
+        assert_eq!((u1.limit, u1.limit_kind), (Some(5.0), Some(LimitKind::ConverterOut)));
+        assert!((u1.ratio.unwrap() - 0.8).abs() < 0.01, "{u1:?}");
+    }
+
+    /// A part with several limits (a fuse that also has a pin rating) reports the one it is closest to exceeding.
+    /// 限度を複数持つ部品 (ピン定格もあるヒューズ) は、一番超えそうな限度を出す。
+    #[test]
+    fn the_highest_ratio_limit_wins() {
+        let sheet = role_series(&[("voltage", "24")], &[("rating_a", "10"), ("pin_rating_a", "5")], &[("current_a", "4")]);
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        let l = load_of(&r, id_of(&sheet, "F1"));
+        assert_eq!((l.limit, l.limit_kind), (Some(5.0), Some(LimitKind::PinRating)));
+    }
+
+    /// Exactly the parts whose ratio exceeds 1 have a fuse, pin, source or converter finding.
+    /// 負荷率が 1 を超えた部品と、ヒューズ・ピン・電源・変換器の指摘が出る部品は一致する。
+    #[test]
+    fn loads_over_one_match_the_findings() {
+        let sheet = role_series(&[("voltage", "24"), ("i_max_a", "3")], &[("rating_a", "5")], &[("current_a", "8")]);
+        let Some(r) = run(&sheet, &SimOptions::default()) else { return };
+        let mut over: Vec<EntityId> =
+            r.loads.iter().filter(|l| l.kind == LoadKind::Component && l.ratio.unwrap_or(0.0) > 1.0).map(|l| l.entity_id).collect();
+        let mut found: Vec<EntityId> = r
+            .findings
+            .iter()
+            .filter(|f| !f.code.starts_with("sim.wire") && f.code != "sim.load_voltage")
+            .flat_map(|f| f.entity_ids.clone())
+            .collect();
+        over.sort();
+        over.dedup();
+        found.sort();
+        found.dedup();
+        assert_eq!(over, found);
     }
 }

@@ -88,6 +88,8 @@ pub struct SpiceDeck {
     pub component_elements: Vec<SpiceElement>,
     /// 役割が負荷の部品の端子ノード。
     pub load_terminals: Vec<LoadTerminals>,
+    /// 部品ごとのピンのノード (定義のピンの順、同じ番号は最初の点)。回路につながらないピンは入らない。
+    pub pin_nodes: Vec<(EntityId, Vec<(String, String)>)>,
     /// 組み立て時の注意 (見つからない短絡ネット・参照記号など)。
     pub warnings: Vec<String>,
 }
@@ -270,6 +272,7 @@ pub fn build_deck_with(
     let mut component_elements = Vec::new();
     let mut extras: Vec<Extra> = Vec::new();
     let mut raw_loads: Vec<(EntityId, (i64, i64), (i64, i64))> = Vec::new();
+    let mut raw_pin_nodes: Vec<(EntityId, Vec<(String, String)>)> = Vec::new();
     let next_name = |seq: &mut usize| {
         *seq += 1;
         format!("R{seq}")
@@ -379,6 +382,19 @@ pub fn build_deck_with(
             }
         }
         let first_of = |no: &str| by_no.get(no.trim()).map(|v| v[0]);
+        {
+            let mut seen: Vec<&str> = Vec::new();
+            let mut list: Vec<(String, String)> = Vec::new();
+            for (no, p) in &pins {
+                let no = no.trim();
+                if seen.contains(&no) {
+                    continue;
+                }
+                seen.push(no);
+                list.push((no.to_string(), format!("{:?}", node_key(*p))));
+            }
+            raw_pin_nodes.push((s.id, list));
+        }
         // 役割が使うピンが見つからなければ、黙って落とさず知らせる
         if let Some(sim) = &def.sim {
             if let Some(missing) = sim.pins.iter().find(|n| first_of(n).is_none()) {
@@ -663,6 +679,19 @@ pub fn build_deck_with(
             minus: node_name(&Node::Key(m)),
         })
         .collect();
+    let pin_nodes = raw_pin_nodes
+        .into_iter()
+        .map(|(id, list)| {
+            let list = list
+                .into_iter()
+                .filter_map(|(no, raw)| {
+                    let key = parse_key(&raw)?;
+                    names.get(&key).map(|n| (no, n.clone()))
+                })
+                .collect();
+            (id, list)
+        })
+        .collect();
 
     // デッキ本文
     let mut deck = String::from("* MadakeCAD verification\n");
@@ -724,6 +753,7 @@ pub fn build_deck_with(
         wire_elements,
         component_elements,
         load_terminals,
+        pin_nodes,
         warnings,
     })
 }

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3455 specification clauses** across 6 areas.
+**3462 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1037,6 +1037,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A part whose role names a pin the placed symbol does not have is left out with a warning instead of vanishing silently. <sub>`a_role_pin_that_is_missing_is_a_warning`</sub>
 - A converter with i_limit_a holds its output current at the limit when its output is shorted, instead of an ideal source driving an endless current; below the limit it behaves as before. <sub>`a_current_limited_converter_stops_at_its_limit`</sub>
 - A converter with v_in_min stops (no output, no input current) when its input voltage is below that value, like a real converter's undervoltage lockout. <sub>`a_converter_below_its_minimum_input_voltage_stops`</sub>
+- Each wire reports its current, the voltage at both ends and, from its size, the ampacity limit and the load ratio. <sub>`a_wire_load_has_current_end_voltages_and_ampacity`</sub>
+- A wire without a size, or thicker than the ampacity table, still reports its current but has no limit and no ratio. <sub>`a_wire_without_a_known_ampacity_has_no_limit`</sub>
+- A fuse reports its rating as the limit, and the voltage at each of its pins in pin order. <sub>`a_fuse_load_uses_its_rating`</sub>
+- A connector without a role still gets a load entry, limited by its pin rating, because current flows through its same-numbered pins. <sub>`a_connector_load_uses_its_pin_rating`</sub>
+- A source reports its maximum current as the limit and a converter its rated output current. <sub>`source_and_converter_loads_use_their_ratings`</sub>
+- A part with several limits (a fuse that also has a pin rating) reports the one it is closest to exceeding. <sub>`the_highest_ratio_limit_wins`</sub>
+- Exactly the parts whose ratio exceeds 1 have a fuse, pin, source or converter finding. <sub>`loads_over_one_match_the_findings`</sub>
 
 ### SPICE netlist generation
 

@@ -780,6 +780,8 @@ export interface SimOpResult {
   warnings: string[];
   /** 定格超過 (重い順)。code は sim.fuse_rating / sim.pin_rating / sim.source_overload / sim.converter_overload / sim.load_voltage / sim.wire_ampacity / sim.wire_unchecked。 */
   findings?: SimFinding[];
+  /** 電線・部品ごとの負荷 (電線が先)。 */
+  loads?: EntityLoad[];
 }
 
 /** シミュレーションの定格超過1件。value は測った値、limit は比べた限度 (A または V)。 */
@@ -791,6 +793,17 @@ export interface SimFinding {
   value: number;
   limit: number;
   message: string;
+}
+
+/** 電線・部品1つの電流・電圧・限度 (図面に重ねる表示とプローブ)。volts は電線なら [始点, 終点]、部品ならピンの順。 */
+export interface EntityLoad {
+  entity_id: string;
+  kind: "wire" | "component";
+  amps: number;
+  volts: number[];
+  limit: number | null;
+  limit_kind: "wire_ampacity" | "fuse_rating" | "pin_rating" | "source_max" | "converter_out" | null;
+  ratio: number | null;
 }
 
 /** シミュレーションの条件 (開路以外)。overrides は 参照記号 → {属性: 値}、shorts は接地へ短絡させるネット名。 */

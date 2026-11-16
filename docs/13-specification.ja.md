@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3455仕様項目**。
+全6領域・**3462仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1037,6 +1037,13 @@
 - 役割が指すピンを持たない部品は、黙って消さず、注意を出して計算から除く。 <sub>`a_role_pin_that_is_missing_is_a_warning`</sub>
 - i_limit_a を持つ変換器は、出力を短絡すると出力電流が上限で止まる (理想電源のように際限なく流さない)。上限より下ではこれまでどおり動く。 <sub>`a_current_limited_converter_stops_at_its_limit`</sub>
 - v_in_min を持つ変換器は、入力電圧がその値より低いと止まる (出力も入力電流も無い)。実際の変換器の低電圧停止と同じ。 <sub>`a_converter_below_its_minimum_input_voltage_stops`</sub>
+- 電線ごとに、電流・両端の電圧・太さから決まる許容電流と負荷率が出る。 <sub>`a_wire_load_has_current_end_voltages_and_ampacity`</sub>
+- 太さの無い電線と、許容電流の表より太い電線も電流は出るが、限度と負荷率は無い。 <sub>`a_wire_without_a_known_ampacity_has_no_limit`</sub>
+- ヒューズは定格を限度として出し、ピンごとの電圧をピンの順に出す。 <sub>`a_fuse_load_uses_its_rating`</sub>
+- 役割の無いコネクタも、同じ番号のピンを電流が通るので負荷の行が出て、ピン定格が限度になる。 <sub>`a_connector_load_uses_its_pin_rating`</sub>
+- 電源は許容電流を、変換器は定格の出力電流を限度として出す。 <sub>`source_and_converter_loads_use_their_ratings`</sub>
+- 限度を複数持つ部品 (ピン定格もあるヒューズ) は、一番超えそうな限度を出す。 <sub>`the_highest_ratio_limit_wins`</sub>
+- 負荷率が 1 を超えた部品と、ヒューズ・ピン・電源・変換器の指摘が出る部品は一致する。 <sub>`loads_over_one_match_the_findings`</sub>
 
 ### SPICEネットリスト生成
 
