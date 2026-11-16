@@ -70,6 +70,7 @@ cargo run -p madake-cli -- verify [--sheet <ID>]     # 図面検証 (ERC+電気�
 cargo run -p madake-cli -- parts [<検索語>] [--category <c>]  # 部品DB検索
 cargo run -p madake-cli -- sim [--open SW1,K1] [--set M1.current_a=40] [--short P24]  # DC動作点シミュレーション (属性の置き換え・地絡・定格超過)
 cargo run -p madake-cli -- reroute [--sheet <ID>] [--net <NAME>]...  # 配線の自動の引き直し (接続は変えない。undo一発)
+cargo run -p madake-cli -- arrange [--sheet <ID>] [--channel MM]  # 部品の並べ直し (並び順を保って整列し、通り道をあけて全配線を引き直す。undo一発)
 cargo run -p madake-cli -- renumber [--sheet <ID>] [--mode append|renumber] [--start N]  # 線番の自動採番
 cargo run -p madake-cli -- terminals [--sheet <ID>]  # 端子台一覧 (参照記号・極数・ジャンパ・entity id)
 cargo run -p madake-cli -- export svg|pdf|dxf|kicad <path> [--sheet <ID>]   # dxf=ACADE/EPLAN向け、kicad=.kicad_sch

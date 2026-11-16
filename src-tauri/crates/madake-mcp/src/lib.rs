@@ -228,6 +228,118 @@ impl SharedDoc {
         Err("引き直しの計算中に図面が何度も変わったため、引き直しをやめました。もう一度実行してください".to_string())
     }
 
+    /// 部品の並べ直し。設定を確かめてから、シートの写し・版番号・図枠・名前の使用状況を取ってロックを放し、
+    /// ロックの外で計画 ([`madake_core::arrange::plan_arrange`]) を作る。適用はもう一度ロックを取り、版番号が
+    /// 変わっていなければ **1回の編集** (undo一発) として実行する。変わっていれば計画を作り直し、3回続けて
+    /// 変わったらエラー。コマンドの順は 消す配線 → 移動 → 形の置き換え → 足す配線。
+    /// 変えるものが無いときは空のバッチを実行しない。
+    /// 返すJSONは `{ moved, columns, rows, routed, labelled: [{net, label}], before, after,
+    /// wire_length_mm: {before, after}, size_mm: {before: [w, h], after: [w, h]} }`。
+    /// `before`は元のシート、`after`は計画を当てた写しのシートで測る。
+    pub fn arrange_sheet(
+        &self,
+        sheet_id: Uuid,
+        options: &madake_core::arrange::ArrangeOptions,
+        origin: EditOrigin,
+    ) -> Result<serde_json::Value, String> {
+        options.validate()?;
+        for _ in 0..3 {
+            let (revision, sheet, ctx) = {
+                let engine = self.engine.lock().unwrap();
+                let project = engine.project();
+                let sheet = project
+                    .sheet(sheet_id)
+                    .ok_or_else(|| format!("sheet not found: {sheet_id}"))?
+                    .clone();
+                let protected: Vec<Uuid> = project.mech_links.iter().map(|l| l.entity_id).collect();
+                let template = madake_core::frame_template::for_project(project);
+                let (pw, ph) = sheet.paper_mm();
+                let frame = template.frame_rect(pw, ph);
+                let (tx, ty) = template.title_block_origin(pw, ph);
+                // 表題欄は左上が原点側の角、右下は図枠の右下
+                let title_block = (tx, ty, frame.2, frame.3);
+                // 使用中の名前: 全シートのネットラベルと、置かれたシンボルのネット名
+                let mut taken_names: Vec<String> = Vec::new();
+                for sh in &project.sheets {
+                    let defs = sheet_symbol_defs(sh);
+                    for e in sh.entities.values() {
+                        match e {
+                            Entity::NetLabel(l) => taken_names.push(l.name.clone()),
+                            Entity::Symbol(sym) => {
+                                if let Some(net) = defs
+                                    .iter()
+                                    .find(|d| d.id == sym.symbol_id)
+                                    .and_then(|d| d.net.as_deref())
+                                {
+                                    if !net.trim().is_empty() {
+                                        taken_names.push(net.to_string());
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                taken_names.sort();
+                taken_names.dedup();
+                let ctx = madake_core::arrange::ArrangeContext { protected, frame, title_block, taken_names };
+                (engine.revision(), sheet, ctx)
+            };
+            let defs = sheet_symbol_defs(&sheet);
+            let plan = madake_core::arrange::plan_arrange(&sheet, &defs, options, &ctx)?;
+            let before = madake_core::tidy::tidy_metrics(&sheet, &defs);
+            let length_before = total_wire_length_mm(&sheet);
+            let after_sheet = plan.after.clone().unwrap_or_else(|| sheet.clone());
+            let after = madake_core::tidy::tidy_metrics(&after_sheet, &defs);
+            let length_after = total_wire_length_mm(&after_sheet);
+            let labelled: Vec<serde_json::Value> = plan
+                .labelled
+                .iter()
+                .map(|(net, label)| serde_json::json!({ "net": net, "label": label }))
+                .collect();
+            let reply = serde_json::json!({
+                "moved": plan.moved,
+                "columns": plan.columns,
+                "rows": plan.rows,
+                "routed": plan.routed,
+                "labelled": labelled,
+                "before": before,
+                "after": after,
+                "wire_length_mm": { "before": length_before, "after": length_after },
+                "size_mm": {
+                    "before": [plan.size_before.0, plan.size_before.1],
+                    "after": [plan.size_after.0, plan.size_after.1],
+                },
+            });
+            let mut commands = Vec::new();
+            if !plan.remove.is_empty() {
+                commands.push(Command::DeleteEntities { sheet_id, ids: plan.remove.clone() });
+            }
+            for (ids, dx, dy) in &plan.moves {
+                commands.push(Command::MoveEntities { sheet_id, ids: ids.clone(), dx: *dx, dy: *dy });
+            }
+            for entity in &plan.updates {
+                commands.push(Command::UpdateEntity { sheet_id, entity: entity.clone() });
+            }
+            for entity in &plan.add {
+                commands.push(Command::AddEntity { sheet_id, entity: entity.clone() });
+            }
+            if commands.is_empty() {
+                return Ok(reply);
+            }
+            let patch = {
+                let mut engine = self.engine.lock().unwrap();
+                if engine.revision() != revision {
+                    continue;
+                }
+                engine.execute_batch(commands, origin).map_err(|e| e.to_string())?
+            };
+            let _ = self.patches.send(patch);
+            return Ok(reply);
+        }
+        Err("並べ直しの計算中に図面が何度も変わったため、並べ直しをやめました。もう一度実行してください".to_string())
+    }
+
     /// 整えバリアントの開始: 元シートを`count`枚複製して入れる (1回の編集)。
     /// 戻り値は適用したpatchと、案ごとの情報 (複製シートid・ラベル・id対応表)。
     ///
@@ -767,6 +879,14 @@ pub struct ConnectCableParams {
 pub struct SheetRefParams {
     /// 対象シートID。省略時は先頭シート。
     pub sheet_id: Option<Uuid>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ArrangeSheetParams {
+    /// 対象シートID。省略時は先頭シート。
+    pub sheet_id: Option<Uuid>,
+    /// 並べ直しの設定 (channel_mm・max_gap_mm・align_mm・route。省略可)。
+    pub options: Option<madake_core::arrange::ArrangeOptions>,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -1788,6 +1908,21 @@ impl MadakeMcp {
         let reply = self
             .doc
             .reroute_wires(sheet_id, &options, self.doc.mcp_origin())
+            .map_err(|e| ErrorData::invalid_params(e, None))?;
+        json_ok(&reply)
+    }
+
+    #[tool(
+        description = "シートの部品を列と行にそろえて並べ直し、全ての配線を引き直す。部品の並び順は保ったまま、列と列・行と行の間に幅 channel_mm(既定8mm、2.5〜50)の配線の通り道をあけ、max_gap_mm(既定20mm)より広い空きはその幅まで詰める。align_mm(既定4mm)未満のずれはそろえる。部品と一緒に動くもの(部品の近くの文字・部品に付いた図形や注記・部品につながった配線の端)は一緒に動かす。配線は全て新しく引き直し、経路が見つからないかたまりはネットラベルでつなぐ。ラベルの名前は、そのかたまりが元から持つラベル名・ネット名シンボルの名前・どちらも無ければ ARR_<n> とし、labelledに{net,label}で返す。断るもの(エラーで何も変えない): ケーブルの芯が使う配線・盤面配置(パネルレイアウト)・ポートの接点・他のエンティティやFreeCADとの対応付けが指している配線・長さの出所(length_source)がまちまちな配線・同じかたまりに名前の違うラベルがある配線・図枠に収まらない並べ直し(図枠の外にすでにある内容を含む)。sheet_id省略で先頭シート。options=設定(任意。範囲外はエラーで何も変えない)。全ての変更は1回の編集で適用し、undo一発で元の図面に戻る。返り値は moved(動かした単位の数)・columns・rows・routed(引き直したネット名)・labelled([{net,label}])・before/after(get_tidy_metricsと同じ数値)・wire_length_mm(前後の配線長の合計)・size_mm(前後の内容の大きさ [幅,高さ])。変えるものが無いときは何も変更しない"
+    )]
+    fn arrange_sheet(&self, Parameters(p): Parameters<ArrangeSheetParams>) -> Result<String, ErrorData> {
+        // 設定はロックを取る前に確かめる (使えない値でエンジンを待たせない)
+        let options = p.options.unwrap_or_default();
+        options.validate().map_err(|e| ErrorData::invalid_params(e, None))?;
+        let sheet_id = self.resolve_sheet(p.sheet_id)?;
+        let reply = self
+            .doc
+            .arrange_sheet(sheet_id, &options, self.doc.mcp_origin())
             .map_err(|e| ErrorData::invalid_params(e, None))?;
         json_ok(&reply)
     }

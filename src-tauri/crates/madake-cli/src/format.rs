@@ -427,6 +427,60 @@ pub fn renumbered(patches: &Value) -> String {
     }
 }
 
+/// `madake arrange` (Link APIの返り値)
+pub fn arrange(result: &Value) -> String {
+    let count = |key: &str| result[key].as_u64().unwrap_or(0);
+    let routed = result["routed"].as_array().cloned().unwrap_or_default();
+    let mut out = format!(
+        "{} 単位を動かしました ({} 列 x {} 行)。引き直したネット: {}\n",
+        count("moved"),
+        count("columns"),
+        count("rows"),
+        routed.len()
+    );
+    let labelled = result["labelled"].as_array().cloned().unwrap_or_default();
+    if !labelled.is_empty() {
+        out.push_str("ラベルでつないだかたまり:\n");
+        for l in &labelled {
+            out.push_str(&format!("  {} -> {}\n", text(l, "net"), text(l, "label")));
+        }
+    }
+    let metric = |side: &str, key: &str| result[side][key].as_u64().unwrap_or(0);
+    if result["before"].is_object() && result["after"].is_object() {
+        out.push_str(&format!(
+            "整い具合 (前 → 後): 交差 {} → {} / 文字の重なり {} → {} / シンボルの重なり {} → {} / グリッド外 {} → {}\n",
+            metric("before", "crossings"),
+            metric("after", "crossings"),
+            metric("before", "label_overlaps"),
+            metric("after", "label_overlaps"),
+            metric("before", "symbol_overlaps"),
+            metric("after", "symbol_overlaps"),
+            metric("before", "off_grid"),
+            metric("after", "off_grid"),
+        ));
+    }
+    let len = &result["wire_length_mm"];
+    if len.is_object() {
+        out.push_str(&format!(
+            "配線長の合計 (前 → 後): {} mm → {} mm\n",
+            len["before"].as_f64().unwrap_or(0.0),
+            len["after"].as_f64().unwrap_or(0.0)
+        ));
+    }
+    let size = &result["size_mm"];
+    if size.is_object() {
+        let dim = |side: &str, i: usize| size[side][i].as_f64().unwrap_or(0.0);
+        out.push_str(&format!(
+            "大きさ (前 → 後): {} x {} mm → {} x {} mm\n",
+            dim("before", 0),
+            dim("before", 1),
+            dim("after", 0),
+            dim("after", 1)
+        ));
+    }
+    out.trim_end().to_string()
+}
+
 /// `madake reroute` (Link APIの返り値)
 pub fn reroute(result: &Value) -> String {
     let rerouted = result["rerouted"].as_array().cloned().unwrap_or_default();
@@ -581,6 +635,20 @@ pub fn terminals(list: &Value) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// The arrange summary lists labelled clusters and the size before and after.
+    /// 並べ直しの要約は、ラベルでつないだかたまりと前後の大きさを書く。
+    #[test]
+    fn arrange_summary_lists_labels_and_size() {
+        let out = arrange(&json!({
+            "moved": 3, "columns": 2, "rows": 2, "routed": ["N1"],
+            "labelled": [{"net": "N2", "label": "ARR_1"}],
+            "size_mm": {"before": [100.0, 50.0], "after": [120.0, 60.0]},
+        }));
+        assert!(out.contains("N2 -> ARR_1"), "{out}");
+        assert!(out.contains("100 x 50 mm → 120 x 60 mm"), "{out}");
+        assert!(out.contains("3 単位") && out.contains("2 列 x 2 行"), "{out}");
+    }
 
     fn sample_snapshot() -> Value {
         json!({

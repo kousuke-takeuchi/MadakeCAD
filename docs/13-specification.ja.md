@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3502仕様項目**。
+全6領域・**3507仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1703,6 +1703,12 @@
 - 図面コンテキストは検証サマリ(重要度ごとの件数と先頭数件のcode・メッセージ)を含む。 <sub>`drawing_context_summarizes_the_verification_result`</sub>
 - AI設定のエンドポイントは変更を永続化し、エージェントマネージャへ適用する。 <sub>`settings_endpoints_persist_and_apply`</sub>
 
+### arrange_api
+
+- 並べ直しのツールが公開され、説明にundo一発で戻ることが書いてある。 <sub>`the_arrange_tool_is_advertised`</sub>
+- MCPで詰まった2つの部品を並べ直すと離れて配線が引き直され、undo一発で全てのエンティティが元に戻る。 <sub>`arranging_over_mcp_moves_reroutes_and_undoes_in_one_step`</sub>
+- Link APIの並べ直しは同じ形の返り値を返し、使えない設定は400で断って何も変えない。 <sub>`the_link_api_arranges_and_refuses_bad_options`</sub>
+
 ### drawing_tools
 
 - place_symbol は置いた部品のピンを用紙上の位置つきで返すので、エージェントは座標を計算せずに配線できる。 <sub>`place_symbol_returns_the_pins_of_the_new_part`</sub>
@@ -2302,6 +2308,7 @@
 - madake rerouteは指定が無ければシートもネット名も送らず、アプリが先頭シートの全ネットを引き直す。 <sub>`reroute_defaults_to_no_sheet_and_no_nets`</sub>
 - madake rerouteは--sheetと、繰り返し指定した--netを順番どおりに送る。 <sub>`reroute_forwards_the_sheet_and_repeated_nets`</sub>
 - madake reroute --json は返事をそのまま出し、通常の出力は引き直さなかったネットを理由つきで並べる。 <sub>`reroute_prints_json_or_a_human_summary`</sub>
+- madake arrangeは、シートと通り道の幅を指定されたときだけ送る。 <sub>`arrange_sends_only_what_was_given`</sub>
 - madake undoは戻す操作が無いことをユーザーに伝える。 <sub>`undo_reports_empty_history`</sub>
 - madake redoは成功時に新しいドキュメントrevisionを報告する。 <sub>`redo_reports_revision`</sub>
 - madake save/openは対象のファイルパスを報告する。 <sub>`save_and_open_report_path`</sub>
@@ -2324,6 +2331,7 @@
 
 ### 人間向け整形出力
 
+- 並べ直しの要約は、ラベルでつないだかたまりと前後の大きさを書く。 <sub>`arrange_summary_lists_labels_and_size`</sub>
 - 表示幅は全角文字を2桁として数え、表の桁揃えを正しくする。 <sub>`disp_width_counts_fullwidth_as_two`</sub>
 - パディングは表示幅基準で、日本語とASCIIのセルが揃う。 <sub>`pad_uses_display_width`</sub>
 - 表は最も広いセルに合わせて列を揃える。 <sub>`table_aligns_columns`</sub>

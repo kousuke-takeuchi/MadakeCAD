@@ -742,6 +742,38 @@ async fn post_route_reroute(
     Ok(Json(reply))
 }
 
+#[derive(Deserialize)]
+struct ArrangeBody {
+    sheet_id: Option<Uuid>,
+    options: Option<madake_core::arrange::ArrangeOptions>,
+}
+
+/// 部品の並べ直し (MCPツール `arrange_sheet` と同じ本体・同じ返り値)。1回の編集でundo一発。
+async fn post_route_arrange(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<ArrangeBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    // 設定はロックを取る前に確かめる (使えない値は400)
+    let options = body.options.unwrap_or_default();
+    options.validate().map_err(bad_request)?;
+    let sheet_id = match body.sheet_id {
+        Some(id) => id,
+        None => doc
+            .engine
+            .lock()
+            .unwrap()
+            .project()
+            .sheets
+            .first()
+            .map(|s| s.id)
+            .ok_or_else(|| bad_request("sheet not found"))?,
+    };
+    let reply = doc
+        .arrange_sheet(sheet_id, &options, madake_core::EditOrigin::Mcp)
+        .map_err(bad_request)?;
+    Ok(Json(reply))
+}
+
 async fn get_verify(
     State(doc): State<SharedDoc>,
     Query(q): Query<NetlistQuery>,
@@ -1398,6 +1430,7 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/plc/generate", post(post_plc_generate))
         .route("/api/v1/simulate/op", post(post_simulate_op))
         .route("/api/v1/route/reroute", post(post_route_reroute))
+        .route("/api/v1/route/arrange", post(post_route_arrange))
         .route("/api/v1/templates", get(get_templates))
         .route("/api/v1/templates/apply", post(post_apply_template))
         .route("/api/v1/frame-templates", get(get_frame_templates))

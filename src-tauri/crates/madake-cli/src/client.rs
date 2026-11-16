@@ -330,6 +330,8 @@ pub trait LinkApi {
     fn simulate_op(&self, sheet_id: Option<&str>, options: Value) -> Result<Value, CliError>;
     /// `POST /api/v1/route/reroute` (`{"sheet_id": ..., "nets": [...]}`)
     fn reroute(&self, sheet_id: Option<&str>, nets: &[String]) -> Result<Value, CliError>;
+    /// `POST /api/v1/route/arrange` (`{"sheet_id": ..., "options": {"channel_mm": ...}}`。`options`は幅の指定があるときだけ)
+    fn arrange(&self, sheet_id: Option<&str>, channel_mm: Option<f64>) -> Result<Value, CliError>;
     /// `POST /api/v1/commands` (Command配列 → Patch配列)
     fn exec(&self, commands: Value) -> Result<Value, CliError>;
     /// `POST /api/v1/undo`
@@ -445,6 +447,13 @@ impl LinkApi for HttpClient {
 
     fn reroute(&self, sheet_id: Option<&str>, nets: &[String]) -> Result<Value, CliError> {
         self.post("/route/reroute", json!({ "sheet_id": sheet_id, "nets": nets }))
+    }
+    fn arrange(&self, sheet_id: Option<&str>, channel_mm: Option<f64>) -> Result<Value, CliError> {
+        let mut body = json!({ "sheet_id": sheet_id });
+        if let Some(channel) = channel_mm {
+            body["options"] = json!({ "channel_mm": channel });
+        }
+        self.post("/route/arrange", body)
     }
 
     fn parts(&self, query: Option<&str>, category: Option<&str>) -> Result<Value, CliError> {

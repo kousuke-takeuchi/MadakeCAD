@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3502 specification clauses** across 6 areas.
+**3507 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1703,6 +1703,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The drawing context summarizes verification: severity counts plus the first few findings. <sub>`drawing_context_summarizes_the_verification_result`</sub>
 - AI settings endpoints persist changes and apply them to the agent manager. <sub>`settings_endpoints_persist_and_apply`</sub>
 
+### arrange_api
+
+- The arrange tool is advertised and its description says that one undo restores the drawing. <sub>`the_arrange_tool_is_advertised`</sub>
+- Arranging two squeezed parts over MCP moves them apart, reroutes the wire and one undo restores every entity. <sub>`arranging_over_mcp_moves_reroutes_and_undoes_in_one_step`</sub>
+- The Link API arrange endpoint gives the same reply shape and refuses bad options with 400 and no change. <sub>`the_link_api_arranges_and_refuses_bad_options`</sub>
+
 ### drawing_tools
 
 - place_symbol returns the new part's pins with paper positions, so the agent can wire it without computing coordinates. <sub>`place_symbol_returns_the_pins_of_the_new_part`</sub>
@@ -2302,6 +2308,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - madake reroute sends no sheet and no net names unless told, so the app reroutes the first sheet's nets. <sub>`reroute_defaults_to_no_sheet_and_no_nets`</sub>
 - madake reroute passes the sheet and every repeated --net through, in order. <sub>`reroute_forwards_the_sheet_and_repeated_nets`</sub>
 - madake reroute --json prints the reply as it came, and the human output lists the nets left unchanged with their reasons. <sub>`reroute_prints_json_or_a_human_summary`</sub>
+- madake arrange sends the sheet and the channel width only when given. <sub>`arrange_sends_only_what_was_given`</sub>
 - madake undo tells the user when there is nothing to undo. <sub>`undo_reports_empty_history`</sub>
 - madake redo reports the new document revision on success. <sub>`redo_reports_revision`</sub>
 - madake save/open report the file path they acted on. <sub>`save_and_open_report_path`</sub>
@@ -2324,6 +2331,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### Human-readable output
 
+- The arrange summary lists labelled clusters and the size before and after. <sub>`arrange_summary_lists_labels_and_size`</sub>
 - Display width counts full-width (Japanese) characters as two columns for correct table alignment. <sub>`disp_width_counts_fullwidth_as_two`</sub>
 - Padding is based on display width, so Japanese and ASCII cells align. <sub>`pad_uses_display_width`</sub>
 - Tables align columns to the widest cell. <sub>`table_aligns_columns`</sub>

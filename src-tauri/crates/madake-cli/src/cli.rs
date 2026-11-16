@@ -75,6 +75,15 @@ pub enum Commands {
         #[arg(long = "net", value_name = "NAME")]
         net: Vec<String>,
     },
+    /// 部品を並べ直す (並び順を保って整列し、通り道をあけて全配線を引き直す。1回の編集でundo可)
+    Arrange {
+        /// シートID (省略時は先頭シート)
+        #[arg(long, value_name = "ID")]
+        sheet: Option<String>,
+        /// 列と列・行と行の間にあける通り道の幅 (mm。省略時は8)
+        #[arg(long, value_name = "MM")]
+        channel: Option<f64>,
+    },
     /// 図面検証 (ERC+電気検証)
     Verify {
         /// シートID (省略時は全シート)
@@ -250,6 +259,13 @@ pub fn run(cli: &Cli, api: &dyn LinkApi) -> Result<String, CliError> {
                 return Ok(pretty(&result));
             }
             Ok(format::reroute(&result))
+        }
+        Commands::Arrange { sheet, channel } => {
+            let result = api.arrange(sheet.as_deref(), *channel)?;
+            if cli.json {
+                return Ok(pretty(&result));
+            }
+            Ok(format::arrange(&result))
         }
         Commands::Verify { sheet } => {
             let diags = api.verify(sheet.as_deref())?;
@@ -483,6 +499,10 @@ mod tests {
         }
         fn reroute(&self, sheet_id: Option<&str>, nets: &[String]) -> Result<Value, CliError> {
             self.record(format!("reroute({sheet_id:?}, {nets:?})"));
+            Ok(self.result.clone())
+        }
+        fn arrange(&self, sheet_id: Option<&str>, channel_mm: Option<f64>) -> Result<Value, CliError> {
+            self.record(format!("arrange({sheet_id:?}, {channel_mm:?})"));
             Ok(self.result.clone())
         }
         fn netlist(&self, sheet_id: Option<&str>) -> Result<Value, CliError> {
@@ -1213,6 +1233,19 @@ mod tests {
         assert_eq!(serde_json::from_str::<Value>(&raw).unwrap(), reply);
         let out = run(&parse(&["madake", "reroute"]), &api).unwrap();
         assert!(out.contains("GND") && out.contains("no route found"), "{out}");
+    }
+
+    /// madake arrange sends the sheet and the channel width only when given.
+    /// madake arrangeは、シートと通り道の幅を指定されたときだけ送る。
+    #[test]
+    fn arrange_sends_only_what_was_given() {
+        let api = FakeApi { result: json!({"moved": 0}), ..Default::default() };
+        run(&parse(&["madake", "arrange"]), &api).unwrap();
+        run(&parse(&["madake", "arrange", "--sheet", "S", "--channel", "10"]), &api).unwrap();
+        assert_eq!(
+            api.calls(),
+            vec!["arrange(None, None)".to_string(), r#"arrange(Some("S"), Some(10.0))"#.to_string()]
+        );
     }
 
     /// madake undo tells the user when there is nothing to undo.
