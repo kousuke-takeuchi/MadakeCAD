@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3318 specification clauses** across 6 areas.
+**3321 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -291,6 +291,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A text font with a pen width is accepted between 0.1 and 1.0 mm and refused outside; the pen is saved with the project and removed again by undo. <sub>`set_text_font_takes_a_pen_width_in_range`</sub>
 - A symbol whose caption_layout cannot be read is refused and the document is not changed; a readable one is accepted on any symbol, not only on blocks. <sub>`a_symbol_with_a_bad_caption_layout_is_refused`</sub>
 - A letter spacing outside 0.3 to 3 is refused on the text font and on a note; a value inside is kept and saved. <sub>`letter_spacing_is_checked_on_the_font_and_on_notes`</sub>
+- The sheet wire style also stores the "hide wire numbers" switch, and undo puts it back. <sub>`set_sheet_wire_style_stores_hidden_wire_numbers`</sub>
 
 ### connector
 
@@ -411,7 +412,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 25, the version that added line and lettering styles (outline weight, vivid wire colours, per-wire dash and weight, arrows, text pen, leadless blocks, caption layout). <sub>`the_current_format_version_is_twenty_five`</sub>
+- The current file format version is 26, the version that added the sheet switch that hides wire numbers. <sub>`the_current_format_version_is_twenty_six`</sub>
 - A version 23 project file opens in this build and becomes the current version; its sheets get the default wire weight and still show their wire notes. <sub>`a_version_23_file_opens_as_the_current_version`</sub>
 - A version 22 project file opens in this build and becomes the current version; its blocks keep their attributes and pins unchanged. <sub>`a_version_22_file_opens_as_the_current_version`</sub>
 - A version 21 project file opens in this build and becomes the current version; its blocks keep their attributes and their 5 mm pins. <sub>`a_version_21_file_opens_as_the_current_version`</sub>
@@ -439,7 +440,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A block whose contacts were all removed again is saved with the kind "symbol", so older builds can open the file again. <sub>`a_block_whose_contacts_were_removed_is_saved_as_symbol_again`</sub>
 - Regression test (already passes): a version 18 file with a port block opens unchanged apart from being moved up to the current version. <sub>`a_version_18_file_loads_unchanged`</sub>
 - A block whose pins have only connectors (no contacts) is also saved under the kind "port_block" and comes back with its connectors, IPC/MCP JSON still says "symbol", and once its connectors are removed it is saved as "symbol" again. <sub>`a_block_with_connectors_is_saved_as_port_block`</sub>
-- A version 24 project file opens in this build and becomes version 25; wires stay solid at the sheet's weight, outlines keep their weight and the text font has no fixed pen. <sub>`a_version_24_file_opens_as_version_25`</sub>
+- A version 24 project file opens in this build and becomes the current version; wires stay solid at the sheet's weight, outlines keep their weight and the text font has no fixed pen. <sub>`a_version_24_file_opens_as_the_current_version`</sub>
 
 ### KiCad import / export
 
@@ -1135,6 +1136,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A symbol with a caption layout writes its reference at the given offset from the placement point, with the given size and alignment; the value line, which the layout leaves out, stays where it was; a hidden line is not written. <sub>`a_caption_layout_places_each_line`</sub>
 - The letter spacing of the font tightens every text, and a note's own spacing multiplies it: with the font at 0.5 a note at 2.0 is as wide as plain text. <sub>`font_and_note_spacing_multiply`</sub>
 - The line of an arrow stops at the base of the triangle, not at its tip, so a thick line does not stick out beside the tip. <sub>`the_line_of_an_arrow_stops_at_the_base_of_the_head`</sub>
+- A wire with an explicit net name shows that name as its wire number; a sheet that hides wire numbers does not write it, and the name stays on the wire. <sub>`a_sheet_can_hide_the_wire_numbers`</sub>
 
 ### Symbol library
 
@@ -3039,6 +3041,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - draws a wire at its own weight when it has one, else at the sheet's <sub>`outline weight, own wire weight and vivid colours`</sub>
 - maps colour names to pure colours and leaves unknown names alone <sub>`outline weight, own wire weight and vivid colours`</sub>
 - keeps the screen colour for blue, brown and purple and uses pure colours for the rest <sub>`vivid colours on the dark canvas`</sub>
+- draws no wire number on a sheet that hides them <sub>`hidden wire numbers`</sub>
 
 ### xref
 

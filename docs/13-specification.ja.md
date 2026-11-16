@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3318仕様項目**。
+全6領域・**3321仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -291,6 +291,7 @@
 - ペンの太さ付きの書体は0.1〜1.0mmなら受け付け、範囲の外は断る。ペンの太さはプロジェクトに保存され、元に戻すと消える。 <sub>`set_text_font_takes_a_pen_width_in_range`</sub>
 - caption_layout を読めないシンボルは断り、図面は変わらない。読めるものは、ブロックに限らずどのシンボルでも受け付ける。 <sub>`a_symbol_with_a_bad_caption_layout_is_refused`</sub>
 - 0.3〜3 の外の字間は、書体でも注記でも断る。範囲内の値は保存される。 <sub>`letter_spacing_is_checked_on_the_font_and_on_notes`</sub>
+- シートの配線の描き方は「線番を描かない」も保存し、元に戻すと前の値に戻る。 <sub>`set_sheet_wire_style_stores_hidden_wire_numbers`</sub>
 
 ### connector
 
@@ -411,7 +412,7 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは25 (線と文字の描き方 = 外形の太さ・鮮やかな配線の色・配線ごとの破線と太さ・矢印・文字のペン・リード線なしのブロック・参照記号の配置を追加した版) である。 <sub>`the_current_format_version_is_twenty_five`</sub>
+- 現行のファイル形式バージョンは26 (シートの線番を描かない設定を追加した版) である。 <sub>`the_current_format_version_is_twenty_six`</sub>
 - 形式23のプロジェクトファイルはこのビルドで開け、現行の形式になる。シートの配線は既定の太さで、配線注記も出たままになる。 <sub>`a_version_23_file_opens_as_the_current_version`</sub>
 - 形式22のプロジェクトファイルはこのビルドで開け、現行の形式になる。ブロックの属性とピンはそのまま残る。 <sub>`a_version_22_file_opens_as_the_current_version`</sub>
 - 形式21のプロジェクトファイルはこのビルドで開け、現行の形式になる。ブロックの属性と5mm間隔のピンはそのまま残る。 <sub>`a_version_21_file_opens_as_the_current_version`</sub>
@@ -439,7 +440,7 @@
 - 接点をすべて消したブロックは種類「symbol」で保存されるので、古いビルドでもまたそのファイルを開ける。 <sub>`a_block_whose_contacts_were_removed_is_saved_as_symbol_again`</sub>
 - 回帰テスト (最初から通る): ポートのブロックを含む形式18のファイルは、現行版へ上がる以外そのまま開ける。 <sub>`a_version_18_file_loads_unchanged`</sub>
 - 接点が無くコネクタだけを持つブロックも種類「port_block」で保存され、読み直すとコネクタ付きで戻り、IPC・MCP の JSON は「symbol」のまま。コネクタを消せばまた「symbol」で保存される。 <sub>`a_block_with_connectors_is_saved_as_port_block`</sub>
-- 形式24のプロジェクトファイルはこのビルドで開け、形式25になる。配線は実線・シートの太さのまま、外形の太さも変わらず、書体のペンの太さは未設定になる。 <sub>`a_version_24_file_opens_as_version_25`</sub>
+- 形式24のプロジェクトファイルはこのビルドで開け、現行の形式になる。配線は実線・シートの太さのまま、外形の太さも変わらず、書体のペンの太さは未設定になる。 <sub>`a_version_24_file_opens_as_the_current_version`</sub>
 
 ### KiCadインポート / エクスポート
 
@@ -1135,6 +1136,7 @@
 - caption_layout を持つシンボルは、参照記号を配置点からの指定のずれ・大きさ・寄せで書く。指定の無い型番の行はこれまでの場所のまま。非表示にした行は書かない。 <sub>`a_caption_layout_places_each_line`</sub>
 - 書体の字間は全ての文字を詰め、注記の字間はそれに掛かる: 書体が0.5で注記が2.0なら、字間なしの文字と同じ幅になる。 <sub>`font_and_note_spacing_multiply`</sub>
 - 矢印のある線は、三角の先端ではなく付け根で止まる。太い線の角が先端の横からはみ出さない。 <sub>`the_line_of_an_arrow_stops_at_the_base_of_the_head`</sub>
+- ネット名を明示した配線は、その名前を線番として表示する。線番を描かないシートは名前を書かず、名前は配線に残る。 <sub>`a_sheet_can_hide_the_wire_numbers`</sub>
 
 ### シンボルライブラリ
 
@@ -3039,6 +3041,7 @@
 - 配線は自分の太さ (0.18〜2.0mm) があればそれ、無ければシートの太さで描く <sub>`outline weight, own wire weight and vivid colours`</sub>
 - 鮮やかな色は純色の表で決まる。知らない色名・黒・#始まりは表に無い (いつもの色を使う) <sub>`outline weight, own wire weight and vivid colours`</sub>
 - キャンバスでは、暗い背景で見えにくい純色 (青・茶・紫) は使わず、いつもの画面用の色で描く。黄・緑・水色・桃・赤・橙は純色で描く <sub>`vivid colours on the dark canvas`</sub>
+- 線番を描かないシートは、キャンバスでも線番の文字を1つも描かない。設定が無ければ描く <sub>`hidden wire numbers`</sub>
 
 ### xref
 

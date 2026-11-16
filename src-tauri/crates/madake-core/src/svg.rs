@@ -1294,6 +1294,9 @@ pub(crate) fn midpoint(a: &Point, b: &Point) -> Point {
 /// 線番 (IEC 62491)。ネットごとに代表線分の中点へ1回だけ描く。
 /// 横向きの線分なら上へ、縦向きなら左へ [`WIRE_NO_GAP`] だけ離す。線番の無いネットは描かない。
 fn render_wire_numbers(out: &mut String, sheet: &Sheet, symbols: &[SymbolDef]) {
+    if sheet.hide_wire_numbers {
+        return;
+    }
     // 文字も配線からの逃がしも、シートの注記文字高 (G20) に合わせて一緒に伸縮する
     let scale = sheet.annotation_scale();
     let (font, gap) = (WIRE_NO_FONT * scale, WIRE_NO_GAP * scale);
@@ -5826,5 +5829,20 @@ mod tests {
         let len = crate::shape::ARROW_LEN_MM + 2.0;
         assert_eq!(attr(drawn, "x2"), Some(30.0 - len), "{drawn}");
         assert!(svg.lines().any(|l| l.starts_with("<polygon") && l.contains("30,20")), "三角の先端は終点のまま");
+    }
+
+    /// A wire with an explicit net name shows that name as its wire number; a sheet that hides wire numbers does not write it, and the name stays on the wire.
+    /// ネット名を明示した配線は、その名前を線番として表示する。線番を描かないシートは名前を書かず、名前は配線に残る。
+    #[test]
+    fn a_sheet_can_hide_the_wire_numbers() {
+        let Entity::Wire(mut w) = coloured_wire() else { unreachable!() };
+        w.color = String::new();
+        w.net = Some("BUS_L".into());
+        let mut sheet = sheet_with(vec![Entity::Wire(w)]);
+        assert!(sheet_to_svg(&sheet, &builtin_symbols(), &[]).contains(">BUS_L<"));
+        sheet.hide_wire_numbers = true;
+        assert!(!sheet_to_svg(&sheet, &builtin_symbols(), &[]).contains(">BUS_L<"));
+        let Entity::Wire(w) = sheet.entities.values().next().unwrap() else { unreachable!() };
+        assert_eq!(w.net.as_deref(), Some("BUS_L"));
     }
 }

@@ -413,15 +413,15 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 25, the version that added line and lettering styles (outline weight, vivid wire colours, per-wire dash and weight, arrows, text pen, leadless blocks, caption layout).
-    /// 現行のファイル形式バージョンは25 (線と文字の描き方 = 外形の太さ・鮮やかな配線の色・配線ごとの破線と太さ・矢印・文字のペン・リード線なしのブロック・参照記号の配置を追加した版) である。
+    /// The current file format version is 26, the version that added the sheet switch that hides wire numbers.
+    /// 現行のファイル形式バージョンは26 (シートの線番を描かない設定を追加した版) である。
     #[test]
-    fn the_current_format_version_is_twenty_five() {
-        assert_eq!(FORMAT_VERSION, 25);
+    fn the_current_format_version_is_twenty_six() {
+        assert_eq!(FORMAT_VERSION, 26);
         let mut old = Project::new("x");
-        old.format_version = 24;
+        old.format_version = 25;
         migrate(&mut old);
-        assert_eq!(old.format_version, 25);
+        assert_eq!(old.format_version, 26);
     }
 
     /// A version 23 project file opens in this build and becomes the current version; its sheets get the default wire weight and still show their wire notes.
@@ -1010,10 +1010,10 @@ mod tests {
         std::fs::remove_dir_all(path.parent().unwrap()).ok();
     }
 
-    /// A version 24 project file opens in this build and becomes version 25; wires stay solid at the sheet's weight, outlines keep their weight and the text font has no fixed pen.
-    /// 形式24のプロジェクトファイルはこのビルドで開け、形式25になる。配線は実線・シートの太さのまま、外形の太さも変わらず、書体のペンの太さは未設定になる。
+    /// A version 24 project file opens in this build and becomes the current version; wires stay solid at the sheet's weight, outlines keep their weight and the text font has no fixed pen.
+    /// 形式24のプロジェクトファイルはこのビルドで開け、現行の形式になる。配線は実線・シートの太さのまま、外形の太さも変わらず、書体のペンの太さは未設定になる。
     #[test]
-    fn a_version_24_file_opens_as_version_25() {
+    fn a_version_24_file_opens_as_the_current_version() {
         let mut project = Project::new("old");
         project.format_version = 24;
         let wire = Entity::Wire(Wire {
@@ -1039,7 +1039,7 @@ mod tests {
         }
         std::fs::write(&path, text).unwrap();
         let loaded = load_project(&path).unwrap();
-        assert_eq!(loaded.format_version, 25);
+        assert_eq!(loaded.format_version, FORMAT_VERSION);
         let sheet = &loaded.sheets[0];
         let Entity::Wire(w) = &sheet.entities[&id] else { panic!("配線が残ること") };
         assert_eq!((w.dashed, w.weight_mm), (false, None));

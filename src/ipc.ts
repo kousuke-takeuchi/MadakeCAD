@@ -380,6 +380,8 @@ export interface Sheet {
   symbol_weight_mm?: number | null;
   /** 配線を鮮やかな色 (純色) で描く。色名は変えない。 */
   vivid_wire_colors?: boolean;
+  /** 線番 (配線のネット名・番号の文字) を描かない。 */
+  hide_wire_numbers?: boolean;
   /**
    * 整えバリアントの複製なら、その元シートのid (madake-coreの`Sheet::variant_of`)。
    *
@@ -475,6 +477,7 @@ export type Command =
       hide_notes: boolean;
       symbol_weight_mm?: number | null;
       vivid_colors?: boolean;
+      hide_numbers?: boolean;
     }
   /**
    * シートの用紙サイズ・向きの変更 (G15)。既存エンティティの座標はそのまま

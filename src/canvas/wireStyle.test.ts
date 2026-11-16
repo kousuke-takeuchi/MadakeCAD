@@ -2,7 +2,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { Sheet } from "../ipc";
-import { junctionDotRMm } from "./renderer";
+import { junctionDotRMm, renderSheet } from "./renderer";
+import { Viewport } from "./viewport";
 import { DEFAULT_WIRE_WEIGHT_MM, hidesWireNotes, symbolWeightMm, vividWireColor, vividWireColorScreen, wireWeightMm, wireWeightOf } from "./wireStyle";
 
 const sheet = (extra: Record<string, unknown>): Sheet => ({ entities: {}, ...extra }) as unknown as Sheet;
@@ -81,6 +82,45 @@ describe("vivid colours on the dark canvas", () => {
     expect(vividWireColorScreen("pink")).toBe("#ff00ff");
     expect(vividWireColorScreen("red")).toBe("#ff0000");
     expect(vividWireColorScreen("black")).toBeNull();
+  });
+});
+
+describe("hidden wire numbers", () => {
+  // ja: 線番を描かないシートは、キャンバスでも線番の文字を1つも描かない。設定が無ければ描く
+  it("draws no wire number on a sheet that hides them", () => {
+    const texts = (hide: boolean): string[] => {
+      const seen: string[] = [];
+      const ctx = new Proxy({ canvas: { width: 400, height: 300 } } as Record<string, unknown>, {
+        get(target, key) {
+          if (key in target) return target[key as string];
+          if (key === "fillText") return (t: string) => seen.push(t);
+          if (key === "measureText") return () => ({ width: 10 });
+          return () => undefined;
+        },
+        set(target, key, value) {
+          target[key as string] = value;
+          return true;
+        },
+      }) as unknown as CanvasRenderingContext2D;
+      const s = {
+        id: "s1",
+        name: "S",
+        size: "A3",
+        orientation: "Landscape",
+        zone_cols: 4,
+        zone_rows: 6,
+        title_block: {},
+        revisions: [],
+        hide_wire_numbers: hide,
+        entities: {
+          w1: { kind: "wire", id: "w1", points: [{ x: 50, y: 60 }, { x: 90, y: 60 }], color: "", sq: 0, length_m: null, part_no: null, net: "BUS_L" },
+        },
+      } as unknown as Sheet;
+      renderSheet(ctx, s, [], new Viewport(), { selection: new Set(), cursor: null, hidden: new Set(["frame", "grid"]) as never });
+      return seen;
+    };
+    expect(texts(false)).toContain("BUS_L");
+    expect(texts(true)).not.toContain("BUS_L");
   });
 });
 

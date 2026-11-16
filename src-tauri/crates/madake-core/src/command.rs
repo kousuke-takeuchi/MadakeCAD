@@ -62,6 +62,9 @@ pub enum Command {
         symbol_weight_mm: Option<f64>,
         #[serde(default)]
         vivid_colors: bool,
+        /// true なら線番 (配線のネット名・番号の文字) を描かない。
+        #[serde(default)]
+        hide_numbers: bool,
     },
     /// シートの用紙サイズ・向きの変更 (G15)。既存エンティティの座標はそのまま
     /// (動かない・消えない)。ゾーン分割 (`zone_cols`/`zone_rows`) も**変えない**
@@ -758,7 +761,7 @@ impl Engine {
                     }],
                 ))
             }
-            Command::SetSheetWireStyle { sheet_id, weight_mm, hide_notes, symbol_weight_mm, vivid_colors } => {
+            Command::SetSheetWireStyle { sheet_id, weight_mm, hide_notes, symbol_weight_mm, vivid_colors, hide_numbers } => {
                 for (what, value) in [("wire weight", weight_mm), ("symbol weight", symbol_weight_mm)] {
                     if let Some(w) = value {
                         if !w.is_finite()
@@ -783,6 +786,7 @@ impl Engine {
                 sheet.hide_wire_notes = *hide_notes;
                 sheet.symbol_weight_mm = *symbol_weight_mm;
                 sheet.vivid_wire_colors = *vivid_colors;
+                let old_numbers = std::mem::replace(&mut sheet.hide_wire_numbers, *hide_numbers);
                 let meta = sheet_meta(sheet);
                 Ok((
                     vec![PatchOp::SheetMetaUpdated { sheet: meta }],
@@ -792,6 +796,7 @@ impl Engine {
                         hide_notes: old_hide,
                         symbol_weight_mm: old_symbol,
                         vivid_colors: old_vivid,
+                        hide_numbers: old_numbers,
                     }],
                 ))
             }
@@ -5365,7 +5370,7 @@ mod tests {
         assert_eq!(engine.project().sheets[0].wire_weight_mm, None);
         assert!((engine.project().sheets[0].wire_weight_mm() - 0.35).abs() < 1e-9, "既定は0.35mm");
         engine
-            .execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(0.7), hide_notes: true, symbol_weight_mm: None, vivid_colors: false })
+            .execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(0.7), hide_notes: true, symbol_weight_mm: None, vivid_colors: false, hide_numbers: false })
             .unwrap();
         let sheet = &engine.project().sheets[0];
         assert_eq!((sheet.wire_weight_mm, sheet.hide_wire_notes), (Some(0.7), true));
@@ -5382,13 +5387,13 @@ mod tests {
         let (mut engine, sheet_id) = test_engine();
         for bad in [0.0, 0.1, 1.5, -0.35, f64::NAN, f64::INFINITY] {
             let err = engine
-                .execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(bad), hide_notes: false, symbol_weight_mm: None, vivid_colors: false })
+                .execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(bad), hide_notes: false, symbol_weight_mm: None, vivid_colors: false, hide_numbers: false })
                 .expect_err("範囲外は断る");
             assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("wire weight")), "{bad}: {err:?}");
         }
         assert_eq!(engine.project().sheets[0].wire_weight_mm, None, "書き換わらない");
         for ok in [0.18, 1.0] {
-            engine.execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(ok), hide_notes: false, symbol_weight_mm: None, vivid_colors: false }).unwrap();
+            engine.execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(ok), hide_notes: false, symbol_weight_mm: None, vivid_colors: false, hide_numbers: false }).unwrap();
         }
     }
 
@@ -5399,7 +5404,7 @@ mod tests {
         let (mut engine, sheet_id) = test_engine();
         let json = serde_json::to_string(engine.project()).unwrap();
         assert!(!json.contains("wire_weight_mm") && !json.contains("hide_wire_notes"), "{json}");
-        engine.execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(0.5), hide_notes: true, symbol_weight_mm: None, vivid_colors: false }).unwrap();
+        engine.execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(0.5), hide_notes: true, symbol_weight_mm: None, vivid_colors: false, hide_numbers: false }).unwrap();
         let json = serde_json::to_string(engine.project()).unwrap();
         assert!(json.contains("\"wire_weight_mm\":0.5") && json.contains("\"hide_wire_notes\":true"), "{json}");
     }
@@ -5425,7 +5430,7 @@ mod tests {
     fn set_sheet_wire_style_stores_outline_weight_and_vivid_colours() {
         let (mut engine, sheet_id) = test_engine();
         engine
-            .execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(1.0), hide_notes: true, symbol_weight_mm: Some(0.9), vivid_colors: true })
+            .execute(Command::SetSheetWireStyle { sheet_id, weight_mm: Some(1.0), hide_notes: true, symbol_weight_mm: Some(0.9), vivid_colors: true, hide_numbers: false })
             .unwrap();
         let sheet = &engine.project().sheets[0];
         assert_eq!((sheet.symbol_weight_mm, sheet.vivid_wire_colors), (Some(0.9), true));
@@ -5435,7 +5440,7 @@ mod tests {
         assert_eq!((sheet.wire_weight_mm, sheet.hide_wire_notes, sheet.symbol_weight_mm, sheet.vivid_wire_colors), (None, false, None, false));
         assert!((sheet.symbol_weight_mm() - 0.3).abs() < 1e-9, "既定は0.3mm");
         let err = engine
-            .execute(Command::SetSheetWireStyle { sheet_id, weight_mm: None, hide_notes: false, symbol_weight_mm: Some(3.0), vivid_colors: false })
+            .execute(Command::SetSheetWireStyle { sheet_id, weight_mm: None, hide_notes: false, symbol_weight_mm: Some(3.0), vivid_colors: false, hide_numbers: false })
             .expect_err("範囲外の外形の太さは断る");
         assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("symbol weight")), "{err:?}");
     }
@@ -5545,5 +5550,20 @@ mod tests {
         assert!(matches!(&err, CoreError::InvalidCommand(m) if m.contains("text spacing")), "{err:?}");
         engine.execute(Command::AddEntity { sheet_id, entity: note(Some(1.2)) }).unwrap();
         engine.execute(Command::AddEntity { sheet_id, entity: note(None) }).unwrap();
+    }
+
+    /// The sheet wire style also stores the "hide wire numbers" switch, and undo puts it back.
+    /// シートの配線の描き方は「線番を描かない」も保存し、元に戻すと前の値に戻る。
+    #[test]
+    fn set_sheet_wire_style_stores_hidden_wire_numbers() {
+        let (mut engine, sheet_id) = test_engine();
+        engine
+            .execute(Command::SetSheetWireStyle { sheet_id, weight_mm: None, hide_notes: false, symbol_weight_mm: None, vivid_colors: false, hide_numbers: true })
+            .unwrap();
+        assert!(engine.project().sheets[0].hide_wire_numbers);
+        assert!(serde_json::to_string(engine.project()).unwrap().contains("\"hide_wire_numbers\":true"));
+        engine.undo().unwrap();
+        assert!(!engine.project().sheets[0].hide_wire_numbers);
+        assert!(!serde_json::to_string(engine.project()).unwrap().contains("hide_wire_numbers"));
     }
 }

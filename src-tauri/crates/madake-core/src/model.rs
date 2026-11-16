@@ -74,7 +74,8 @@ pub type SheetId = Uuid;
 ///   ([`Sheet::vivid_wire_colors`])、配線ごとの破線と太さ ([`Wire::dashed`] / [`Wire::weight_mm`])、図形の線の矢印
 ///   ([`Shape::arrow_end`])、書体のペンの太さ ([`TextFont::pen_mm`])、ブロックの属性 `block_leads`、シンボルの属性
 ///   `caption_layout`。形式24のビルドは版番号で断る。使っていないファイルは版番号以外これまでと同じ
-pub const FORMAT_VERSION: u32 = 25;
+/// - v26: シートの線番を描かない設定 ([`Sheet::hide_wire_numbers`])。形式25のビルドは版番号で断る。使っていないファイルは版番号以外これまでと同じ
+pub const FORMAT_VERSION: u32 = 26;
 
 fn is_false(b: &bool) -> bool {
     !*b
@@ -329,6 +330,9 @@ pub struct Sheet {
     /// 配線を鮮やかな色 (純色) で描く。色名は変えない (品番の引き当ては同じ)。既定は紙で見やすい落ち着いた色。
     #[serde(default, skip_serializing_if = "is_false")]
     pub vivid_wire_colors: bool,
+    /// 線番 (配線に付けたネット名・番号の文字) を描かない。ネット名はデータに残る。信号名を注記で書く図面で使う。
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub hide_wire_numbers: bool,
     /// 整えバリアントの複製なら、その元シートのid ([`crate::variants`])。
     ///
     /// 比較のために一時的に増えるシートで、比較が終われば消える。**図面全体を見渡す
@@ -371,6 +375,7 @@ impl Sheet {
             hide_wire_notes: false,
             symbol_weight_mm: None,
             vivid_wire_colors: false,
+            hide_wire_numbers: false,
             variant_of: None,
             entities: BTreeMap::new(),
         }

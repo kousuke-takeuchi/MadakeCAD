@@ -915,6 +915,8 @@ export function drawAgentOverlay(
  * (ネットごとに最長線分の中点、横線は上・縦線は左へ2.5mm)。Rust側svg.rsと同一ルール。
  */
 function drawWireNumbers(ctx: CanvasRenderingContext2D, vp: Viewport, sheet: Sheet) {
+  // シートが線番を描かない設定なら何も描かない (svg.rs と同じ)
+  if (sheet.hide_wire_numbers) return;
   const labels = wireNumberLabels(sheet);
   if (labels.length === 0) return;
   ctx.fillStyle = theme.wireNumber;
