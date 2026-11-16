@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3489仕様項目**。
+全6領域・**3502仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -28,6 +28,19 @@
 - 2つの部品のピンにつながるラベルは、それだけで1つの単位になる。 <sub>`a_label_between_two_symbols_is_its_own_unit`</sub>
 - 部品から3mm以内の注記は部品と一緒に動き、遠い注記はどの単位にも入らない。 <sub>`nearby_notes_join_their_part`</sub>
 - 範囲外の設定は、項目名を含むメッセージで断られる。 <sub>`bad_options_are_refused`</sub>
+- 3mmしか離れていない2つの部品は通り道の幅以上に離され、つながり方は変わらない。 <sub>`squeezed_parts_get_a_channel_and_keep_their_wiring`</sub>
+- 部品の左右・上下の並び順は変わらない。 <sub>`order_is_kept_in_both_directions`</sub>
+- 同じ列で原点の差が2.5mmの部品は、同じxにそろう。 <sub>`nearly_aligned_parts_line_up`</sub>
+- 電源マーク・タグのラベル・近くの注記は、部品と一緒に動く。 <sub>`satellites_move_with_their_part`</sub>
+- 2つの部品を囲む枠は、部品の間の空きに合わせて伸びる。 <sub>`an_enclosure_stretches_with_its_contents`</sub>
+- 並べた図面が図枠に収まらないときは計画を作らず、理由に大きさを書く。 <sub>`a_drawing_that_would_not_fit_is_refused`</sub>
+- 引けないかたまりは新しい名前のラベルでつながり、ピンのネットの分け方は変わらない。 <sub>`an_unroutable_cluster_is_joined_by_labels`</sub>
+- 代わりの名前はプロジェクトで使われている名前を避けるので、関係ないネットがつながることはない。 <sub>`fallback_names_never_join_unrelated_nets`</sub>
+- ケーブルのあるシートは断られ、計画は作られない。 <sub>`a_sheet_with_a_cable_is_refused`</sub>
+- 1つの部品から出て先が浮いている線は、形を変えずに部品と一緒に動く。 <sub>`a_free_stub_moves_with_its_part`</sub>
+- 配線と注記だけのシートでは何も変わらない。 <sub>`a_sheet_without_symbols_changes_nothing`</sub>
+- 2.5mmグリッドから外れた部品も2.5mm刻みで動き、ずれを保ったまま接続も保つ。 <sub>`off_grid_symbols_keep_their_offset_and_stay_connected`</sub>
+- 並べ直した後のシートをもう一度並べ直しても、それ以上は動かない。 <sub>`arranging_twice_does_not_move_more`</sub>
 
 ### block
 

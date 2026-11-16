@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3489 specification clauses** across 6 areas.
+**3502 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -28,6 +28,19 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A label wired to pins of two different parts is its own unit. <sub>`a_label_between_two_symbols_is_its_own_unit`</sub>
 - A note within 3 mm of a part moves with it; a note far away belongs to no unit. <sub>`nearby_notes_join_their_part`</sub>
 - Out-of-range options are refused with a message naming the field. <sub>`bad_options_are_refused`</sub>
+- Two parts squeezed 3 mm apart are pushed to at least the channel width and stay wired the same way. <sub>`squeezed_parts_get_a_channel_and_keep_their_wiring`</sub>
+- Parts keep their left-to-right and top-to-bottom order. <sub>`order_is_kept_in_both_directions`</sub>
+- Parts in one column whose origins differ by 2.5 mm end on the same x. <sub>`nearly_aligned_parts_line_up`</sub>
+- A power mark, a tag label and a nearby note move together with their part. <sub>`satellites_move_with_their_part`</sub>
+- An enclosure rectangle around two parts stretches with the gap between them. <sub>`an_enclosure_stretches_with_its_contents`</sub>
+- When the arranged drawing would not fit in the frame, nothing is planned and the reason gives the size. <sub>`a_drawing_that_would_not_fit_is_refused`</sub>
+- A cluster that cannot be routed is connected by labels with a fresh name, and pins still share the same nets. <sub>`an_unroutable_cluster_is_joined_by_labels`</sub>
+- Fallback names skip names already used in the project, so unrelated nets never join. <sub>`fallback_names_never_join_unrelated_nets`</sub>
+- A sheet with a cable is refused and nothing is planned. <sub>`a_sheet_with_a_cable_is_refused`</sub>
+- A wire stub with a free end on one part moves with that part unchanged in shape. <sub>`a_free_stub_moves_with_its_part`</sub>
+- A sheet with only wires and notes changes nothing. <sub>`a_sheet_without_symbols_changes_nothing`</sub>
+- Parts off the 2.5 mm grid move in 2.5 mm steps, keep their offset and stay connected. <sub>`off_grid_symbols_keep_their_offset_and_stay_connected`</sub>
+- Arranging an already arranged sheet moves nothing more. <sub>`arranging_twice_does_not_move_more`</sub>
 
 ### block
 
