@@ -513,6 +513,8 @@ pub struct ArrangePlan {
     pub routed: Vec<String>,
     /// ラベルでつないだかたまり (ネット名, ラベル名)。
     pub labelled: Vec<(String, String)>,
+    /// 引けずに、元の配線の形のまま伸び縮みさせたネット (重複なし、名前順)。
+    pub kept_shape: Vec<String>,
     pub size_before: (f64, f64),
     pub size_after: (f64, f64),
     /// 計画を当てた後のシート (数値を測るための写し)。
@@ -1080,20 +1082,25 @@ fn seg_dist(p: Point, a: Point, b: Point) -> f64 {
 
 /// 短い線 (点列) が、他の線・点 (ピン・ラベル・ジャンクション) に触れるか。始点 (自分のピン) は数えない。
 fn stub_hits(pts: &[Point], lines: &[Vec<Point>], spots: &[Point]) -> bool {
+    path_hits(pts, lines, spots, &[pts[0]])
+}
+
+/// 点列が、他の線・点に触れるか。`exempt`の点 (自分のピン・自分の他の線との継ぎ目) で触れるのは数えない。
+fn path_hits(pts: &[Point], lines: &[Vec<Point>], spots: &[Point], exempt: &[Point]) -> bool {
     const TOUCH: f64 = 0.3;
-    let start = pts[0];
+    let free = |q: Point| !exempt.iter().any(|e| near(*e, q));
     let segs: Vec<(Point, Point)> = pts.windows(2).map(|w| (w[0], w[1])).collect();
     let on_me = |q: Point| segs.iter().any(|&(a, b)| seg_dist(q, a, b) < TOUCH);
-    if spots.iter().any(|&q| !near(q, start) && on_me(q)) {
+    if spots.iter().any(|&q| free(q) && on_me(q)) {
         return true;
     }
     for line in lines {
         // 他の線の頂点が自分に乗る・自分の頂点が他の線に乗る・線分どうしが交わる
-        if line.iter().any(|&q| !near(q, start) && on_me(q)) {
+        if line.iter().any(|&q| free(q) && on_me(q)) {
             return true;
         }
         for w in line.windows(2) {
-            if pts.iter().any(|&q| !near(q, start) && seg_dist(q, w[0], w[1]) < TOUCH) {
+            if pts.iter().any(|&q| free(q) && seg_dist(q, w[0], w[1]) < TOUCH) {
                 return true;
             }
             if segs.iter().any(|&(a, b)| crosses(a, b, w[0], w[1])) {
@@ -1117,6 +1124,99 @@ fn crosses(a: Point, b: Point, c: Point, d: Point) -> bool {
         ((c.x.min(d.x), c.x.max(d.x), c.y), (a.x, a.y.min(b.y), a.y.max(b.y)))
     };
     vx > hx0 + 1e-6 && vx < hx1 - 1e-6 && hy > vy0 + 1e-6 && hy < vy1 - 1e-6
+}
+
+/// 引けなかったかたまりの元の配線を、形を保ったまま伸び縮みさせる。各点を列・行の写像で写し、端子に
+/// あった端は端子の新しい位置へ合わせ、隣の点を同じ向きにずらして直角を保つ (2点の線が斜めになるなら中ほどで折る)。
+/// 他の線・ピン・ラベルに触れるなら None。
+fn stretch_wires(
+    sheet: &Sheet,
+    wires: &[EntityId],
+    junctions: &[EntityId],
+    lay: &Layout,
+    trip: &[(Point, Point, Option<Dir>)],
+    lines: &[Vec<Point>],
+    spots: &[Point],
+    bodies: &[(EntityId, Bounds)],
+    own: &BTreeSet<EntityId>,
+) -> Option<(Vec<Entity>, Vec<Vec<Point>>)> {
+    let map = |p: Point| Point::new(rnd(lay.wx.map(p.x)), rnd(lay.wy.map(p.y)));
+    let to_term = |old: Point| trip.iter().find(|t| near(t.0, old)).map(|t| t.1);
+    let mut out = Vec::new();
+    let mut paths: Vec<Vec<Point>> = Vec::new();
+    for id in wires {
+        let Some(Entity::Wire(w)) = sheet.entities.get(id) else { return None };
+        if w.points.len() < 2 {
+            return None;
+        }
+        let mut pts: Vec<Point> = w.points.iter().map(|p| map(*p)).collect();
+        let n = pts.len();
+        for (end, next) in [(0usize, 1usize), (n - 1, n - 2)] {
+            let Some(target) = to_term(w.points[end]) else { continue };
+            let horizontal = (w.points[end].y - w.points[next].y).abs() < 1e-6;
+            let vertical = (w.points[end].x - w.points[next].x).abs() < 1e-6;
+            pts[end] = target;
+            if n > 2 {
+                if horizontal {
+                    pts[next].y = target.y;
+                } else if vertical {
+                    pts[next].x = target.x;
+                }
+            }
+        }
+        // 2点の線が斜めになったら、中ほどで折る
+        if pts.len() == 2 && (pts[0].x - pts[1].x).abs() > 1e-6 && (pts[0].y - pts[1].y).abs() > 1e-6 {
+            let (a, b) = (pts[0], pts[1]);
+            let horizontal = (w.points[0].y - w.points[1].y).abs() < 1e-6;
+            pts = if horizontal {
+                let mx = rnd((a.x + b.x) / 2.0);
+                vec![a, Point::new(mx, a.y), Point::new(mx, b.y), b]
+            } else {
+                let my = rnd((a.y + b.y) / 2.0);
+                vec![a, Point::new(a.x, my), Point::new(b.x, my), b]
+            };
+        }
+        // 3点以上でも斜めの線分が残るなら諦める
+        if pts.windows(2).any(|s| (s[0].x - s[1].x).abs() > 1e-6 && (s[0].y - s[1].y).abs() > 1e-6) {
+            return None;
+        }
+        let pts = simplify(pts);
+        if pts.len() < 2 {
+            return None;
+        }
+        out.push(Entity::Wire(Wire { id: uuid::Uuid::new_v4(), points: pts.clone(), ..w.clone() }));
+        paths.push(pts);
+    }
+    // 自分の線どうしの継ぎ目・端子は触れてよい
+    let mut exempt: Vec<Point> = trip.iter().map(|t| t.1).collect();
+    for p in &paths {
+        exempt.push(p[0]);
+        exempt.push(*p.last().unwrap());
+    }
+    for id in junctions {
+        let Some(Entity::Junction(j)) = sheet.entities.get(id) else { return None };
+        let at = map(j.at);
+        exempt.push(at);
+        out.push(Entity::Junction(crate::model::Junction { id: uuid::Uuid::new_v4(), at }));
+    }
+    if paths.iter().any(|p| path_hits(p, lines, spots, &exempt)) {
+        return None;
+    }
+    // 端子の部品以外の部品の外形を横切らない
+    let through = |b: &Bounds, a: Point, c: Point| -> bool {
+        let m = 0.3;
+        let (x0, y0, x1, y1) = (b.0 + m, b.1 + m, b.2 - m, b.3 - m);
+        if x0 >= x1 || y0 >= y1 {
+            return false;
+        }
+        let (sx0, sx1) = (a.x.min(c.x), a.x.max(c.x));
+        let (sy0, sy1) = (a.y.min(c.y), a.y.max(c.y));
+        sx1 > x0 && sx0 < x1 && sy1 > y0 && sy0 < y1
+    };
+    if paths.iter().any(|p| p.windows(2).any(|w| bodies.iter().any(|(id, b)| !own.contains(id) && through(b, w[0], w[1])))) {
+        return None;
+    }
+    Some((out, paths))
 }
 
 /// ラベルでつなぐ短い線とラベル。ピンの向きへまっすぐ 2.5・5・7.5 mm の線を順に試し、他の線・ピン・ラベルに
@@ -1327,6 +1427,26 @@ fn unit_stays(sheet: &Sheet, wires: &[EntityId], junctions: &[EntityId], owns: &
     wires.iter().chain(junctions).all(|id| sheet.entities.get(id).map_or(true, |e| shape_points(e).iter().all(fixed)))
 }
 
+/// 接続点として描かれた図形の小さな円 (半径1mm以下): (id, 中心)。
+fn dot_shapes(sheet: &Sheet) -> Vec<(EntityId, Point)> {
+    sheet
+        .entities
+        .values()
+        .filter_map(|e| match e {
+            Entity::Shape(sh) if sh.shape == crate::model::ShapeKind::Circle && sh.points.len() >= 2 => {
+                let (c, r) = (sh.points[0], sh.points[1]);
+                ((c.x - r.x).hypot(c.y - r.y) <= 1.0).then_some((sh.id, c))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// 点がどれかの配線の上にあるか。
+fn on_any_wire(sheet: &Sheet, p: Point) -> bool {
+    sheet.entities.values().any(|e| matches!(e, Entity::Wire(w) if on_wire(w, &p)))
+}
+
 /// 計画をシートの写しに当てる (消す → 動かす → 置き換える → 足す)。
 fn apply_plan(sheet: &Sheet, plan: &ArrangePlan) -> Sheet {
     let mut s = sheet.clone();
@@ -1464,6 +1584,13 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
         moved.entities.values().filter_map(|e| if let Entity::Junction(j) = e { Some(j.at) } else { None }).collect();
     let mut add: Vec<Entity> = Vec::new();
     let mut stubs: Vec<Stub> = Vec::new();
+    // 元の形で伸び縮みさせる配線が横切ってはいけない部品の外形 (動かした後)
+    let bodies: Vec<(EntityId, Bounds)> = moved
+        .entities
+        .values()
+        .filter(|e| matches!(e, Entity::Symbol(_)))
+        .filter_map(|e| entity_bounds(e, &idx).map(|r| (e.id(), rect_tuple(&r))))
+        .collect();
     // 短い線が避けるもの: 動かした後の配線・ピン・ラベル・ジャンクション (置いた短い線も足していく)
     let mut stub_lines: Vec<Vec<Point>> = fixed_lines.clone();
     let mut stub_spots: Vec<Point> = pin_points(&moved, defs)
@@ -1522,10 +1649,18 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
         for (&i, r) in live.iter().zip(results) {
             match r {
                 Ok(r) => outcome[i] = Some(r),
-                Err(_) => {
+                Err(why) => {
                     new_failed = true;
                     let u = &route[i];
                     let trip = &trips[i];
+                    // まず元の形のまま伸び縮みさせる。触れるならラベルでつなぐ
+                    let own: BTreeSet<EntityId> =
+                        trip.iter().flat_map(|t| pins.iter().filter(move |q| near(q.pos, t.0)).map(|q| q.entity)).collect();
+                    if let Some((es, paths)) = stretch_wires(sheet, &u.wires, &u.junctions, &lay, trip, &stub_lines, &stub_spots, &bodies, &own) {
+                        stub_lines.extend(paths);
+                        stub_parts.insert(i, (es, Vec::new()));
+                        continue;
+                    }
                     let old_terms: Vec<(Point, Option<Dir>)> = trip.iter().map(|t| (t.0, t.2)).collect();
                     let name = fallback_name(sheet, &idx, &pins, &u.wires, &old_terms, &pointed, &mut taken);
                     let mut attrs = u.template.clone();
@@ -1543,10 +1678,16 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
         }
     }
     let mut routed: BTreeSet<String> = BTreeSet::new();
+    let mut kept_shape: BTreeSet<String> = BTreeSet::new();
     for (i, u) in route.iter().enumerate() {
         remove.extend(u.wires.iter().chain(&u.junctions).copied());
         if let Some((es, ss)) = stub_parts.remove(&i) {
-            let name = names.remove(&i).expect("名前は引けなかった単位ごとに決めてある");
+            let Some(name) = names.remove(&i) else {
+                // 元の形のまま伸び縮みさせた配線
+                add.extend(es);
+                kept_shape.insert(u.net.clone());
+                continue;
+            };
             if name.fresh {
                 fresh.insert(name.name.clone());
             }
@@ -1603,12 +1744,32 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
         rows: lay.rows,
         routed: routed.into_iter().collect(),
         labelled,
+        kept_shape: kept_shape.into_iter().collect(),
         size_before: size_of(before),
         ..Default::default()
     };
 
     // 検算: 計画を写しに当てて、接続と名前が変わっていないこと、引いた後も図枠に収まることを確かめる
-    let after = apply_plan(sheet, &plan);
+    // 配線の上に図形の小さな円で描いた接続点 (ジャンクションの代わり) は、配線が動いて線から外れたら消す
+    let mut after = apply_plan(sheet, &plan);
+    let lost: Vec<EntityId> = dot_shapes(sheet)
+        .into_iter()
+        .filter(|(_, c)| on_any_wire(sheet, *c))
+        .filter(|(id, _)| match after.entities.get(id) {
+            Some(Entity::Shape(sh)) => sh.points.first().is_some_and(|c| !on_any_wire(&after, *c)),
+            _ => false,
+        })
+        .map(|(id, _)| id)
+        .collect();
+    if !lost.is_empty() {
+        plan.updates.retain(|e| !lost.contains(&e.id()));
+        for (ids, _, _) in plan.moves.iter_mut() {
+            ids.retain(|id| !lost.contains(id));
+        }
+        plan.moves.retain(|m| !m.0.is_empty());
+        plan.remove.extend(lost.iter().copied());
+        after = apply_plan(sheet, &plan);
+    }
     verify_after(sheet, &after, defs, &fresh, &stubs)?;
     let b = content_bounds(&after, &idx);
     if !fits(b, ctx, hit_title) {
