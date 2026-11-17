@@ -106,7 +106,7 @@ import { symbolWeightMm, vividWireColorScreen, WIRE_DASH, wireWeightMm, wireWeig
 import { captionLayoutOf, type CaptionLine } from "./caption";
 import { arrowHead } from "./shapes";
 import { textSpacingOf, textStretchOf, withTextSpacing, withTextStretch } from "./strokeFont";
-import { TAG_FONT, netTag } from "./netTag";
+import { TAG_FONT, netTag, tagDest, tagDir } from "./netTag";
 import { XREF_FONT, deviceXrefAt, xrefTextAt } from "./xref";
 import { annotationScale } from "./annotationText";
 import {
@@ -1640,7 +1640,10 @@ export function renderSheet(
     } else if (e.kind === "net_label") {
       // 方向付きタグ (G3/G19)。attrs.tagがある時だけ旗の枠で囲む (Rust側 net_tag.rs と同形)
       const labelFont = TAG_FONT * annotationScale(sheet);
-      const tag = netTag(e, labelFont);
+      // 脇に添える文字: 相手のいるラベルのXRefテキスト (自分の tag_dest はそれより優先)
+      const tagged = tagDir(e) !== null;
+      const xref = opts.xrefs?.get(e.id) ?? (tagged ? tagDest(e) : null);
+      const tag = netTag(e, labelFont, sheet.xref_style ?? "zone", xref);
       ctx.fillStyle = theme.annotation;
       setDrawingFont(ctx, labelFont, vp.scale, "monospace");
       ctx.textAlign = "left";
@@ -1656,14 +1659,26 @@ export function renderSheet(
         ctx.closePath();
         ctx.stroke();
         const t = vp.toScreen(tag.textAt);
-        drawingText(ctx, e.name, t.x, t.y);
+        if (tag.bold) {
+          setDrawingFont(ctx, labelFont, vp.scale, "monospace", "bold ");
+          drawingText(ctx, e.name, t.x, t.y);
+          setDrawingFont(ctx, labelFont, vp.scale, "monospace");
+        } else {
+          drawingText(ctx, e.name, t.x, t.y);
+        }
+        if (tag.destAt && xref) {
+          const d = vp.toScreen(tag.destAt);
+          setDrawingFont(ctx, tag.destFont, vp.scale, "monospace");
+          drawingText(ctx, xref, d.x, d.y);
+          setDrawingFont(ctx, labelFont, vp.scale, "monospace");
+        }
       } else {
         const s = vp.toScreen(e.at);
         drawingText(ctx, e.name, s.x, s.y - 2);
       }
-      // シート間クロスリファレンス (IEC 61082-1)。相手のいるラベルだけ右脇に添える
-      const xref = opts.xrefs?.get(e.id);
-      if (xref) {
+      // シート間クロスリファレンス (IEC 61082-1)。相手のいるラベルだけ右脇に添える。
+      // 行き先を旗の中に書いたタグには、旗の外へは何も書かない
+      if (xref && !(tag && (tag.bold || tag.destAt))) {
         // タグ付きは旗の本体側の外へ逃がす (枠にも自分の配線にも重ねない)
         const at = vp.toScreen(tag ? tag.xrefAt : xrefTextAt(e, labelFont));
         ctx.fillStyle = theme.xref;

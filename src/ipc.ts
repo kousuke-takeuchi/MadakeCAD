@@ -358,6 +358,9 @@ export type Entity =
 /** シート種別。回路図 (既定) と2D盤レイアウト (M4 §8)。 */
 export type SheetKind = "schematic" | "panel";
 
+/** タグ付きネットラベルの行き先の書き方 (madake-coreの`XrefStyle`)。 */
+export type XrefStyle = "zone" | "sheet_name";
+
 export interface Sheet {
   id: string;
   name: string;
@@ -384,6 +387,8 @@ export interface Sheet {
   vivid_wire_colors?: boolean;
   /** 線番 (配線のネット名・番号の文字) を描かない。 */
   hide_wire_numbers?: boolean;
+  /** タグ付きネットラベルの行き先の書き方。未設定は "zone" (ゾーン住所を旗の外へ)。 */
+  xref_style?: XrefStyle;
   /**
    * 整えバリアントの複製なら、その元シートのid (madake-coreの`Sheet::variant_of`)。
    *
@@ -490,6 +495,8 @@ export type Command =
    * (動かない・消えない)。新しい用紙の外に出たエンティティはERC警告
    * (`erc.outside_paper`) で報告するだけで、動かしたり消したりしない。
    */
+  /** シートのタグの行き先の書き方 ("zone" は旗の外へゾーン住所、"sheet_name" は旗の中へ行き先のシート名)。 */
+  | { type: "set_sheet_xref_style"; sheet_id: string; style: XrefStyle }
   | { type: "set_sheet_paper"; sheet_id: string; size: PaperSize; orientation: Orientation }
   | { type: "add_entity"; sheet_id: string; entity: Entity }
   | { type: "update_entity"; sheet_id: string; entity: Entity }

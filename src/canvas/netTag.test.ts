@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { NetLabel } from "../ipc";
-import { TAG_FONT, TAG_TIP, netTag, tagDir } from "./netTag";
+import { TAG_FONT, TAG_TIP, netTag, tagDest, tagDir } from "./netTag";
 
 function label(name: string, tag?: string): NetLabel {
   return {
@@ -104,6 +104,62 @@ describe("netTag", () => {
   it("ignores an unknown tag value instead of breaking", () => {
     for (const value of ["up", "", "LEFT", "右"]) {
       expect(netTag(label("24V", value)), value).toBeNull();
+    }
+  });
+});
+
+function withAttrs(name: string, attrs: Record<string, string>): NetLabel {
+  return { id: "l1", at: { x: 100, y: 50 }, name, rotation: 0, attrs };
+}
+
+describe("netTag destination and flow", () => {
+  // ja: ゾーン住所の書き方では、行き先を渡しても旗も文字も変わらない
+  it("ignores a destination in the zone style", () => {
+    const plain = netTag(label("24V", "right"))!;
+    const given = netTag(label("24V", "right"), TAG_FONT, "zone", "Power")!;
+    expect(given).toEqual(plain);
+    expect(plain.bold).toBe(false);
+    expect(plain.destAt).toBeNull();
+  });
+
+  // ja: シート名の書き方では、旗が広がり、太字のネット名のあとに行き先が文字高0.8倍で、文字高1つぶんあけて入る
+  it("widens the flag for the destination in the sheet-name style", () => {
+    const nameOnly = netTag(label("24V", "right"), TAG_FONT, "sheet_name", null)!;
+    const both = netTag(label("24V", "right"), TAG_FONT, "sheet_name", "Power")!;
+    expect(nameOnly.bold && both.bold).toBe(true);
+    expect(nameOnly.destAt).toBeNull();
+    expect(both.destFont).toBeCloseTo(TAG_FONT * 0.8, 9);
+    expect(both.destAt!.x).toBeGreaterThan(both.textAt.x + TAG_FONT);
+    expect(both.destAt!.y).toBeCloseTo(both.textAt.y, 9);
+    expect(both.right - both.left).toBeGreaterThan(nameOnly.right - nameOnly.left);
+  });
+
+  // ja: 空白だけの行き先は無いものとして扱われ、tag_dest は前後の空白を落として読まれる
+  it("treats a blank destination as none and trims tag_dest", () => {
+    const blank = netTag(label("24V", "right"), TAG_FONT, "sheet_name", "  ")!;
+    expect(blank.destAt).toBeNull();
+    expect(blank.points).toEqual(netTag(label("24V", "right"))!.points);
+    expect(tagDest(withAttrs("X", { tag_dest: "  " }))).toBeNull();
+    expect(tagDest(withAttrs("X", { tag_dest: " Pump " }))).toBe("Pump");
+  });
+
+  // ja: tag_flow が out のとき、平らな辺はラベルの点にあり、先端は本体の遠い端にある
+  it("moves the point to the far end of the body when the flow is out", () => {
+    const right = netTag(withAttrs("24V", { tag: "right", tag_flow: "out" }))!;
+    expect(right.right).toBeCloseTo(100, 9);
+    expect(right.points[2].x).toBeCloseTo(right.left, 9);
+    expect(right.points[2].x).toBeLessThan(right.points[1].x);
+    const left = netTag(withAttrs("24V", { tag: "left", tag_flow: "out" }))!;
+    expect(left.left).toBeCloseTo(100, 9);
+    expect(left.points[2].x).toBeCloseTo(left.right, 9);
+    expect(left.xrefAt.x).toBeGreaterThan(left.right);
+  });
+
+  // ja: tag_flow が out 以外なら、今までの形のまま
+  it("keeps the old shape for any other flow value", () => {
+    const plain = netTag(label("24V", "right"))!;
+    for (const v of ["", "in", "OUT"]) {
+      expect(netTag(withAttrs("24V", { tag: "right", tag_flow: v }))).toEqual(plain);
     }
   });
 });

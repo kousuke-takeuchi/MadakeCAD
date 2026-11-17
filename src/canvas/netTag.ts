@@ -9,7 +9,7 @@
 // 文字高さはシートの注記文字高 (annotationText.ts) に従って伸縮し、余白・先端・
 // クロスリファレンスの逃がし量も同じ倍率で一緒に縮む。
 
-import type { NetLabel, Point, TextAnchor } from "../ipc";
+import type { NetLabel, Point, TextAnchor, XrefStyle } from "../ipc";
 import { textWidthMm } from "./dynamicSymbol";
 import { XREF_GAP } from "./xref";
 
@@ -25,6 +25,12 @@ export const TAG_WIDTH_SLACK = 1.1;
 export const TAG_TIP = 2.0;
 /** attrsでタグの向きを指定するキー。 */
 export const TAG_ATTR = "tag";
+/** attrsで行き先の文字を指定するキー (空なら自動)。 */
+export const DEST_ATTR = "tag_dest";
+/** attrsで旗の先端の置き方を指定するキー ("out" なら先端が本体の遠い端)。 */
+export const FLOW_ATTR = "tag_flow";
+/** 旗の中に書く行き先の文字高さの、ネット名に対する倍率。 */
+export const DEST_SCALE = 0.8;
 
 export type TagDir = "left" | "right";
 
@@ -43,6 +49,12 @@ export interface NetTag {
   xrefAt: Point;
   /** クロスリファレンスの寄せ方。左へ逃がすときは右揃え。 */
   xrefAnchor: TextAnchor;
+  /** ネット名を太字で描くか (行き先を旗の中に書く書き方のとき)。 */
+  bold: boolean;
+  /** 旗の中に書く行き先の左端のベースライン (書かないなら null)。 */
+  destAt: Point | null;
+  /** 行き先の文字高さ (mm)。 */
+  destFont: number;
 }
 
 /** ラベルのタグ向き。未指定・空・知らない値なら null (従来どおり文字だけ)。 */
@@ -51,55 +63,82 @@ export function tagDir(label: NetLabel): TagDir | null {
   return value === "left" || value === "right" ? value : null;
 }
 
+/** ラベルの行き先の自由な文字。空・空白だけなら null (自動の行き先を使う)。 */
+export function tagDest(label: NetLabel): string | null {
+  const value = label.attrs?.[DEST_ATTR]?.trim();
+  return value ? value : null;
+}
+
+/** 旗の先端を本体の遠い端へ置くか (attrs.tag_flow === "out")。 */
+export function tagFlowsOut(label: NetLabel): boolean {
+  return label.attrs?.[FLOW_ATTR]?.trim() === "out";
+}
+
 /**
  * ラベルのタグ形状。タグ指定の無いラベルは null。
  * `font` はネットラベル本文の文字高さ (mm。シートの注記文字高で決まる)。
+ * `style` が "sheet_name" ならネット名を太字にし、`dest` があれば名前のあとに文字高0.8倍で書いて旗を広げる
+ * (Rust側 net_tag_with と同一の数式)。
  */
-export function netTag(label: NetLabel, font: number = TAG_FONT): NetTag | null {
+export function netTag(
+  label: NetLabel,
+  font: number = TAG_FONT,
+  style: XrefStyle = "zone",
+  dest: string | null = null,
+): NetTag | null {
   const dir = tagDir(label);
   if (!dir) return null;
+  const out = tagFlowsOut(label);
   const scale = font / TAG_FONT;
   const pad = TAG_PAD * scale;
   const tip = TAG_TIP * scale;
   const gap = XREF_GAP * scale;
-  const bodyW = textWidthMm(label.name, font) * TAG_WIDTH_SLACK + pad * 2;
+  const inside = style === "sheet_name";
+  const destText = inside ? (dest?.trim() || null) : null;
+  const nameW = textWidthMm(label.name, font) * TAG_WIDTH_SLACK;
+  const destFont = font * DEST_SCALE;
+  const destGap = font;
+  const destW = destText ? textWidthMm(destText, destFont) * TAG_WIDTH_SLACK : 0;
+  const bodyW = nameW + (destText ? destGap + destW : 0) + pad * 2;
   const baseline = label.at.y - TAG_BASELINE_DY * scale;
   const top = baseline - font - pad;
   const bottom = baseline + pad;
   const cy = (top + bottom) / 2;
   const x0 = label.at.x;
-  if (dir === "right") {
-    // 先端が右 = 本体は基準点の左側。逃がしも左 (右揃え)
-    return {
-      dir,
-      points: [
-        { x: x0 - bodyW, y: top },
-        { x: x0, y: top },
-        { x: x0 + tip, y: cy },
-        { x: x0, y: bottom },
-        { x: x0 - bodyW, y: bottom },
-      ],
-      textAt: { x: x0 - bodyW + pad, y: baseline },
-      left: x0 - bodyW,
-      right: x0 + tip,
-      xrefAt: { x: x0 - bodyW - gap, y: baseline },
-      xrefAnchor: "end",
-    };
+  const bx0 = dir === "right" ? x0 - bodyW : x0;
+  const bx1 = dir === "right" ? x0 : x0 + bodyW;
+  let points: Point[];
+  let left: number;
+  let right: number;
+  if (dir === "right" && !out) {
+    points = [{ x: bx0, y: top }, { x: x0, y: top }, { x: x0 + tip, y: cy }, { x: x0, y: bottom }, { x: bx0, y: bottom }];
+    left = bx0;
+    right = x0 + tip;
+  } else if (dir === "left" && !out) {
+    points = [{ x: x0 - tip, y: cy }, { x: x0, y: top }, { x: bx1, y: top }, { x: bx1, y: bottom }, { x: x0, y: bottom }];
+    left = x0 - tip;
+    right = bx1;
+  } else if (dir === "right") {
+    points = [{ x: x0, y: top }, { x: bx0, y: top }, { x: bx0 - tip, y: cy }, { x: bx0, y: bottom }, { x: x0, y: bottom }];
+    left = bx0 - tip;
+    right = x0;
+  } else {
+    points = [{ x: x0, y: top }, { x: bx1, y: top }, { x: bx1 + tip, y: cy }, { x: bx1, y: bottom }, { x: x0, y: bottom }];
+    left = x0;
+    right = bx1 + tip;
   }
-  // 先端が左 = 本体は基準点の右側。逃がしも右 (左揃え)
+  const textX = dir === "right" ? bx0 + pad : x0 + pad;
   return {
     dir,
-    points: [
-      { x: x0 - tip, y: cy },
-      { x: x0, y: top },
-      { x: x0 + bodyW, y: top },
-      { x: x0 + bodyW, y: bottom },
-      { x: x0, y: bottom },
-    ],
-    textAt: { x: x0 + pad, y: baseline },
-    left: x0 - tip,
-    right: x0 + bodyW,
-    xrefAt: { x: x0 + bodyW + gap, y: baseline },
-    xrefAnchor: "start",
+    points,
+    textAt: { x: textX, y: baseline },
+    left,
+    right,
+    // 逃がしは本体側 (右向きは左へ右揃え、左向きは右へ左揃え)
+    xrefAt: dir === "right" ? { x: left - gap, y: baseline } : { x: right + gap, y: baseline },
+    xrefAnchor: dir === "right" ? "end" : "start",
+    bold: inside,
+    destAt: destText ? { x: textX + nameW + destGap, y: baseline } : null,
+    destFont,
   };
 }

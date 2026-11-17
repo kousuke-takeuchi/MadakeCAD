@@ -2,7 +2,7 @@
 // Rust側 madake-core/src/xref.rs と同一ルール。
 import { describe, expect, it } from "vitest";
 
-import type { Entity, Project, Sheet, SymbolInstance } from "../ipc";
+import type { Entity, NetLabel, Project, Sheet, SymbolInstance } from "../ipc";
 import {
   NET_LABEL_RISE,
   deviceXrefAddresses,
@@ -299,5 +299,49 @@ describe("G13 device cross-reference", () => {
     const at = deviceXrefAt(inst, bounds, 47, corner);
     expect(at.x).toBeCloseTo(bounds.max.x + 1.0, 9);
     expect(at.y).toBeCloseTo(40 - 4.5, 9);
+  });
+});
+
+function destProject(others: string[], style: "zone" | "sheet_name", extra: Record<string, string> = {}): Project {
+  const own = { ...(netLabel("own", "PUMP", 20, 20) as NetLabel & { kind: "net_label" }), attrs: { tag: "right", ...extra } };
+  const first = { ...sheet("s1", "Power", [own]), xref_style: style };
+  const rest = others.map((name, i) => sheet(`o${i}`, name, [netLabel(`far${i}`, "PUMP", 250, 70)]));
+  return { format_version: 1, name: "t", wire_parts: [], plc_assignments: [], sheets: [first, ...rest] } as unknown as Project;
+}
+
+describe("sheetXrefs for tagged labels", () => {
+  // ja: シート名の書き方では、タグ付きラベルの文字は他のシートの名前になる。2枚なら「・」でつなぎ、3枚以上は先頭2枚のあとに「他」
+  it("lists up to two sheet names then the other mark", () => {
+    const text = (others: string[]) => sheetXrefs(destProject(others, "sheet_name"), "s1").get("own");
+    expect(text(["Motor"])).toBe("Motor");
+    expect(text(["Motor", "Panel"])).toBe("Motor・Panel");
+    expect(text(["Motor", "Panel", "Aux"])).toBe("Motor・Panel他");
+    expect(text([])).toBeUndefined();
+  });
+
+  // ja: 同名ラベルを2つ持つシートは1回だけ並び、シート名が空ならシート番号が使われる
+  it("names a sheet once and falls back to the sheet number", () => {
+    const p = destProject(["Motor", ""], "sheet_name");
+    p.sheets[1].entities.extra = netLabel("extra", "PUMP", 300, 100);
+    expect(sheetXrefs(p, "s1").get("own")).toBe("Motor・3");
+  });
+
+  // ja: tag_dest は、どちらの書き方でも自動の行き先に代わって使われ、空白なら自動になる
+  it("lets tag_dest replace the automatic destination", () => {
+    for (const style of ["zone", "sheet_name"] as const) {
+      expect(sheetXrefs(destProject(["Motor"], style, { tag_dest: "Field" }), "s1").get("own")).toBe("Field");
+      expect(sheetXrefs(destProject([], style, { tag_dest: "Field" }), "s1").get("own")).toBe("Field");
+      const auto = style === "zone" ? "/2.B3" : "Motor";
+      expect(sheetXrefs(destProject(["Motor"], style, { tag_dest: " " }), "s1").get("own")).toBe(auto);
+    }
+  });
+
+  // ja: タグの無いラベルは、どちらの書き方でもゾーン住所のままで、tag_dest は無視される
+  it("keeps the zone address for an untagged label", () => {
+    for (const style of ["zone", "sheet_name"] as const) {
+      const p = destProject(["Motor"], style, { tag_dest: "Ignored" });
+      (p.sheets[0].entities.own as NetLabel).attrs = { tag_dest: "Ignored" };
+      expect(sheetXrefs(p, "s1").get("own")).toBe("/2.B3");
+    }
   });
 });

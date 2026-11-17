@@ -143,6 +143,20 @@ export function sheetXrefs(project: Project | null, sheetId: string): Map<string
     if (entity.kind !== "net_label") continue;
     const name = entity.name.trim();
     if (!name) continue;
+    // タグ付きは、自分の tag_dest > (シート名の書き方なら) 行き先のシート名 > ゾーン住所 (madake-core xref::sheet_xrefs と同じ)
+    const tag = entity.attrs?.tag?.trim();
+    if (tag === "left" || tag === "right") {
+      const own = entity.attrs?.tag_dest?.trim();
+      if (own) {
+        out.set(entity.id, own);
+        continue;
+      }
+      if (sheet.xref_style === "sheet_name") {
+        const names = destNamesFrom(sites, sheetId, name);
+        if (names) out.set(entity.id, names);
+        continue;
+      }
+    }
     const seen = new Set<string>();
     const addresses = (sites.get(name) ?? [])
       .filter((s) => s.sheet_id !== sheetId)
@@ -151,6 +165,28 @@ export function sheetXrefs(project: Project | null, sheetId: string): Map<string
     if (addresses.length) out.set(entity.id, addresses.join(XREF_SEPARATOR));
   }
   return out;
+}
+
+/** 行き先のシート名を並べる区切りと、3枚以上のときの印 (Rust側 xref.rs と同じ)。 */
+export const DEST_SEPARATOR = "・";
+export const DEST_MORE = "他";
+
+/**
+ * 同名ラベルを持つ他のシートの名前を、シート順に並べた行き先の文字。同じシートは1回、3枚以上は先頭2枚+「他」、
+ * シート名が空ならシート番号。相手が無ければnull。
+ */
+function destNamesFrom(sites: Map<string, NetSite[]>, sheetId: string, name: string): string | null {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const s of sites.get(name) ?? []) {
+    if (s.sheet_id === sheetId || seen.has(s.sheet_id)) continue;
+    seen.add(s.sheet_id);
+    names.push(s.sheet_name.trim() || String(s.sheet_no));
+  }
+  if (names.length === 0) return null;
+  if (names.length === 1) return names[0];
+  const head = `${names[0]}${DEST_SEPARATOR}${names[1]}`;
+  return names.length === 2 ? head : `${head}${DEST_MORE}`;
 }
 
 /** デバイス (参照記号) が置かれている場所 (どのシートのどのゾーンか、G13)。 */
