@@ -1026,6 +1026,78 @@ mod tests {
         assert!(joined.contains(far_el.node_a.as_str()) && joined.contains(far_el.node_b.as_str()), "{}", deck.deck);
     }
 
+    /// 素子の両端を結んで、GND (0) と同じかたまりに入るノード。
+    fn ground_cluster(deck: &SpiceDeck) -> std::collections::BTreeSet<String> {
+        let elements: Vec<&SpiceElement> = deck.wire_elements.iter().chain(&deck.component_elements).collect();
+        let mut joined: std::collections::BTreeSet<String> = ["0".to_string()].into();
+        loop {
+            let before = joined.len();
+            for e in &elements {
+                if joined.contains(&e.node_a) || joined.contains(&e.node_b) {
+                    joined.insert(e.node_a.clone());
+                    joined.insert(e.node_b.clone());
+                }
+            }
+            if joined.len() == before {
+                return joined;
+            }
+        }
+    }
+
+    /// Two power rails with the same value and no wire between them are one node in the deck, like two ground marks; a different value is not joined.
+    /// 間に配線の無い、同じ値の2つの電源の印は、接地の印と同じにデッキでも1つのノードになる。値が違えばつながらない。
+    #[test]
+    fn power_rails_with_the_same_value_are_one_node_in_the_deck() {
+        for (second, joined) in [("GND", true), ("V5", false)] {
+            let far = wire(&[(100.0, 50.0), (120.0, 50.0)], 0.75, None);
+            let far_id = far.id();
+            let sheet = sheet_with(vec![
+                symbol("battery", "BT1", -10.0, 0.0, "24"),
+                wire(&[(-2.5, 0.0), (20.0, 0.0)], 0.75, None),
+                symbol("power_rail", "", 20.0, 0.0, "GND"),
+                far,
+                symbol("power_rail", "", 100.0, 50.0, second),
+            ]);
+            let deck = build_deck(&sheet, &crate::symbol::builtin_symbols()).expect("deck");
+            let cluster = ground_cluster(&deck);
+            let el = deck.wire_elements.iter().find(|e| e.entity_id == far_id).expect("far wire element");
+            assert_eq!(cluster.contains(&el.node_a) && cluster.contains(&el.node_b), joined, "{second}: {}", deck.deck);
+        }
+    }
+
+    /// A connector contact on a wire is a zero-ohm pass-through in the deck: the wire beyond it is in the same node cluster as the wire before it.
+    /// 配線の途中のコネクタ接点は、デッキでは 0Ω の素通し (同番号ピンの橋) になり、接点の先の配線は手前の配線と同じかたまりに入る。
+    #[test]
+    fn a_connector_contact_is_a_pass_through_in_the_deck() {
+        let far = wire(&[(32.5, 0.0), (60.0, 0.0)], 0.75, None);
+        let far_id = far.id();
+        let sheet = sheet_with(vec![
+            symbol("battery", "BT1", -10.0, 0.0, "24"),
+            wire(&[(-2.5, 0.0), (27.5, 0.0)], 0.75, None),
+            symbol("connector_contact", "J7", 30.0, 0.0, "1"),
+            far,
+        ]);
+        let deck = build_deck(&sheet, &crate::symbol::builtin_symbols()).expect("deck");
+        let cluster = ground_cluster(&deck);
+        let el = deck.wire_elements.iter().find(|e| e.entity_id == far_id).expect("far wire element");
+        assert!(cluster.contains(&el.node_a) && cluster.contains(&el.node_b), "{}", deck.deck);
+        assert!(deck.component_elements.iter().any(|e| matches!(&e.kind, ElementKind::Pin(n) if n == "1") && (e.ohms - BRIDGE_OHMS).abs() < 1e-12));
+    }
+
+    /// Parts the simulator has no model for (transistor, photocoupler, op-amp, TVS diode) put no element in the deck, as every role-less part does today: current does not flow through them.
+    /// シミュレーションに模型の無い部品 (トランジスタ・フォトカプラ・オペアンプ・TVS) は、役割の無い部品が今そうであるように、デッキに素子を作らない。電流はその部品を通らない。
+    #[test]
+    fn parts_without_a_model_add_no_elements() {
+        let base = vec![symbol("battery", "BT1", -10.0, 0.0, "24"), wire(&[(-2.5, 0.0), (20.0, 0.0)], 0.75, None)];
+        let plain = build_deck(&sheet_with(base.clone()), &crate::symbol::builtin_symbols()).expect("deck");
+        for id in ["transistor_npn", "transistor_pnp", "photocoupler", "opamp", "tvs_diode"] {
+            let mut v = base.clone();
+            v.push(symbol(id, "Q1", 60.0, 40.0, ""));
+            let deck = build_deck(&sheet_with(v), &crate::symbol::builtin_symbols()).expect("deck");
+            assert_eq!(deck.component_elements.len(), plain.component_elements.len(), "{id}");
+        }
+    }
+
     /// A drawing without a power source cannot be converted (explicit NoSource error).
     /// 電源の無い図面は変換できない(明示的なNoSourceエラー)。
     #[test]

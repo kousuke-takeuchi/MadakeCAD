@@ -1201,6 +1201,61 @@ mod tests {
         assert!(text.contains("(label \"GND\" (at 80 60 0)"), "{text}");
     }
 
+    fn placed(symbol_id: &str, reference: &str, value: &str, x: f64, y: f64) -> Entity {
+        use uuid::Uuid;
+        Entity::Symbol(SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: symbol_id.into(),
+            at: crate::geometry::Point::new(x, y),
+            rotation: 0,
+            mirror: false,
+            reference: reference.into(),
+            value: value.into(),
+            attrs: Default::default(),
+        })
+    }
+
+    /// The KiCad export writes a label named after the value at the pin of every power rail, so rails with the same value stay connected in KiCad and a blank value writes no label.
+    /// KiCad書き出しは、電源の印それぞれのピンの位置に値の名前のラベルを書くので、同じ値の印どうしのつながりがKiCadでも残る。値が空の印にはラベルを書かない。
+    #[test]
+    fn power_rails_are_written_as_labels_named_by_their_values() {
+        let mut sheet = Sheet::new("Sheet1", PaperSize::A4, Orientation::Landscape);
+        for e in [
+            placed("power_rail", "", "V24", 20.0, 30.0),
+            placed("power_rail", "", "V24", 80.0, 60.0),
+            placed("power_rail", "", "", 120.0, 60.0),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let (text, _) = export_kicad_sch(&sheet, &defs(&sheet));
+        assert_eq!(text.matches("(label \"V24\"").count(), 2, "{text}");
+        assert!(text.contains("(label \"V24\" (at 20 30 0)") && text.contains("(label \"V24\" (at 80 60 0)"), "{text}");
+        assert_eq!(text.matches("(label ").count(), 2, "{text}");
+    }
+
+    /// A connector contact is written with both of its same-numbered pins and imports back as the same symbol with its designator and pole.
+    /// コネクタ接点は、同じ番号の左右2ピンつきで書き出され、読み戻すと参照記号と極の番号を持つ同じシンボルになる。
+    #[test]
+    fn a_connector_contact_round_trips_through_kicad() {
+        let mut sheet = Sheet::new("Sheet1", PaperSize::A4, Orientation::Landscape);
+        let e = placed("connector_contact", "J7", "3", 50.0, 40.0);
+        sheet.entities.insert(e.id(), e);
+        let (text, report) = export_kicad_sch(&sheet, &defs(&sheet));
+        assert!(text.contains("MadakeCAD:connector_contact"), "{text}");
+        assert_eq!(text.matches("(pin passive").count(), 2, "{text}");
+        assert_eq!(text.matches("(number \"1\"").count(), 2, "{text}");
+        let (project, _) = import_kicad_sch(&text, "往復").unwrap();
+        let back = project.sheets[0]
+            .entities
+            .values()
+            .find_map(|e| match e {
+                Entity::Symbol(s) => Some(s),
+                _ => None,
+            })
+            .expect("the contact comes back");
+        assert_eq!((back.symbol_id.as_str(), back.reference.as_str(), back.value.as_str()), ("connector_contact", "J7", "3"));
+    }
+
     /// The KiCad export report counts the electrical kinds it wrote and names the kinds it does not write at all (shapes, the wire part legend and the panel layout entities), so nothing is dropped without a word.
     /// KiCad書き出しの内訳は、書いた電気要素の件数と、まったく書かない種別(図形・電線品番凡例・盤レイアウト)を挙げるので、黙って落ちるものが無い。
     #[test]

@@ -690,6 +690,10 @@ export interface SymbolDef {
   free_pins?: boolean;
   /** このシンボルが載るネットの名前 (接地の印など)。置いたシンボルのピンが、その名前のネットラベルと同じ働きをする。 */
   net?: string;
+  /** ネット名を置いた部品の値から取る (電源の印)。同じ値の印どうし・同名のネットラベルと1つのネットになる。値が空なら名前なし (検証が警告)。`net` とは同時に使えない。 */
+  net_from_value?: boolean;
+  /** 貫通: 同じ番号のピンどうしが1つの節点 (配線の途中のコネクタ接点)。参照記号を共有でき、部品表は同じ参照記号を1つと数える。同じ番号のピンが2つ以上要る。 */
+  through?: boolean;
   /** シミュレーションでの役割と、役割が使うピン番号。値は置いた部品の属性 (voltage / current_a / rating_a / v_out / eta / i_limit_a / v_in_min など)。 */
   sim?: SymbolSimSpec;
 }

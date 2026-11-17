@@ -543,6 +543,8 @@
         "slot_unknown": "Unknown attribute slot {key} (allowed: {keys})",
         "slot_duplicate": "Attribute slot {key} is duplicated",
         "slot_height": "Attribute slot {key} has a text height of zero or less",
+        "net_conflict": "The net name cannot be both fixed (net) and taken from the value (net_from_value)",
+        "through_no_pair": "A through symbol needs two or more connection points with the same number",
         "save_failed": "Could not save"
       }
     },

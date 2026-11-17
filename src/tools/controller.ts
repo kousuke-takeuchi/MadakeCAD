@@ -997,7 +997,8 @@ export class EditorController {
       at,
       rotation: this.placeRotation,
       mirror: false,
-      reference: this.placeReference ?? this.nextReference(def.ref_prefix),
+      // 値がネット名になる印 (電源の印) は部品ではないので、参照記号を振らない
+      reference: this.placeReference ?? (def.net_from_value ? "" : this.nextReference(def.ref_prefix)),
       value: this.placePart?.value ?? "",
       attrs: this.placePart?.attrs ?? {},
     };

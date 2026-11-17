@@ -2450,6 +2450,49 @@ mod tests {
         assert_eq!(crate::block::drawn_like(&back.attrs), crate::block::drawn_like(&orig));
     }
 
+    /// Every drawing-aid symbol (transistors, photocoupler, op-amp, TVS diode, power rail, connector contact) exported to DXF imports back as the same symbol with its reference and value, with nothing skipped.
+    /// 図面の補助の記号 (トランジスタ・フォトカプラ・オペアンプ・TVS・電源の印・コネクタ接点) は、DXFへ書き出して読み戻すと、参照記号と値つきの同じシンボルに戻り、読み飛ばしは無い。
+    #[test]
+    fn drawing_aid_symbols_survive_a_dxf_round_trip() {
+        let ids = ["transistor_npn", "transistor_pnp", "photocoupler", "opamp", "tvs_diode", "power_rail", "connector_contact"];
+        let mut sheet = Sheet::new("S", crate::model::PaperSize::A3, crate::model::Orientation::Landscape);
+        for (i, id) in ids.iter().enumerate() {
+            let e = Entity::Symbol(crate::model::SymbolInstance {
+                id: uuid::Uuid::new_v4(),
+                symbol_id: (*id).into(),
+                at: crate::geometry::Point::new(40.0 + 30.0 * i as f64, 60.0),
+                rotation: 0,
+                mirror: false,
+                reference: if *id == "power_rail" { String::new() } else { format!("P{}", i + 1) },
+                value: if *id == "power_rail" { "V24".into() } else { format!("T{}", i + 1) },
+                attrs: Default::default(),
+            });
+            sheet.entities.insert(e.id(), e);
+        }
+        let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
+        let (project, report) = import_dxf(&dxf, "往復", &DxfImportOptions::default()).unwrap();
+        assert!(report.skipped.is_empty(), "{:?}", report.skipped);
+        let mut back: Vec<(String, String, String)> = project.sheets[0]
+            .entities
+            .values()
+            .filter_map(|e| match e {
+                Entity::Symbol(s) => Some((s.symbol_id.clone(), s.reference.clone(), s.value.clone())),
+                _ => None,
+            })
+            .collect();
+        back.sort();
+        let mut want: Vec<(String, String, String)> = sheet
+            .entities
+            .values()
+            .filter_map(|e| match e {
+                Entity::Symbol(s) => Some((s.symbol_id.clone(), s.reference.clone(), s.value.clone())),
+                _ => None,
+            })
+            .collect();
+        want.sort();
+        assert_eq!(back, want);
+    }
+
     /// The DXF export of a block without the pitch and number attributes does not mention them.
     /// 間隔と番号の属性を持たないブロックのDXF書き出しには、その2つの属性は現れない。
     #[test]

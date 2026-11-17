@@ -371,6 +371,14 @@ export function validateSymbol(def: SymbolDef, reservedIds: readonly string[] = 
   if (!slotKeys.includes(REQUIRED_SLOT)) {
     out.push(error("symbol.slot_missing", { key: REQUIRED_SLOT }));
   }
+  // 値からネット名を取る印は、固定のネット名と同時には決められない (Rust の validate と同じ)
+  if (def.net_from_value && (def.net ?? "").trim() !== "") out.push(error("symbol.net_conflict"));
+  // 貫通のシンボルには、同じ番号のピンが2つ以上要る
+  if (def.through) {
+    const counts = new Map<string, number>();
+    for (const pin of def.pins) counts.set(pin.number.trim(), (counts.get(pin.number.trim()) ?? 0) + 1);
+    if (![...counts.values()].some((n) => n >= 2)) out.push(error("symbol.through_no_pair"));
+  }
   return out;
 }
 

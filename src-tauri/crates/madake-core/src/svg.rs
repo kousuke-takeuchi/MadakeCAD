@@ -2179,6 +2179,101 @@ mod tests {
         assert!(svg.trim_end().ends_with("</svg>"));
     }
 
+    /// One sheet with every drawing-aid symbol, a wire stub on each of its pins, and a connector contact between two wires.
+    fn drawing_aid_sheet() -> Sheet {
+        let mut sheet = Sheet::new("Aids", PaperSize::A3, Orientation::Landscape);
+        let defs = builtin_symbols();
+        let mut x = 50.0;
+        for (i, id) in ["transistor_npn", "transistor_pnp", "photocoupler", "opamp", "tvs_diode", "power_rail"].iter().enumerate() {
+            let def = defs.iter().find(|d| d.id == *id).unwrap();
+            let at = Point::new(x, 80.0);
+            let inst = SymbolInstance {
+                id: Uuid::new_v4(),
+                symbol_id: (*id).into(),
+                at,
+                rotation: 0,
+                mirror: false,
+                reference: if *id == "power_rail" { String::new() } else { format!("P{}", 20 + i) },
+                value: if *id == "power_rail" { "P24X".into() } else { "BC847".into() },
+                attrs: Default::default(),
+            };
+            for pin in &def.pins {
+                let p = crate::netlist::transform_local(pin.at, &inst);
+                let (dx, dy) = match pin.dir {
+                    crate::symbol::PinDir::Left => (-10.0, 0.0),
+                    crate::symbol::PinDir::Right => (10.0, 0.0),
+                    crate::symbol::PinDir::Up => (0.0, -10.0),
+                    crate::symbol::PinDir::Down => (0.0, 10.0),
+                };
+                let w = Entity::Wire(Wire {
+                    id: Uuid::new_v4(),
+                    points: vec![p, Point::new(p.x + dx, p.y + dy)],
+                    color: "black".into(),
+                    sq: 0.3,
+                    length_m: None,
+                    length_source: Default::default(),
+                    part_no: None,
+                    net: None,
+                    dashed: false,
+                    weight_mm: None,
+                });
+                sheet.entities.insert(w.id(), w);
+            }
+            sheet.entities.insert(inst.id, Entity::Symbol(inst));
+            x += 55.0;
+        }
+        // 2本の配線の間のコネクタ接点 (J7 の3番極)
+        let contact = SymbolInstance {
+            id: Uuid::new_v4(),
+            symbol_id: "connector_contact".into(),
+            at: Point::new(150.0, 160.0),
+            rotation: 0,
+            mirror: false,
+            reference: "J7".into(),
+            value: "3".into(),
+            attrs: Default::default(),
+        };
+        for pts in [[(130.0, 160.0), (147.5, 160.0)], [(152.5, 160.0), (170.0, 160.0)]] {
+            let w = Entity::Wire(Wire {
+                id: Uuid::new_v4(),
+                points: pts.iter().map(|&(x, y)| Point::new(x, y)).collect(),
+                color: "black".into(),
+                sq: 0.3,
+                length_m: None,
+                length_source: Default::default(),
+                part_no: None,
+                net: None,
+                dashed: false,
+                weight_mm: None,
+            });
+            sheet.entities.insert(w.id(), w);
+        }
+        sheet.entities.insert(contact.id, Entity::Symbol(contact));
+        sheet
+    }
+
+    /// The connector contact is drawn as a circle of radius 1 mm with its designator and pole number, and a power rail prints its value (the net name) next to the bar; neither prints the other's text.
+    /// コネクタ接点は半径1mmの円に参照記号と極の番号を添えて描かれ、電源の印は値 (ネット名) を棒の近くに印字する。
+    #[test]
+    fn svg_draws_the_connector_contact_and_the_power_rail() {
+        let sheet = drawing_aid_sheet();
+        let svg = sheet_to_svg(&sheet, &builtin_symbols(), &[]);
+        assert!(svg.contains(">J7<") && svg.contains(">3<"), "コネクタ名と極の番号が描かれていない");
+        assert!(svg.contains(">P24X<"), "電源の印の値が描かれていない");
+        assert!(svg.contains("cx=\"150\" cy=\"160\" r=\"1\""), "半径1mmの円が描かれていない");
+    }
+
+    /// Writes one SVG with every drawing-aid symbol for a visual check (run by hand: cargo test -p madake-core draws_every_drawing_aid -- --ignored).
+    /// 図面の補助の記号を1枚に並べた SVG を、目で確かめるために書き出す (手で実行する)。
+    #[test]
+    #[ignore]
+    fn draws_every_drawing_aid_symbol_for_a_proof_image() {
+        let svg = sheet_to_svg(&drawing_aid_sheet(), &builtin_symbols(), &[]);
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.superpowers/sdd/2026-11-17-sheet-drawing-aids");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("proof-symbols.svg"), svg).unwrap();
+    }
+
     /// A block symbol is drawn with its outline, its pin numbers and its pin names, taken from the instance attributes.
     /// ブロックシンボルは、インスタンスの属性から外形・ピン番号・ピン名まで描かれる。
     #[test]

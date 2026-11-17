@@ -143,6 +143,20 @@ describe("symbol editor validation", () => {
     expect(codes(broken)).toContain("symbol.pin_off_grid");
   });
 
+  // ja: ネット名を固定 (net) と値から取る (net_from_value) の両方で決めたシンボルは指摘され、どちらか一方なら通る
+  it("refuses a fixed net name together with net_from_value", () => {
+    expect(codes({ ...goodSymbol(), net: "GND" })).not.toContain("symbol.net_conflict");
+    expect(codes({ ...goodSymbol(), net_from_value: true })).not.toContain("symbol.net_conflict");
+    expect(codes({ ...goodSymbol(), net: "GND", net_from_value: true })).toContain("symbol.net_conflict");
+  });
+
+  // ja: 貫通 (through) のシンボルは、同じ番号の接続点が2つ以上なければ指摘される
+  it("needs a pair of same-numbered pins for a through symbol", () => {
+    expect(codes({ ...goodSymbol(), through: true })).toContain("symbol.through_no_pair");
+    const pair = goodSymbol({ pins: [pin("1", -2.5, 0, "left"), pin("1", 2.5, 0, "right")] });
+    expect(codes({ ...pair, through: true })).not.toContain("symbol.through_no_pair");
+  });
+
   // ja: 2.5mmグリッドから外れた接続点は保存前に指摘される
   it("reports a connection point that is off the 2.5 mm grid", () => {
     const def = goodSymbol({ pins: [pin("1", -7.5, 0), pin("2", 7.5, 1.2)] });

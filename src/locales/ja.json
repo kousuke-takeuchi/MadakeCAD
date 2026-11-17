@@ -543,6 +543,8 @@
         "slot_unknown": "知らない属性スロット「{key}」です (使えるのは {keys})",
         "slot_duplicate": "属性スロット「{key}」が重複しています",
         "slot_height": "属性スロット「{key}」の文字高が0以下です",
+        "net_conflict": "ネット名は固定 (net) と値から取る (net_from_value) の両方では決められません",
+        "through_no_pair": "貫通 (through) のシンボルには、同じ番号の接続点が2つ以上要ります",
         "save_failed": "保存できませんでした"
       }
     },
