@@ -136,6 +136,14 @@ passed through. All options are validated before the engine lock is taken.
   (ignoring only fresh `ARR_<n>` names), the labels and net-name symbols sitting directly on pins, and
   that every new label stub touches nothing but its own pin, and that no symbol was deleted (arrange never
   deletes parts or marks); any difference refuses with nothing changed.
+- Label text room: a stub candidate is also judged by where its label's printed text lands (same
+  rectangle as the tidy metric, via `tidy::net_label_text_rect`). The first candidate that clears the
+  wires and whose text overlaps no symbol outline, no text, no wire segment and no earlier new label is
+  used. Extra straight candidates (text width rounded up to the 2.5 mm grid plus one step, and up to two
+  steps more) give the text room beside the stub; a tagged template gets the tag side whose body points
+  away from the pin (west stub: `right`, east: `left`; vertical: both sides tried). When no candidate has
+  text room, the old choice (first wire-clear candidate, then first non-touching, then the first) is kept,
+  so connectivity checks behave as before.
 - The title block area is taken from the frame template's corner (`title_block.origin`), its width and
   height, plus the revision rows stacked above it.
 

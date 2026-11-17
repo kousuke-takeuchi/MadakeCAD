@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3616 specification clauses** across 6 areas.
+**3620 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -90,6 +90,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - With nothing in the way, the short wire goes straight out of the pin 2.5 mm and ends in a label with the chosen name. <sub>`a_free_pin_gets_a_straight_stub_of_2_5_mm`</sub>
 - When a wire stands in the way of every straight stub, the stub bends away and stays clear of it. <sub>`a_blocked_pin_gets_a_bent_or_led_stub_that_stays_clear`</sub>
 - When every candidate comes within the comfortable distance of something, the first one that still does not touch it is used. <sub>`a_crowded_pin_takes_the_first_stub_that_does_not_touch`</sub>
+- A plain label on a west-facing pin keeps its text off its own part: the stub grows until the text sits beside it. <sub>`a_plain_label_on_a_west_pin_keeps_its_text_off_its_own_part`</sub>
+- Fallback labels on two pins 2.5 mm apart do not print their texts on top of each other. <sub>`labels_on_neighbouring_pins_do_not_overlap_their_texts`</sub>
+- A tagged template on a west-going stub gets the tag whose body points away from the pin. <sub>`a_tagged_label_on_a_west_stub_gets_its_body_away_from_the_pin`</sub>
+- When no stub leaves room for the text, the stub is the one chosen without the text check, and it still starts at the pin. <sub>`a_boxed_in_pin_keeps_the_stub_chosen_without_the_text_check`</sub>
 - A stub placed first is avoided by the next one, because its wire and end are added to the lists the next stub avoids. <sub>`a_placed_stub_is_avoided_by_the_next`</sub>
 - A single-unit cluster (every terminal in one part) is detected as such. <sub>`single_unit_detects_clusters_inside_one_unit`</sub>
 - A wire between a part and its own ground mark moves with the part in its old shape and is not redrawn. <sub>`a_wire_inside_one_unit_moves_rigidly_with_it`</sub>

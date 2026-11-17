@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3616仕様項目**。
+全6領域・**3620仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -90,6 +90,10 @@
 - 何も邪魔が無いと、短い線はピンの向きへまっすぐ2.5mm出て、先に選んだ名前のラベルが付く。 <sub>`a_free_pin_gets_a_straight_stub_of_2_5_mm`</sub>
 - 真っすぐな短い線がどれも他の線に当たるときは、曲げて、その線を避ける。 <sub>`a_blocked_pin_gets_a_bent_or_led_stub_that_stays_clear`</sub>
 - どの候補もゆとりの距離以内に何かが来るときは、それでも電気的に触れない最初の候補を使う。 <sub>`a_crowded_pin_takes_the_first_stub_that_does_not_touch`</sub>
+- 西向きのピンの、タグなしのラベルは、文字が自分の部品に重ならない。文字が収まる長さまで短い線を伸ばす。 <sub>`a_plain_label_on_a_west_pin_keeps_its_text_off_its_own_part`</sub>
+- 2.5 mm 離れた2つのピンのラベルは、文字が互いに重ならない。 <sub>`labels_on_neighbouring_pins_do_not_overlap_their_texts`</sub>
+- タグ付きの手本のラベルが西へ出る短い線に付くときは、旗の本体がピンと反対を向く側のタグになる。 <sub>`a_tagged_label_on_a_west_stub_gets_its_body_away_from_the_pin`</sub>
+- どの短い線にも文字の置き場が無いときは、文字を調べずに選ぶ短い線と同じものになり、ピンからつながる。 <sub>`a_boxed_in_pin_keeps_the_stub_chosen_without_the_text_check`</sub>
 - 先に置いた短い線とその先は、次の短い線が避けるものに加わる。 <sub>`a_placed_stub_is_avoided_by_the_next`</sub>
 - 端子が全て同じ単位にあるかたまりは、単位1つのかたまりと見なす。 <sub>`single_unit_detects_clusters_inside_one_unit`</sub>
 - 部品とその部品の接地の印の間の配線は、元の形のまま部品と一緒に動き、引き直さない。 <sub>`a_wire_inside_one_unit_moves_rigidly_with_it`</sub>
