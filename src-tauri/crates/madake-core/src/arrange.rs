@@ -920,12 +920,16 @@ fn build_moved(
 
 /// 図枠に収まり、(元が表題欄に掛かっていなければ) 表題欄を避けているか。
 fn fits(b: Option<Bounds>, ctx: &ArrangeContext, hit_title: bool) -> bool {
+    fits_in(b, ctx.frame, ctx.title_block, hit_title)
+}
+
+/// [`fits`]の図枠と表題欄を直接受け取る形。
+fn fits_in(b: Option<Bounds>, f: Bounds, title_block: Bounds, hit_title: bool) -> bool {
     let Some(b) = b else { return true };
-    let f = ctx.frame;
     if b.0 < f.0 - EPS || b.1 < f.1 - EPS || b.2 > f.2 + EPS || b.3 > f.3 + EPS {
         return false;
     }
-    hit_title || !rects_hit(b, ctx.title_block)
+    hit_title || !rects_hit(b, title_block)
 }
 
 /// エンティティの位置を決める点 (形の変化を調べるため)。
@@ -1336,22 +1340,58 @@ fn stretch_wires(
 struct TextRoom {
     /// (持ち主のid・置いたラベルはNone, 矩形)。
     rects: Vec<(Option<EntityId>, crate::tidy::Rect)>,
+    /// 部品の外形 (伸ばした短い線が突き抜けてはいけないもの)。
+    bodies: Vec<crate::tidy::Rect>,
     /// シートの注記文字高の倍率。
     scale: f64,
+    /// 図枠への収まり (無ければ調べない)。
+    area: Option<StubArea>,
+}
+
+/// 文字の置き場で選ぶ短い線が、並べ直しの最後の「図枠に収まるか」の検算を新しく破らないための情報。
+struct StubArea {
+    frame: Bounds,
+    title_block: Bounds,
+    /// 元の図面が表題欄に掛かっていたか ([`fits_in`]と同じ)。
+    hit_title: bool,
+    /// 動かした後の中身と、置いた短い線の外接矩形。
+    content: Option<Bounds>,
+}
+
+impl StubArea {
+    fn new(ctx: &ArrangeContext, hit_title: bool, content: Option<Bounds>) -> Self {
+        Self { frame: ctx.frame, title_block: ctx.title_block, hit_title, content }
+    }
+
+    /// 短い線を足しても中身が図枠に収まり、文字が図枠の内側で表題欄に掛からないか。
+    fn allows(&self, pts: &[Point], text: &crate::tidy::Rect) -> bool {
+        let f = self.frame;
+        let inside = text.min.x >= f.0 - EPS && text.min.y >= f.1 - EPS && text.max.x <= f.2 + EPS && text.max.y <= f.3 + EPS;
+        inside && !rects_hit(rect_tuple(text), self.title_block) && fits_in(self.grown(pts), f, self.title_block, self.hit_title)
+    }
+
+    fn grown(&self, pts: &[Point]) -> Option<Bounds> {
+        pts.iter().fold(self.content, |b, q| union_bounds(b, (q.x, q.y, q.x, q.y)))
+    }
 }
 
 impl TextRoom {
     /// 図面の全ての部品の外形と文字から作る。`gone`の持ち主のものは入れない (計画が消す・置き換えるもの)。
     fn build(sheet: &Sheet, defs: &[SymbolDef], gone: &BTreeSet<EntityId>) -> Self {
-        let mut rects: Vec<(Option<EntityId>, crate::tidy::Rect)> = crate::tidy::symbol_boxes(sheet, defs)
-            .into_iter()
-            .filter(|(id, _)| !gone.contains(id))
-            .map(|(id, r)| (Some(id), r))
-            .collect();
+        let bodies: Vec<(EntityId, crate::tidy::Rect)> =
+            crate::tidy::symbol_boxes(sheet, defs).into_iter().filter(|(id, _)| !gone.contains(id)).collect();
+        let mut rects: Vec<(Option<EntityId>, crate::tidy::Rect)> = bodies.iter().map(|(id, r)| (Some(*id), *r)).collect();
         rects.extend(
             crate::tidy::text_boxes(sheet, defs).into_iter().filter(|t| t.owner.is_none_or(|o| !gone.contains(&o))).map(|t| (t.owner, t.rect)),
         );
-        Self { rects, scale: sheet.annotation_scale() }
+        Self { rects, bodies: bodies.into_iter().map(|b| b.1).collect(), scale: sheet.annotation_scale(), area: None }
+    }
+
+    /// 短い線が、自分のピンのある外形のほかの部品の外形を突き抜けないか。
+    fn clear_of_bodies(&self, pts: &[Point]) -> bool {
+        let pin = pts[0];
+        let holds = |r: &crate::tidy::Rect| pin.x >= r.min.x - EPS && pin.x <= r.max.x + EPS && pin.y >= r.min.y - EPS && pin.y <= r.max.y + EPS;
+        !self.bodies.iter().filter(|r| !holds(r)).any(|r| pts.windows(2).any(|w| seg_in_rect(w[0], w[1], r)))
     }
 
     /// 後から消すと分かったエンティティの矩形を外す。
@@ -1445,7 +1485,8 @@ fn stub_entities_in(
                 }
             }
             'search: for pts in &ordered {
-                if stub_hits(pts, lines, spots) {
+                // 触れる線・他の部品を突き抜ける線は使わない
+                if stub_hits(pts, lines, spots) || !room.clear_of_bodies(pts) {
                     continue;
                 }
                 let (a, b) = (pts[pts.len() - 2], pts[pts.len() - 1]);
@@ -1470,7 +1511,8 @@ fn stub_entities_in(
                 for tag in tags {
                     let text = crate::tidy::net_label_text_rect(&label_at(end, tag), room.scale);
                     // 自分の短い線は避ける対象に入れない (まだ `lines` に入っていない)
-                    if !room.blocked(&text, lines) {
+                    // 図枠からはみ出す・表題欄に掛かる候補も使わない (最後の収まりの検算を新しく破らない)
+                    if !room.blocked(&text, lines) && room.area.as_ref().is_none_or(|a| a.allows(pts, &text)) {
                         chosen = Some(pts.clone());
                         tag_of = tag;
                         break 'search;
@@ -1479,7 +1521,6 @@ fn stub_entities_in(
             }
         }
         let pts = chosen.unwrap_or_else(|| {
-            tag_of = None;
             cands
                 .iter()
                 .find(|c| !stub_hits(c, lines, spots))
@@ -1492,6 +1533,9 @@ fn stub_entities_in(
         if let Some(room) = room.as_deref_mut() {
             let r = crate::tidy::net_label_text_rect(&placed, room.scale);
             room.rects.push((None, r));
+            if let Some(a) = room.area.as_mut() {
+                a.content = a.grown(&pts);
+            }
         }
         lines.push(pts.clone());
         spots.push(end);
@@ -1957,6 +2001,7 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
         .collect();
     // ラベルの文字が読める場所を探すための、動かした後の部品の外形と文字 (置いたラベルの文字も足していく)
     let mut room = TextRoom::build(&moved, defs, &dropped);
+    room.area = Some(StubArea::new(ctx, hit_title, content_bounds(&moved, &idx)));
     let mut remove: BTreeSet<EntityId> = deleted.clone();
     let mut labelled: Vec<(String, String)> = Vec::new();
     for (ci, name) in kept_fallbacks {
@@ -3731,12 +3776,56 @@ mod tests {
         let (grid, fb) = stub_fixture();
         let lines = vec![vec![p(62.5, 40.0), p(62.5, 60.0)]];
         let (without, _) = stub_entities(&grid, &fb, &mut lines.clone(), &mut vec![]);
-        let mut room = TextRoom { rects: vec![(None, crate::tidy::Rect::from_corners(p(-500.0, -500.0), p(500.0, 500.0)))], scale: 1.0 };
+        let mut room = TextRoom {
+            rects: vec![(None, crate::tidy::Rect::from_corners(p(-500.0, -500.0), p(500.0, 500.0)))],
+            bodies: vec![],
+            scale: 1.0,
+            area: None,
+        };
         let (es, stubs) = stub_entities_in(&grid, &fb, &mut lines.clone(), &mut vec![], Some(&mut room));
         assert_eq!(stub_points(&es), stub_points(&without));
         assert_eq!(stub_points(&es)[0], (60.0, 50.0));
         assert_eq!(stubs.len(), 1);
         assert_eq!(room.rects.len(), 2, "the placed label text is added to the room");
+    }
+
+    /// A stub lengthened to give its label text room never runs through another part's outline to get there.
+    /// 文字の置き場のために伸ばす短い線は、そのために他の部品の外形を突き抜けない。
+    #[test]
+    fn a_stub_lengthened_for_its_text_does_not_run_through_another_part() {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (60.0, 50.0), "R1");
+        // ピンの西に、ピンの無い細い壁 (x 42.5..47.5)
+        place(&mut sh, "wall_v", (45.0, 50.0), "W1");
+        let grid = RouteGrid::build(&sh, &defs(), &ArrangeOptions::default().route);
+        let w = old_wire_at(&sh, &[], p(0.0, 0.0));
+        let fb = Fallback { net: "N".into(), name: "NET_A".into(), terms: vec![(p(50.0, 50.0), Some(Dir::W), w)], template: None };
+        let wall = crate::tidy::symbol_boxes(&sh, &defs()).into_iter().map(|b| b.1).find(|r| r.max.x <= 47.5 + EPS).expect("wall");
+        let mut room = TextRoom::build(&sh, &defs(), &BTreeSet::new());
+        let (es, _) = stub_entities_in(&grid, &fb, &mut vec![], &mut vec![], Some(&mut room));
+        let pts: Vec<Point> = stub_points(&es).into_iter().map(|(x, y)| p(x, y)).collect();
+        assert!(!pts.windows(2).any(|s| seg_in_rect(s[0], s[1], &wall)), "{pts:?} runs through {wall:?}");
+    }
+
+    /// A stub lengthened to give its label text room stays inside the drawing frame, so arranging is not refused for leaving it.
+    /// 文字の置き場のために伸ばす短い線は図枠の内側にとどまり、図枠からはみ出して並べ直しが断られることはない。
+    #[test]
+    fn a_stub_lengthened_for_its_text_stays_inside_the_frame() {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (60.0, 50.0), "R1");
+        let grid = RouteGrid::build(&sh, &defs(), &ArrangeOptions::default().route);
+        let w = old_wire_at(&sh, &[], p(0.0, 0.0));
+        let fb = Fallback { net: "N".into(), name: "NET_A".into(), terms: vec![(p(50.0, 50.0), Some(Dir::W), w)], template: None };
+        // 図枠の左端はピンの 5 mm 西
+        let ctx = ArrangeContext { frame: (45.0, 10.0, 410.0, 287.0), title_block: (230.0, 240.0, 410.0, 287.0), ..Default::default() };
+        let mut room = TextRoom::build(&sh, &defs(), &BTreeSet::new());
+        room.area = Some(StubArea::new(&ctx, false, content_bounds(&sh, &DefIndex::new(&defs()))));
+        let (es, _) = stub_entities_in(&grid, &fb, &mut vec![], &mut vec![], Some(&mut room));
+        let pts = stub_points(&es);
+        assert!(pts.iter().all(|q| q.0 >= 45.0 - EPS), "{pts:?} leaves the frame");
+        // 置いた短い線は、次の候補のための中身の外接矩形に加わる
+        let grown = room.area.as_ref().and_then(|a| a.content).expect("content");
+        assert!(pts.iter().all(|q| q.0 >= grown.0 - EPS && q.0 <= grown.2 + EPS));
     }
 
     /// A stub placed first is avoided by the next one, because its wire and end are added to the lists the next stub avoids.

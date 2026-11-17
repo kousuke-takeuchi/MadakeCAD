@@ -139,7 +139,9 @@ passed through. All options are validated before the engine lock is taken.
 - Label text room: a stub candidate is also judged by where its label's printed text lands (same
   rectangle as the tidy metric, via `tidy::net_label_text_rect`). The first candidate that clears the
   wires and whose text overlaps no symbol outline, no text, no wire segment and no earlier new label is
-  used. Extra straight candidates (text width rounded up to the 2.5 mm grid plus one step, and up to two
+  used. Such a candidate must also not run through another part's outline, and must keep the content
+  inside the frame (and off the title block, as the final fit check requires) with its text inside the
+  frame and off the title block. Extra straight candidates (text width rounded up to the 2.5 mm grid plus one step, and up to two
   steps more) give the text room beside the stub; a tagged template gets the tag side whose body points
   away from the pin (west stub: `right`, east: `left`; vertical: both sides tried). When no candidate has
   text room, the old choice (first wire-clear candidate, then first non-touching, then the first) is kept,

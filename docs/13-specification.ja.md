@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3620仕様項目**。
+全6領域・**3622仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -94,6 +94,8 @@
 - 2.5 mm 離れた2つのピンのラベルは、文字が互いに重ならない。 <sub>`labels_on_neighbouring_pins_do_not_overlap_their_texts`</sub>
 - タグ付きの手本のラベルが西へ出る短い線に付くときは、旗の本体がピンと反対を向く側のタグになる。 <sub>`a_tagged_label_on_a_west_stub_gets_its_body_away_from_the_pin`</sub>
 - どの短い線にも文字の置き場が無いときは、文字を調べずに選ぶ短い線と同じものになり、ピンからつながる。 <sub>`a_boxed_in_pin_keeps_the_stub_chosen_without_the_text_check`</sub>
+- 文字の置き場のために伸ばす短い線は、そのために他の部品の外形を突き抜けない。 <sub>`a_stub_lengthened_for_its_text_does_not_run_through_another_part`</sub>
+- 文字の置き場のために伸ばす短い線は図枠の内側にとどまり、図枠からはみ出して並べ直しが断られることはない。 <sub>`a_stub_lengthened_for_its_text_stays_inside_the_frame`</sub>
 - 先に置いた短い線とその先は、次の短い線が避けるものに加わる。 <sub>`a_placed_stub_is_avoided_by_the_next`</sub>
 - 端子が全て同じ単位にあるかたまりは、単位1つのかたまりと見なす。 <sub>`single_unit_detects_clusters_inside_one_unit`</sub>
 - 部品とその部品の接地の印の間の配線は、元の形のまま部品と一緒に動き、引き直さない。 <sub>`a_wire_inside_one_unit_moves_rigidly_with_it`</sub>

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3620 specification clauses** across 6 areas.
+**3622 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -94,6 +94,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Fallback labels on two pins 2.5 mm apart do not print their texts on top of each other. <sub>`labels_on_neighbouring_pins_do_not_overlap_their_texts`</sub>
 - A tagged template on a west-going stub gets the tag whose body points away from the pin. <sub>`a_tagged_label_on_a_west_stub_gets_its_body_away_from_the_pin`</sub>
 - When no stub leaves room for the text, the stub is the one chosen without the text check, and it still starts at the pin. <sub>`a_boxed_in_pin_keeps_the_stub_chosen_without_the_text_check`</sub>
+- A stub lengthened to give its label text room never runs through another part's outline to get there. <sub>`a_stub_lengthened_for_its_text_does_not_run_through_another_part`</sub>
+- A stub lengthened to give its label text room stays inside the drawing frame, so arranging is not refused for leaving it. <sub>`a_stub_lengthened_for_its_text_stays_inside_the_frame`</sub>
 - A stub placed first is avoided by the next one, because its wire and end are added to the lists the next stub avoids. <sub>`a_placed_stub_is_avoided_by_the_next`</sub>
 - A single-unit cluster (every terminal in one part) is detected as such. <sub>`single_unit_detects_clusters_inside_one_unit`</sub>
 - A wire between a part and its own ground mark moves with the part in its old shape and is not redrawn. <sub>`a_wire_inside_one_unit_moves_rigidly_with_it`</sub>
