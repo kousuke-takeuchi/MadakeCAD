@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3622仕様項目**。
+全6領域・**3657仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -397,6 +397,9 @@
 - 既にあるケースの id で SetSimCase すると、その場で置き換わり、undo で元のケースに戻る。 <sub>`set_sim_case_replaces_a_case_and_undo_restores_it`</sub>
 - 名前が空のケースと、ほかのケースと同じ名前のケースは断られ、何も変わらない。 <sub>`set_sim_case_refuses_empty_and_duplicate_names`</sub>
 - RemoveSimCase はケースを消し、undo で同じ位置に戻す。 <sub>`remove_sim_case_and_undo_restores_the_position`</sub>
+- シートのタグの行き先の書き方を設定すると保存され、シートの情報が配信され、元に戻すと前の書き方に戻る。 <sub>`set_sheet_xref_style_stores_the_style_and_undoes`</sub>
+- 存在しないシートにタグの行き先の書き方を設定すると断られる。 <sub>`set_sheet_xref_style_refuses_an_unknown_sheet`</sub>
+- コマンドはJSONの snake_case の書き方名を受け取り、知らない名前は断る。 <sub>`set_sheet_xref_style_reads_json_style_names`</sub>
 
 ### connector
 
@@ -517,7 +520,8 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは27 (シミュレーションの計算ケースを追加した版) である。 <sub>`the_current_format_version_is_twenty_seven`</sub>
+- 現行のファイル形式バージョンは28 (シートのタグの行き先の書き方を追加した版) である。 <sub>`the_current_format_version_is_twenty_eight`</sub>
+- 版 27 のファイルは版 28 として開き、シートはゾーン住所の書き方になる。書き方は保存して開き直しても残り、既定の書き方はファイルに書かれない。 <sub>`xref_style_loads_from_old_files_and_round_trips`</sub>
 - 形式23のプロジェクトファイルはこのビルドで開け、現行の形式になる。シートの配線は既定の太さで、配線注記も出たままになる。 <sub>`a_version_23_file_opens_as_the_current_version`</sub>
 - 形式22のプロジェクトファイルはこのビルドで開け、現行の形式になる。ブロックの属性とピンはそのまま残る。 <sub>`a_version_22_file_opens_as_the_current_version`</sub>
 - 形式21のプロジェクトファイルはこのビルドで開け、現行の形式になる。ブロックの属性と5mm間隔のピンはそのまま残る。 <sub>`a_version_21_file_opens_as_the_current_version`</sub>
@@ -568,6 +572,7 @@
 - 貫通ピン (向かい合う辺に同じ番号) を持つブロックは、KiCadへ2本のピンとして書き出され、読み戻しても同じブロックに戻る。 <sub>`a_feedthrough_block_survives_a_kicad_round_trip`</sub>
 - 間隔と番号の属性を持たないブロックのKiCad書き出しには、その2つの属性は現れない。 <sub>`a_plain_block_kicad_export_does_not_mention_pitch_or_numbers`</sub>
 - 線番はそのネット上のKiCadラベルになり、KiCadでも再インポート後もネット名として残る。 <sub>`wire_numbers_become_labels`</sub>
+- ラベルのタグの属性 (向き・行き先の文字・先端の置き方) はタグそのものと同じく書き出されないが、ラベルは名前のままKiCadに残る。 <sub>`tag_attributes_are_dropped_but_the_label_name_stays`</sub>
 - ハーネス境界は破線の閉じた多角形と、その名前の注記として書き出される。 <sub>`harness_becomes_dashed_polyline_with_name`</sub>
 - 注記内の引用符・バックスラッシュ・改行はエスケープされ、書き出したファイルは正しく解釈されて同じ文字列に戻る。 <sub>`strings_are_escaped_and_read_back`</sub>
 - MadakeCADが書き出した回路図の"MadakeCAD:<id>"ライブラリidは、端子台・コネクタの動的シンボルも含めそのまま同じシンボルに戻る。 <sub>`madakecad_lib_ids_resolve_directly_on_import`</sub>
@@ -667,6 +672,11 @@
 - 注記文字高を小さくすると、文字・余白・先端がまとめて縮み、旗の形はそのままで小さくなる。 <sub>`a_smaller_annotation_height_shrinks_the_whole_flag`</sub>
 - タグ属性の無いネットラベルは、これまでどおり文字だけの見た目のままになる。 <sub>`label_without_tag_attribute_stays_plain_text`</sub>
 - 知らないタグの値(打ち間違いや "up")は無視され、失敗せずに文字だけの表示に戻る。 <sub>`unknown_tag_value_is_ignored`</sub>
+- ゾーン住所の書き方では、行き先を渡しても旗も文字も変わらない (行き先なしと全く同じ)。 <sub>`the_zone_style_ignores_a_destination`</sub>
+- シート名の書き方では、旗が広がって、太字のネット名のあとに行き先が文字高0.8倍で、ラベルの高さ1つぶんあけて入る。 <sub>`the_sheet_name_style_widens_the_flag_for_the_destination`</sub>
+- 空白だけの行き先は無いものとして扱われ、名前だけの旗は普通のタグと同じ大きさになる。 <sub>`a_blank_destination_is_no_destination`</sub>
+- tag_flow が out のときは、平らな辺がラベルの点にあり、先端は本体の遠い端にあって、旗は配線から離れる向きを指す。 <sub>`flow_out_moves_the_point_to_the_far_end`</sub>
+- tag_flow が out 以外なら、今までの形のまま。 <sub>`other_flow_values_keep_the_old_shape`</sub>
 
 ### ネットリスト抽出
 
@@ -708,6 +718,8 @@
 - シンボルのネット名は、離れた場所に置いた同じ名前のネットラベルともつながる。 <sub>`a_symbol_net_name_joins_a_label_of_the_same_name`</sub>
 - 回転して置いた2ピンのネット名付きシンボルは、回転後の位置にあるどちらのピンもその名前のネットにつながる。 <sub>`a_rotated_two_pin_net_symbol_joins_both_pins`</sub>
 - どの配線にも触れていないネット名付きシンボルは、ほかの部品のピンをネットへ引き込まない。 <sub>`a_lone_net_symbol_joins_no_other_part`</sub>
+- J7 というラベルのポートがあるシートでも、ポートに接点2が無ければ、普通の配線の J7.2 ラベルは J7.2 という普通のネットのままで、ポートのネットにその配線のピンは入らない。 <sub>`a_dotted_label_with_no_matching_contact_is_an_ordinary_net_name`</sub>
+- J7 というラベルのポートに接点「2」があれば、普通の配線の J7.2 ラベルはその接点に繋がり、接点のネットに入る。 <sub>`a_dotted_label_on_a_real_port_net_still_taps_the_contact`</sub>
 
 ### ngspiceランナー
 
@@ -1346,6 +1358,11 @@
 - ネット名を明示した配線は、その名前を線番として表示する。線番を描かないシートは名前を書かず、名前は配線に残る。 <sub>`a_sheet_can_hide_the_wire_numbers`</sub>
 - 書体の横の伸縮率は、字形と幅を一緒に縮め、高さは変えない。注記の伸縮率はそれに掛かる。 <sub>`the_text_stretch_scales_glyphs_and_width`</sub>
 - 書体の横の伸縮率は図枠には効かない: 図枠の文字の範囲の中では、文字は伸縮率なしと同じ幅になり、範囲を出ると伸縮率が戻る。 <sub>`the_frame_text_ignores_the_font_stretch`</sub>
+- シート名の書き方では、タグ付きラベルは太字のネット名と、行き先のシート名 (文字高0.8倍) を旗の中に描き、旗の外には何も描かない。 <sub>`the_sheet_name_style_draws_the_destination_inside_the_flag`</sub>
+- ゾーン住所の書き方では、同じタグ付きラベルが今までどおりゾーン住所を旗の外に描く。 <sub>`the_zone_style_keeps_the_address_outside_the_flag`</sub>
+- tag_dest は、ゾーン住所の書き方では旗の外の文字を、シート名の書き方では旗の中の文字を置き換える。シート単体の出力でも同じ。 <sub>`tag_dest_replaces_the_text_in_both_styles`</sub>
+- 他のシートに同名が無いと、シート名の旗には名前だけが出る。タグの無いラベルは、この書き方でも旗の外でなくラベルの脇にゾーン住所を描く。 <sub>`a_flag_without_a_destination_shows_only_the_name`</sub>
+- 既定の書き方のシートは、ゾーン住所の書き方を明示した場合とバイトまで同じSVGになる。tag_flow out は旗の多角形だけを変える。 <sub>`the_default_style_renders_as_before_and_flow_out_only_moves_the_polygon`</sub>
 
 ### シンボルライブラリ
 
@@ -1621,6 +1638,8 @@
 - 区間ケーブルの文字 (注記・芯数・扇の芯の呼び名) はケーブルが持つ文字として測られるので、ブロックの外形に乗った注記は文字の重なりとして詳細にも出て、何も無い所の注記は出ない。 <sub>`run_cable_text_is_measured_and_can_overlap`</sub>
 - グリッド外の接続点を持つシンボルをグリッドの外に置いても、その接続点で終わる配線も、グリッド外には数えない。そうした接続点に触れない配線は数える。 <sub>`free_pin_symbols_and_their_wires_are_not_off_grid`</sub>
 - 線番を描かないシートでは、描かれない線番を「重なる文字」に数えない。 <sub>`hidden_wire_numbers_are_not_counted_as_text`</sub>
+- シート名の書き方では、タグ付きラベルの行き先も別の文字の矩形として測られ、広がった旗に合わせて名前の矩形も動く。自動の行き先はラベル名で渡せる。 <sub>`the_destination_inside_a_flag_is_measured`</sub>
+- 自分の tag_dest は、自動の行き先が無くても測られる。 <sub>`an_own_tag_dest_is_measured_without_automatic_ones`</sub>
 
 ### 整えバリアント (シート複製 / 採用)
 
@@ -1767,6 +1786,13 @@
 - デバイスXRefのテキストはシンボル外形の右側、参照記号のラベルと同じ高さに置かれる。 <sub>`device_cross_reference_text_sits_right_of_the_outline`</sub>
 - 参照記号のラベルがシンボルの外形より横に長いときは、デバイスXRefはその右まで下がるので、ラベルと重ならない。 <sub>`device_cross_reference_clears_a_designator_label_wider_than_the_symbol`</sub>
 - 2枚のシートでラベル USB_MIC が付いたポートのネットは、シートを跨いで接点ごとに統合され、別の接点とは統合されない。3本目の配線の点付きラベル USB_MIC.D+ は D+ にだけ繋がる。 <sub>`port_nets_merge_contact_by_contact_across_sheets`</sub>
+- 別々のシートの普通の配線に付けた J7.2 は1つのネットにまとまる。J7 というラベルのポートを持つ3枚目のシートがあり、その接点に2が無くても同じ。 <sub>`a_dotted_label_joins_across_sheets_when_the_prefix_port_has_no_such_contact`</sub>
+- シート名の書き方では、タグ付きラベルの文字は同名ラベルを持つ他のシートの名前になる。1枚ならその名前、2枚なら「・」でつなぎ、3枚以上は先頭2枚のあとに「他」。 <sub>`sheet_name_destinations_list_up_to_two_then_other`</sub>
+- 他のシートに同名ラベルが無いタグ付きラベルには行き先が無く、旗には名前だけが出る。 <sub>`a_tag_with_no_other_sheet_has_no_destination`</sub>
+- 同名ラベルを2つ持つシートの名前は1回だけ並び、シート名が空ならシート番号を使う。 <sub>`a_sheet_is_named_once_and_a_blank_name_uses_its_number`</sub>
+- ラベル自身の tag_dest は、どちらの書き方でも自動の行き先に代わって使われ (他のシートに同名が無くても)、空白なら自動になる。 <sub>`tag_dest_replaces_the_automatic_destination`</sub>
+- タグの無いラベルは、どちらの書き方でもゾーン住所のままで、タグの無いラベルの tag_dest は無視される。 <sub>`untagged_labels_keep_the_zone_address`</sub>
+- ゾーン住所の書き方は寸法計算へ自動の行き先を渡さず、シート名の書き方はラベル名ごとに渡す。 <sub>`automatic_destinations_for_measuring_follow_the_style`</sub>
 
 
 ## 自動化API (MCP / REST)
@@ -2826,6 +2852,11 @@
 - 注記文字高を小さくすると、文字・余白・先端がまとめて縮み、旗の形はそのままで小さくなる <sub>`netTag`</sub>
 - タグ属性の無いネットラベルは、これまでどおり文字だけの見た目のままになる <sub>`netTag`</sub>
 - 知らないタグの値(打ち間違いや "up")は無視され、文字だけの表示に戻る <sub>`netTag`</sub>
+- ゾーン住所の書き方では、行き先を渡しても旗も文字も変わらない <sub>`netTag destination and flow`</sub>
+- シート名の書き方では、旗が広がり、太字のネット名のあとに行き先が文字高0.8倍で、文字高1つぶんあけて入る <sub>`netTag destination and flow`</sub>
+- 空白だけの行き先は無いものとして扱われ、tag_dest は前後の空白を落として読まれる <sub>`netTag destination and flow`</sub>
+- tag_flow が out のとき、平らな辺はラベルの点にあり、先端は本体の遠い端にある <sub>`netTag destination and flow`</sub>
+- tag_flow が out 以外なら、今までの形のまま <sub>`netTag destination and flow`</sub>
 
 ### panel
 
@@ -3361,6 +3392,10 @@
 - デバイスXRefのテキストはシンボル外形の右側、参照記号のラベルと同じ高さに置かれる <sub>`G13 device cross-reference`</sub>
 - 参照記号のラベルがシンボルの外形より横に長いときは、デバイスXRefはその右まで下がるので、ラベルと重ならない <sub>`G13 device cross-reference`</sub>
 - 参照記号が外形の左上の角に右揃えで置かれるブロックでは、デバイスXRefは外形の右端から出て、高さは角の参照記号の行に揃う <sub>`G13 device cross-reference`</sub>
+- シート名の書き方では、タグ付きラベルの文字は他のシートの名前になる。2枚なら「・」でつなぎ、3枚以上は先頭2枚のあとに「他」 <sub>`sheetXrefs for tagged labels`</sub>
+- 同名ラベルを2つ持つシートは1回だけ並び、シート名が空ならシート番号が使われる <sub>`sheetXrefs for tagged labels`</sub>
+- tag_dest は、どちらの書き方でも自動の行き先に代わって使われ、空白なら自動になる <sub>`sheetXrefs for tagged labels`</sub>
+- タグの無いラベルは、どちらの書き方でもゾーン住所のままで、tag_dest は無視される <sub>`sheetXrefs for tagged labels`</sub>
 
 ### blocks
 

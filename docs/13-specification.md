@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3622 specification clauses** across 6 areas.
+**3657 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -397,6 +397,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - SetSimCase with the id of an existing case replaces it in place, and undo brings the old case back. <sub>`set_sim_case_replaces_a_case_and_undo_restores_it`</sub>
 - A case with an empty name, or with the name of another case, is refused and nothing changes. <sub>`set_sim_case_refuses_empty_and_duplicate_names`</sub>
 - RemoveSimCase deletes a case, and undo puts it back at the same position. <sub>`remove_sim_case_and_undo_restores_the_position`</sub>
+- Setting a sheet's tag destination style stores it, reports the sheet meta, and undo restores the previous style. <sub>`set_sheet_xref_style_stores_the_style_and_undoes`</sub>
+- Setting the style on a sheet that does not exist is refused. <sub>`set_sheet_xref_style_refuses_an_unknown_sheet`</sub>
+- The command takes the snake_case style names from JSON and refuses an unknown one. <sub>`set_sheet_xref_style_reads_json_style_names`</sub>
 
 ### connector
 
@@ -517,7 +520,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 27, the version that added simulation study cases. <sub>`the_current_format_version_is_twenty_seven`</sub>
+- The current file format version is 28, the version that added the sheet's tag destination style. <sub>`the_current_format_version_is_twenty_eight`</sub>
+- A version 27 file opens as version 28 with sheets in the zone style, the style survives save and load, and the default style is not written to the file. <sub>`xref_style_loads_from_old_files_and_round_trips`</sub>
 - A version 23 project file opens in this build and becomes the current version; its sheets get the default wire weight and still show their wire notes. <sub>`a_version_23_file_opens_as_the_current_version`</sub>
 - A version 22 project file opens in this build and becomes the current version; its blocks keep their attributes and pins unchanged. <sub>`a_version_22_file_opens_as_the_current_version`</sub>
 - A version 21 project file opens in this build and becomes the current version; its blocks keep their attributes and their 5 mm pins. <sub>`a_version_21_file_opens_as_the_current_version`</sub>
@@ -568,6 +572,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A block with feed-through pins (one number on opposite sides) exports to KiCad with both pins and imports back as the same block. <sub>`a_feedthrough_block_survives_a_kicad_round_trip`</sub>
 - The KiCad export of a block without the pitch and number attributes does not mention them. <sub>`a_plain_block_kicad_export_does_not_mention_pitch_or_numbers`</sub>
 - A wire number becomes a KiCad label on the numbered net, so the net keeps its name in KiCad and on re-import. <sub>`wire_numbers_become_labels`</sub>
+- Tag attributes on a label (direction, destination text, flow) are not exported, like the tag itself, but the label keeps its name in KiCad. <sub>`tag_attributes_are_dropped_but_the_label_name_stays`</sub>
 - A harness boundary is exported as a dashed closed polyline plus a text with its name. <sub>`harness_becomes_dashed_polyline_with_name`</sub>
 - Quotes, backslashes and newlines in text are escaped so the exported file parses and reads back unchanged. <sub>`strings_are_escaped_and_read_back`</sub>
 - Importing a schematic exported by MadakeCAD resolves "MadakeCAD:<id>" library ids directly, including parametric terminal blocks and connectors. <sub>`madakecad_lib_ids_resolve_directly_on_import`</sub>
@@ -667,6 +672,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A smaller annotation text height shrinks the whole flag - text, padding and point - keeping its shape. <sub>`a_smaller_annotation_height_shrinks_the_whole_flag`</sub>
 - A net label without the tag attribute keeps the plain text look it has always had. <sub>`label_without_tag_attribute_stays_plain_text`</sub>
 - An unknown tag value (a typo, or "up") is ignored and the label falls back to plain text instead of failing. <sub>`unknown_tag_value_is_ignored`</sub>
+- In the zone style a destination changes nothing: the flag and the text are exactly the same as without it. <sub>`the_zone_style_ignores_a_destination`</sub>
+- In the sheet-name style the flag grows to hold the destination after the bold name, at 0.8 of the label size and one label height apart. <sub>`the_sheet_name_style_widens_the_flag_for_the_destination`</sub>
+- A blank destination counts as none, and the flag with only a name is the same size as the plain tag. <sub>`a_blank_destination_is_no_destination`</sub>
+- With tag_flow out the flat side stays on the label point and the pointed end is at the far end of the body, so the flag points away from the wire. <sub>`flow_out_moves_the_point_to_the_far_end`</sub>
+- Any tag_flow value other than out leaves today's shape. <sub>`other_flow_values_keep_the_old_shape`</sub>
 
 ### Netlist extraction
 
@@ -708,6 +718,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A symbol's net name also joins a plain net label of the same name placed elsewhere. <sub>`a_symbol_net_name_joins_a_label_of_the_same_name`</sub>
 - Every pin of a rotated two-pin symbol with a net name joins that net at its rotated position. <sub>`a_rotated_two_pin_net_symbol_joins_both_pins`</sub>
 - A net-name symbol that touches no wire does not pull any other part's pin into a net. <sub>`a_lone_net_symbol_joins_no_other_part`</sub>
+- A plain wire labelled J7.2 on a sheet that also has a port labelled J7 stays an ordinary net named J7.2 when the port has no contact 2, and the port's nets do not take its pins. <sub>`a_dotted_label_with_no_matching_contact_is_an_ordinary_net_name`</sub>
+- When the port labelled J7 does have a contact named 2, a plain wire labelled J7.2 taps that contact and joins its net. <sub>`a_dotted_label_on_a_real_port_net_still_taps_the_contact`</sub>
 
 ### ngspice runner
 
@@ -1346,6 +1358,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A wire with an explicit net name shows that name as its wire number; a sheet that hides wire numbers does not write it, and the name stays on the wire. <sub>`a_sheet_can_hide_the_wire_numbers`</sub>
 - The horizontal stretch of the font narrows the glyphs and the width together and leaves the height alone; a note's own stretch multiplies it. <sub>`the_text_stretch_scales_glyphs_and_width`</sub>
 - The horizontal stretch of the font does not reach the frame: inside the frame's text scope a text is as wide as without any stretch, and after the scope the stretch applies again. <sub>`the_frame_text_ignores_the_font_stretch`</sub>
+- In the sheet-name style a tagged label draws the name in bold and the destination sheet name inside the flag at 0.8 of the size, and nothing monospace outside the flag. <sub>`the_sheet_name_style_draws_the_destination_inside_the_flag`</sub>
+- In the zone style the same tagged label draws its zone address outside the flag, as it always has. <sub>`the_zone_style_keeps_the_address_outside_the_flag`</sub>
+- A tag_dest replaces the outside text in the zone style and the inside text in the sheet-name style, also when drawing the sheet alone. <sub>`tag_dest_replaces_the_text_in_both_styles`</sub>
+- With no other sheet carrying the name, the sheet-name flag shows only the name, and an untagged label keeps its outside zone address in that style. <sub>`a_flag_without_a_destination_shows_only_the_name`</sub>
+- A sheet with no tags and the default style renders byte-identical SVG to the sheet rendered with the zone style set explicitly, and the flow-out flag moves only the polygon. <sub>`the_default_style_renders_as_before_and_flow_out_only_moves_the_polygon`</sub>
 
 ### Symbol library
 
@@ -1621,6 +1638,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A run cable's text (label, core count, fan core names) is measured as text boxes owned by the cable, so a label lying over a block's outline is a label overlap that shows up in the issue details, while an unobstructed one is not. <sub>`run_cable_text_is_measured_and_can_overlap`</sub>
 - A symbol with free connection points placed off the grid, and a wire that ends on one of its points, are not counted as off-grid; a wire that touches no such point still is. <sub>`free_pin_symbols_and_their_wires_are_not_off_grid`</sub>
 - On a sheet that hides wire numbers, a hidden wire number is not counted as text that overlaps something. <sub>`hidden_wire_numbers_are_not_counted_as_text`</sub>
+- In the sheet-name style a tagged label's destination is measured as its own text box and the name box moves with the wider flag; automatic destinations come in by label name. <sub>`the_destination_inside_a_flag_is_measured`</sub>
+- An own tag_dest is measured too, without any automatic destination. <sub>`an_own_tag_dest_is_measured_without_automatic_ones`</sub>
 
 ### Tidy variants (sheet copies / adopt)
 
@@ -1767,6 +1786,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The device cross-reference text sits to the right of the symbol outline, on the same row as the designator label. <sub>`device_cross_reference_text_sits_right_of_the_outline`</sub>
 - A designator label wider than its symbol pushes the device cross-reference further right, so the two never overlap. <sub>`device_cross_reference_clears_a_designator_label_wider_than_the_symbol`</sub>
 - A port net labelled USB_MIC on two sheets merges contact by contact across the sheets, never across contacts, and a dotted label USB_MIC.D+ on a third wire joins only D+. <sub>`port_nets_merge_contact_by_contact_across_sheets`</sub>
+- Two plain wires labelled J7.2 on two sheets join into one project net, also when a third sheet has a port labelled J7 that has no contact 2. <sub>`a_dotted_label_joins_across_sheets_when_the_prefix_port_has_no_such_contact`</sub>
+- In the sheet-name style a tagged label's text is the names of the other sheets with the same label: one name, two joined by a middle dot, three or more as the first two plus the "other" mark. <sub>`sheet_name_destinations_list_up_to_two_then_other`</sub>
+- A tagged label whose name is on no other sheet has no destination at all, so the flag shows the name only. <sub>`a_tag_with_no_other_sheet_has_no_destination`</sub>
+- A sheet carrying the label twice is named once, and a blank sheet name falls back to its number. <sub>`a_sheet_is_named_once_and_a_blank_name_uses_its_number`</sub>
+- The label's own tag_dest replaces the automatic destination in both styles, even when no other sheet has the name; a blank one means automatic. <sub>`tag_dest_replaces_the_automatic_destination`</sub>
+- Untagged labels keep the zone address in both styles, and a tag_dest on an untagged label is ignored. <sub>`untagged_labels_keep_the_zone_address`</sub>
+- The zone style never lists sheet names and gives measuring code no automatic destinations; the sheet-name style gives them by label name. <sub>`automatic_destinations_for_measuring_follow_the_style`</sub>
 
 
 ## Automation APIs (MCP / REST)
@@ -2826,6 +2852,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - shrinks the whole flag when the annotation text height is smaller <sub>`netTag`</sub>
 - leaves a label without the tag attribute as plain text <sub>`netTag`</sub>
 - ignores an unknown tag value instead of breaking <sub>`netTag`</sub>
+- ignores a destination in the zone style <sub>`netTag destination and flow`</sub>
+- widens the flag for the destination in the sheet-name style <sub>`netTag destination and flow`</sub>
+- treats a blank destination as none and trims tag_dest <sub>`netTag destination and flow`</sub>
+- moves the point to the far end of the body when the flow is out <sub>`netTag destination and flow`</sub>
+- keeps the old shape for any other flow value <sub>`netTag destination and flow`</sub>
 
 ### panel
 
@@ -3361,6 +3392,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - places the text right of the symbol outline, level with the designator label <sub>`G13 device cross-reference`</sub>
 - clears a designator label wider than the symbol itself <sub>`G13 device cross-reference`</sub>
 - places the text right of the outline, level with a corner-anchored designator <sub>`G13 device cross-reference`</sub>
+- lists up to two sheet names then the other mark <sub>`sheetXrefs for tagged labels`</sub>
+- names a sheet once and falls back to the sheet number <sub>`sheetXrefs for tagged labels`</sub>
+- lets tag_dest replace the automatic destination <sub>`sheetXrefs for tagged labels`</sub>
+- keeps the zone address for an untagged label <sub>`sheetXrefs for tagged labels`</sub>
 
 ### blocks
 

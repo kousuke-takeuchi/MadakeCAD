@@ -1481,6 +1481,14 @@ export; when a net carries more than one name, the existing label-conflict warni
 
 A mark needs no reference designator: the checks for missing and repeated designators skip it, the parts list leaves it out, and the wire list writes a wire end on a mark as the mark's net name (2026-11-16).
 
+### G49 — The destination of a tag cannot be written inside it · quality
+
+**Closed 2026-11-18** (`Sheet.xref_style`, label attributes `tag_dest` and `tag_flow`; format 28).
+
+**Current behaviour (verified).** A tagged net label showed the zone address of the same name on other sheets as small text outside the flag. Function sheets that name the destination sheet inside the flag, with the flag pointing away from an outgoing wire, could not be drawn.
+
+**What closed it.** A sheet setting chooses between the zone address outside and the destination sheet names inside the flag; a label may carry its own free destination text and a flag direction. Text measuring and arrange placement follow the wider flag. A dotted net name that is not a port-contact tap is pinned by tests as an ordinary name that joins across sheets.
+
 ## Summary by impact
 
 | Impact | Gaps |

@@ -1504,6 +1504,26 @@ mod tests {
         assert!(nets.iter().any(|n| n.name == "101"), "{:?}", nets.iter().map(|n| &n.name).collect::<Vec<_>>());
     }
 
+    /// Tag attributes on a label (direction, destination text, flow) are not exported, like the tag itself, but the label keeps its name in KiCad.
+    /// ラベルのタグの属性 (向き・行き先の文字・先端の置き方) はタグそのものと同じく書き出されないが、ラベルは名前のままKiCadに残る。
+    #[test]
+    fn tag_attributes_are_dropped_but_the_label_name_stays() {
+        let mut sheet = export_fixture();
+        for e in sheet.entities.values_mut() {
+            if let Entity::NetLabel(l) = e {
+                l.attrs.insert("tag".into(), "right".into());
+                l.attrs.insert("tag_dest".into(), "Field box".into());
+                l.attrs.insert("tag_flow".into(), "out".into());
+            }
+        }
+        sheet.xref_style = crate::model::XrefStyle::SheetName;
+        let (text, _report) = export_kicad_sch(&sheet, &defs(&sheet));
+        assert!(!text.contains("Field box") && !text.contains("tag_flow"));
+        let root = parse_sexpr(&text).unwrap();
+        let labels: Vec<&str> = root.children("label").filter_map(|l| l.arg_str(0)).collect();
+        assert!(labels.contains(&"24V"), "{labels:?}");
+    }
+
     /// A harness boundary is exported as a dashed closed polyline plus a text with its name.
     /// ハーネス境界は破線の閉じた多角形と、その名前の注記として書き出される。
     #[test]
