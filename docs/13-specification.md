@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3700 specification clauses** across 6 areas.
+**3730 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -434,6 +434,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Each distinct block shape is its own DXF block (MDK_block for the template, MDK_block_<hash> otherwise); equal shapes share one, the picture is in it, and a block whose pin table cannot be read is reported, not drawn as the template. <sub>`each_block_shape_is_its_own_dxf_block`</sub>
 - Block shapes exported to DXF import back as plain blocks with their pin table restored in block_pins (no upper-case BLOCK_PINS left). <sub>`our_block_shapes_import_back_as_blocks_with_their_pin_table`</sub>
 - A 2.5 mm block with numbers inside exported to DXF imports back with its pitch and number position, and its pins are where they were. <sub>`a_fine_block_survives_a_dxf_round_trip`</sub>
+- Every drawing-aid symbol (transistors, photocoupler, op-amp, TVS diode, power rail, connector contact) exported to DXF imports back as the same symbol with its reference and value, with nothing skipped. <sub>`drawing_aid_symbols_survive_a_dxf_round_trip`</sub>
 - The DXF export of a block without the pitch and number attributes does not mention them. <sub>`a_plain_block_dxf_export_does_not_mention_pitch_or_numbers`</sub>
 - A block whose pin table cannot be read on import becomes the template box with a warning naming it. <sub>`an_unreadable_block_pin_table_imports_as_the_template_with_a_warning`</sub>
 - Each symbol becomes an INSERT of a block named MDK_<symbol_id> (defined once) with a negative X scale for mirroring and TAG1/CAT/DESC1/RATING1/TERMnn attributes. <sub>`symbols_become_block_inserts_with_attributes`</sub>
@@ -539,6 +540,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
 - The current file format version is 29, the version that added unnumbered block pins, spacer and caption rows and the block text size. <sub>`the_current_format_version_is_twenty_nine`</sub>
 - A version 28 file opens as version 29 with its blocks drawn exactly as before, and a block with unnumbered pins, spacer and caption rows and a text size survives save and load with the same drawing. <sub>`block_rows_and_text_size_survive_save_and_load`</sub>
+- A project that uses the power rail and the connector contact is saved and loaded back unchanged, and these symbols need no new file format: the version stays 29 because symbol definitions live in the library, not in the project. <sub>`drawing_aid_symbols_need_no_new_file_format`</sub>
 - A version 27 file opens as version 28 with sheets in the zone style, the style survives save and load, and the default style is not written to the file. <sub>`xref_style_loads_from_old_files_and_round_trips`</sub>
 - A version 23 project file opens in this build and becomes the current version; its sheets get the default wire weight and still show their wire notes. <sub>`a_version_23_file_opens_as_the_current_version`</sub>
 - A version 22 project file opens in this build and becomes the current version; its blocks keep their attributes and pins unchanged. <sub>`a_version_22_file_opens_as_the_current_version`</sub>
@@ -580,6 +582,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - children(name) iterates every child list with the given head symbol. <sub>`children_iterates_all_matches`</sub>
 - Unbalanced parentheses and unterminated strings are reported as syntax errors with a position. <sub>`syntax_errors_are_reported`</sub>
 - The KiCad export writes a label with the symbol's net name at the pin of every ground mark, so the marks stay connected in KiCad. <sub>`the_kicad_export_writes_a_label_at_each_ground_mark_pin`</sub>
+- The KiCad export writes a label named after the value at the pin of every power rail, so rails with the same value stay connected in KiCad and a blank value writes no label. <sub>`power_rails_are_written_as_labels_named_by_their_values`</sub>
+- A connector contact is written with both of its same-numbered pins and imports back as the same symbol with its designator and pole. <sub>`a_connector_contact_round_trips_through_kicad`</sub>
 - The KiCad export report counts the electrical kinds it wrote and names the kinds it does not write at all (shapes, the wire part legend and the panel layout entities), so nothing is dropped without a word. <sub>`the_kicad_export_report_names_the_kinds_it_cannot_write`</sub>
 - Exporting a sheet to .kicad_sch and importing it back keeps paper, title block, symbols (id, reference, value, rotation, mirror), wires, junctions, labels and text. <sub>`export_then_import_round_trips_the_sheet`</sub>
 - A wire drawn as a polyline is exported as one two-point KiCad wire per segment. <sub>`polyline_wires_are_split_into_segments`</sub>
@@ -735,6 +739,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Symbols whose definition carries a net name (a ground mark) join their pins into one net of that name even with no wire between them. <sub>`symbols_with_a_net_name_join_into_one_net`</sub>
 - Without a net name the same marks stay separate: each wire is its own net. <sub>`symbols_without_a_net_name_stay_separate`</sub>
 - A symbol's net name also joins a plain net label of the same name placed elsewhere. <sub>`a_symbol_net_name_joins_a_label_of_the_same_name`</sub>
+- Two power rail marks with the same value join into one net named after that value, with no wire between them. <sub>`two_power_rails_with_the_same_value_join_into_one_net`</sub>
+- Power rails with different values stay separate nets, each named by its own value. <sub>`power_rails_with_different_values_stay_separate`</sub>
+- A power rail with a blank value has no net name: it joins nothing, and a value of only spaces counts as blank. <sub>`a_power_rail_with_a_blank_value_joins_nothing`</sub>
+- A power rail joins a net label of the same name and a fixed-net mark of the same name into one net. <sub>`a_power_rail_joins_a_label_and_a_fixed_net_mark_of_the_same_name`</sub>
+- A connector contact on a wire is a pass-through: the wires on its left and right are one net, and the net lists the contact once under its designator and pole. <sub>`a_connector_contact_passes_the_wire_through_and_is_listed_once`</sub>
 - Every pin of a rotated two-pin symbol with a net name joins that net at its rotated position. <sub>`a_rotated_two_pin_net_symbol_joins_both_pins`</sub>
 - A net-name symbol that touches no wire does not pull any other part's pin into a net. <sub>`a_lone_net_symbol_joins_no_other_part`</sub>
 - A plain wire labelled J7.2 on a sheet that also has a port labelled J7 stays an ordinary net named J7.2 when the port has no contact 2, and the port's nets do not take its pins. <sub>`a_dotted_label_with_no_matching_contact_is_an_ordinary_net_name`</sub>
@@ -1013,7 +1022,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The BOM groups symbols by part number and counts quantities per group. <sub>`bom_groups_by_value_and_counts`</sub>
 - Ground marks (symbols whose definition carries a net name) are not parts, so the parts list leaves them out; ordinary symbols stay. <sub>`bom_leaves_out_ground_marks`</sub>
 - A symbol whose net name is only blanks is an ordinary part, so the parts list still counts it. <sub>`bom_keeps_a_symbol_whose_net_name_is_blank`</sub>
+- The parts list leaves out power rails, and counts the contacts of one connector designator as one connector (several designators, several rows' worth). <sub>`bom_counts_contacts_of_one_designator_as_one_connector`</sub>
 - In the wire list, a wire end on a ground mark is written as the mark's net name, not as an empty reference with a pin number. <sub>`a_wire_end_on_a_ground_mark_is_written_as_its_net_name`</sub>
+- In the wire list, a wire end on a power rail is written as the rail's value (its net name). <sub>`a_wire_end_on_a_power_rail_is_written_as_its_value`</sub>
 - A wire that ends on a ground mark follows the net to the one device on another mark of the same name, and the marks themselves are not counted as devices. <sub>`a_ground_mark_end_follows_the_net_to_the_one_device_beyond_the_other_mark`</sub>
 - The parts list carries the panel item number as its first column, so the balloons on the panel drawing and the parts list line up. <sub>`bom_starts_with_the_panel_item_number`</sub>
 - Parts that are not on a panel yet leave the item number column empty; the rest of the parts list is unaffected. <sub>`bom_leaves_the_item_number_empty_for_unplaced_parts`</sub>
@@ -1198,6 +1209,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A junction resting mid-wire splits that wire's resistance proportionally to the geometric length on each side. <sub>`junction_splits_wire_resistance_proportionally`</sub>
 - Same-named net labels in different places are bridged with a milliohm resistor, preserving their logical connection. <sub>`same_name_labels_are_bridged`</sub>
 - A return path through two ground marks (symbols with a net name) with no wire between them is one connected node in the deck. <sub>`a_return_path_through_two_ground_marks_is_one_node`</sub>
+- Two power rails with the same value and no wire between them are one node in the deck, like two ground marks; a different value is not joined. <sub>`power_rails_with_the_same_value_are_one_node_in_the_deck`</sub>
+- A connector contact on a wire is a zero-ohm pass-through in the deck: the wire beyond it is in the same node cluster as the wire before it. <sub>`a_connector_contact_is_a_pass_through_in_the_deck`</sub>
+- Parts the simulator has no model for (transistor, photocoupler, op-amp, TVS diode) put no element in the deck, as every role-less part does today: current does not flow through them. <sub>`parts_without_a_model_add_no_elements`</sub>
 - A drawing without a power source cannot be converted (explicit NoSource error). <sub>`no_battery_is_an_error`</sub>
 - A drawing whose only source is a user symbol with the source role can be converted: the source's minus pin is ground, the load becomes a constant current source, and every node gets a high-value shunt so isolated parts still solve. <sub>`a_user_source_and_load_become_spice_sources`</sub>
 - When a built-in battery and a user source are both on the sheet, ground is the battery's minus pin. <sub>`a_built_in_battery_is_ground_before_a_user_source`</sub>
@@ -1225,6 +1239,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### SVG output (JIS frame)
 
 - The exported SVG contains the JIS frame, the title block text, wires and reference designators. <sub>`svg_contains_frame_wire_and_symbol`</sub>
+- The connector contact is drawn as a circle of radius 1 mm with its designator and pole number, and a power rail prints its value (the net name) next to the bar; neither prints the other's text. <sub>`svg_draws_the_connector_contact_and_the_power_rail`</sub>
+- Writes one SVG with every drawing-aid symbol for a visual check (run by hand: cargo test -p madake-core draws_every_drawing_aid -- --ignored). <sub>`draws_every_drawing_aid_symbol_for_a_proof_image`</sub>
 - A block symbol is drawn with its outline, its pin numbers and its pin names, taken from the instance attributes. <sub>`svg_draws_block_outline_with_pin_numbers_and_names`</sub>
 - Regression test for Task 5 (already passes): a plug's black insert is drawn as one more black-filled polygon than the same block without the connector, so PDF and PNG, which are made from this SVG, show it too. <sub>`svg_draws_a_plug_insert_as_a_black_polygon`</sub>
 - A revision table with its own columns prints the template's header words and each revision field in its column, with the row height the table states. <sub>`a_configured_revision_table_prints_its_own_columns`</sub>
@@ -1444,6 +1460,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The current transformer has the primary conductor passing through the core and two secondary terminals S1/S2. <sub>`current_transformer_has_primary_through_and_secondary_terminals`</sub>
 - The plug and the socket of a connector pair face each other: the plug is a wedge, the socket the cup that receives it. <sub>`connector_plug_and_socket_face_each_other`</sub>
 - A multi-pole device conducts pole by pole (terminals 1-2, 3-4, 5-6), so the phases are never treated as connected to each other. <sub>`multipole_devices_conduct_pole_by_pole`</sub>
+- The drawing-aid symbols exist with the pins a reader expects: transistors B C E, photocoupler A K C E, op-amp - + OUT V+ V-, two-pin TVS diode, one-pin power rail, two same-numbered contact pins. <sub>`the_drawing_aid_symbols_have_their_pins`</sub>
+- Every pin of the drawing-aid symbols is on the 2.5 mm grid and is the end of a drawn lead line (no pin floats away from the outline). <sub>`drawing_aid_symbol_pins_are_on_the_grid_and_at_lead_ends`</sub>
+- Definition properties: the power rail takes its net name from the value, the connector contact is a pass-through, and both are in their natural categories; nothing else uses these properties. <sub>`net_from_value_and_through_belong_only_to_the_new_marks`</sub>
+- A placed power rail takes its net name from its own value: two instances give two different names, and a blank value gives none. <sub>`a_placed_power_rail_is_named_by_its_value`</sub>
 
 ### User symbol library
 
@@ -1479,6 +1499,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A symbol's net name is kept through save and load, and a symbol without one is written without the field. <sub>`a_net_name_is_kept_and_written_only_when_set`</sub>
 - A symbol's simulation role (for example "load on pins 1 and 2") is kept through save and load, and a symbol without one is written without the field. <sub>`a_simulation_role_is_kept_and_written_only_when_set`</sub>
 - A simulation role is refused when it names the wrong number of pins (a load needs two, a converter four) or a pin the symbol does not have. <sub>`a_simulation_role_with_wrong_pins_is_refused`</sub>
+- net_from_value and through are kept through save and load, and a symbol without them is written without the fields, so existing symbol files stay as they are. <sub>`net_from_value_and_through_are_written_only_when_set`</sub>
+- A user symbol may not set both a fixed net name and net_from_value; each alone is fine. <sub>`a_fixed_net_and_net_from_value_conflict`</sub>
+- A through symbol needs at least two connection points with the same number; without a pair it is refused. <sub>`a_through_symbol_needs_a_pair_of_same_numbered_pins`</sub>
+- A through user symbol saved to a symbol file loads back from it with the through mark kept. <sub>`a_saved_through_symbol_loads_back_with_its_marks`</sub>
 
 ### Start templates
 
@@ -1705,6 +1729,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A ground mark (a symbol whose definition carries a net name) without a reference designator is not flagged, while an ordinary symbol without one still is. <sub>`a_ground_mark_needs_no_reference_designator`</sub>
 - Ground marks that happen to share a reference designator are not reported as duplicates, because a mark is not a part. <sub>`ground_marks_sharing_a_reference_are_not_duplicates`</sub>
 - A symbol whose net name is only blanks is an ordinary symbol, so a missing reference designator is still reported. <sub>`a_blank_net_name_still_needs_a_reference_designator`</sub>
+- A power rail with a blank value (or only spaces) gets one erc.empty_net_name warning; with a value it gets none. <sub>`a_power_rail_without_a_value_is_warned`</sub>
+- Power rails need no reference designator and may share one: they are marks, not parts. <sub>`power_rails_need_no_reference_and_may_share_one`</sub>
+- Several connector contacts of one designator are not duplicates, a contact with no designator is still reported, and a contact sharing a designator with an ordinary part is a duplicate. <sub>`connector_contacts_share_one_designator`</sub>
 - A wire joining a ground mark (net name GND) to a net label with a different name is reported as a label conflict. <sub>`a_ground_mark_and_a_different_label_on_one_net_conflict`</sub>
 - A wire joining two marks with different net names (GND and PE) is reported as a label conflict. <sub>`two_marks_with_different_net_names_on_one_net_conflict`</sub>
 - A ground mark and a net label of the same name on one net are not a conflict. <sub>`a_ground_mark_and_a_same_named_label_do_not_conflict`</sub>
@@ -1790,6 +1817,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Nets with different label names stay separate across sheets. <sub>`differently_named_labels_stay_separate_nets`</sub>
 - Ground marks (symbols carrying a net name) on two different sheets join into one project-wide net of that name. <sub>`ground_marks_on_two_sheets_merge_into_one_project_net`</sub>
 - A ground mark on one sheet joins a plain net label of the same name on another sheet. <sub>`a_ground_mark_joins_a_same_named_label_on_another_sheet`</sub>
+- Power rail marks with the same value on two sheets join into one project net named by the value, and a rail also joins a same-named label on another sheet; a different value stays apart. <sub>`power_rails_join_across_sheets_by_value`</sub>
 - The cross-reference of a label is the address "/sheet.zone" of the same-named label on another sheet. <sub>`cross_reference_address_uses_slash_sheet_dot_zone`</sub>
 - A label on the destination sheet points back to the source sheet, so both sides show the counterpart. <sub>`cross_reference_is_shown_on_both_sides`</sub>
 - When the same net continues onto several sheets, every counterpart address is listed. <sub>`multiple_counterparts_are_all_listed`</sub>
@@ -3205,6 +3233,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - never stacks a second connection point on the same point as an existing one <sub>`symbol editor canvas geometry`</sub>
 - reports no problem for a well-formed symbol <sub>`symbol editor validation`</sub>
 - lets a free-pin symbol keep connection points off the grid <sub>`symbol editor validation`</sub>
+- refuses a fixed net name together with net_from_value <sub>`symbol editor validation`</sub>
+- needs a pair of same-numbered pins for a through symbol <sub>`symbol editor validation`</sub>
 - reports a connection point that is off the 2.5 mm grid <sub>`symbol editor validation`</sub>
 - reports two connection points with the same number at the same position <sub>`symbol editor validation`</sub>
 - reports two different connection point numbers stacked on one position <sub>`symbol editor validation`</sub>

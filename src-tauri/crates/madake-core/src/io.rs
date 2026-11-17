@@ -465,6 +465,32 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// A project that uses the power rail and the connector contact is saved and loaded back unchanged, and these symbols need no new file format: the version stays 29 because symbol definitions live in the library, not in the project.
+    /// 電源の印とコネクタ接点を使うプロジェクトは、保存して読み直しても変わらない。この記号のためにファイル形式は変わらない (形式は29のまま。シンボルの定義はプロジェクトではなくライブラリにあるため)。
+    #[test]
+    fn drawing_aid_symbols_need_no_new_file_format() {
+        assert_eq!(FORMAT_VERSION, 29);
+        let mut p = Project::new("aids");
+        for (id, reference, value) in [("power_rail", "", "P24X"), ("connector_contact", "J7", "2"), ("opamp", "U3", "TL072")] {
+            let e = Entity::Symbol(SymbolInstance {
+                id: Uuid::new_v4(),
+                symbol_id: id.into(),
+                at: Point::new(100.0, 50.0),
+                rotation: 0,
+                mirror: false,
+                reference: reference.into(),
+                value: value.into(),
+                attrs: Default::default(),
+            });
+            p.sheets[0].entities.insert(e.id(), e);
+        }
+        let text = serde_json::to_string_pretty(&p).unwrap();
+        let mut back: Project = serde_json::from_str(&text).unwrap();
+        migrate(&mut back);
+        assert_eq!(serde_json::to_string_pretty(&back).unwrap(), text);
+        assert_eq!(back.format_version, 29);
+    }
+
     /// A version 27 file opens as version 28 with sheets in the zone style, the style survives save and load, and the default style is not written to the file.
     /// 版 27 のファイルは版 28 として開き、シートはゾーン住所の書き方になる。書き方は保存して開き直しても残り、既定の書き方はファイルに書かれない。
     #[test]

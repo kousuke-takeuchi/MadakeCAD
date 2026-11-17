@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3700仕様項目**。
+全6領域・**3730仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -434,6 +434,7 @@
 - ブロックは形ごとに別のDXFブロックになる(見本はMDK_block、他はMDK_block_<ハッシュ>)。同じ形は1つを共有し、絵も入る。ピン表を読めないブロックは見本の箱にせず報告する。 <sub>`each_block_shape_is_its_own_dxf_block`</sub>
 - DXFへ書き出したブロックの形は、ピン表をblock_pinsに戻した普通のブロックとして読み戻せる(大文字のBLOCK_PINSは残らない)。 <sub>`our_block_shapes_import_back_as_blocks_with_their_pin_table`</sub>
 - 番号を内側に描く2.5mm間隔のブロックは、DXFへ書き出して読み戻しても間隔と番号の位置を保ち、ピンの位置も変わらない。 <sub>`a_fine_block_survives_a_dxf_round_trip`</sub>
+- 図面の補助の記号 (トランジスタ・フォトカプラ・オペアンプ・TVS・電源の印・コネクタ接点) は、DXFへ書き出して読み戻すと、参照記号と値つきの同じシンボルに戻り、読み飛ばしは無い。 <sub>`drawing_aid_symbols_survive_a_dxf_round_trip`</sub>
 - 間隔と番号の属性を持たないブロックのDXF書き出しには、その2つの属性は現れない。 <sub>`a_plain_block_dxf_export_does_not_mention_pitch_or_numbers`</sub>
 - 読み戻すときにピン表が読めないブロックは、名前入りの警告つきで見本の箱になる。 <sub>`an_unreadable_block_pin_table_imports_as_the_template_with_a_warning`</sub>
 - シンボルはMDK_<symbol_id>ブロック(1回だけ定義)のINSERTになり、ミラー(X倍率-1)・TAG1/CAT/DESC1/RATING1/TERMnnの属性を持つ。 <sub>`symbols_become_block_inserts_with_attributes`</sub>
@@ -539,6 +540,7 @@
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
 - 現行のファイル形式バージョンは29 (ブロックの番号なしのピン・すき間と見出しの行・文字の大きさを追加した版) である。 <sub>`the_current_format_version_is_twenty_nine`</sub>
 - 形式28のファイルは形式29として開き、ブロックは前と同じに描かれる。番号なしのピン・すき間と見出しの行・文字の大きさを持つブロックは、保存して開き直しても同じ絵になる。 <sub>`block_rows_and_text_size_survive_save_and_load`</sub>
+- 電源の印とコネクタ接点を使うプロジェクトは、保存して読み直しても変わらない。この記号のためにファイル形式は変わらない (形式は29のまま。シンボルの定義はプロジェクトではなくライブラリにあるため)。 <sub>`drawing_aid_symbols_need_no_new_file_format`</sub>
 - 版 27 のファイルは版 28 として開き、シートはゾーン住所の書き方になる。書き方は保存して開き直しても残り、既定の書き方はファイルに書かれない。 <sub>`xref_style_loads_from_old_files_and_round_trips`</sub>
 - 形式23のプロジェクトファイルはこのビルドで開け、現行の形式になる。シートの配線は既定の太さで、配線注記も出たままになる。 <sub>`a_version_23_file_opens_as_the_current_version`</sub>
 - 形式22のプロジェクトファイルはこのビルドで開け、現行の形式になる。ブロックの属性とピンはそのまま残る。 <sub>`a_version_22_file_opens_as_the_current_version`</sub>
@@ -580,6 +582,8 @@
 - children(name)は指定した先頭シンボルを持つ子リストをすべて列挙する。 <sub>`children_iterates_all_matches`</sub>
 - 括弧の不整合や閉じていない文字列は、位置付きの構文エラーとして報告される。 <sub>`syntax_errors_are_reported`</sub>
 - KiCad書き出しは、接地の印それぞれのピンの位置にシンボルのネット名のラベルを書くので、KiCadでも印どうしのつながりが残る。 <sub>`the_kicad_export_writes_a_label_at_each_ground_mark_pin`</sub>
+- KiCad書き出しは、電源の印それぞれのピンの位置に値の名前のラベルを書くので、同じ値の印どうしのつながりがKiCadでも残る。値が空の印にはラベルを書かない。 <sub>`power_rails_are_written_as_labels_named_by_their_values`</sub>
+- コネクタ接点は、同じ番号の左右2ピンつきで書き出され、読み戻すと参照記号と極の番号を持つ同じシンボルになる。 <sub>`a_connector_contact_round_trips_through_kicad`</sub>
 - KiCad書き出しの内訳は、書いた電気要素の件数と、まったく書かない種別(図形・電線品番凡例・盤レイアウト)を挙げるので、黙って落ちるものが無い。 <sub>`the_kicad_export_report_names_the_kinds_it_cannot_write`</sub>
 - シートを.kicad_schへ書き出して読み戻すと、用紙・表題欄・シンボル(種類・参照記号・型番・回転・ミラー)・配線・ジャンクション・ラベル・注記が保たれる。 <sub>`export_then_import_round_trips_the_sheet`</sub>
 - 折れ線で描いた配線は、セグメントごとに2点のKiCad wireとして書き出される。 <sub>`polyline_wires_are_split_into_segments`</sub>
@@ -735,6 +739,11 @@
 - 定義がネット名を持つシンボル (接地の印) は、間に配線が無くても、そのピンどうしをその名前の1つのネットにまとめる。 <sub>`symbols_with_a_net_name_join_into_one_net`</sub>
 - ネット名が無ければ、同じ印でもつながらない: 配線ごとに別のネットになる。 <sub>`symbols_without_a_net_name_stay_separate`</sub>
 - シンボルのネット名は、離れた場所に置いた同じ名前のネットラベルともつながる。 <sub>`a_symbol_net_name_joins_a_label_of_the_same_name`</sub>
+- 同じ値の電源の印が2つあれば、間に配線が無くても、その値の名前の1つのネットにまとまる。 <sub>`two_power_rails_with_the_same_value_join_into_one_net`</sub>
+- 値の違う電源の印どうしはつながらず、それぞれの値の名前の別のネットになる。 <sub>`power_rails_with_different_values_stay_separate`</sub>
+- 値が空の電源の印はネット名を持たず、何ともつながらない。空白だけの値も空とみなす。 <sub>`a_power_rail_with_a_blank_value_joins_nothing`</sub>
+- 電源の印は、同じ名前のネットラベルとも、同じ名前を固定で持つ印とも、1つのネットにまとまる。 <sub>`a_power_rail_joins_a_label_and_a_fixed_net_mark_of_the_same_name`</sub>
+- 配線の途中のコネクタ接点は素通しで、左右の配線は1つのネットになり、ネットには接点が参照記号とピン1つ分だけ載る。 <sub>`a_connector_contact_passes_the_wire_through_and_is_listed_once`</sub>
 - 回転して置いた2ピンのネット名付きシンボルは、回転後の位置にあるどちらのピンもその名前のネットにつながる。 <sub>`a_rotated_two_pin_net_symbol_joins_both_pins`</sub>
 - どの配線にも触れていないネット名付きシンボルは、ほかの部品のピンをネットへ引き込まない。 <sub>`a_lone_net_symbol_joins_no_other_part`</sub>
 - J7 というラベルのポートがあるシートでも、ポートに接点2が無ければ、普通の配線の J7.2 ラベルは J7.2 という普通のネットのままで、ポートのネットにその配線のピンは入らない。 <sub>`a_dotted_label_with_no_matching_contact_is_an_ordinary_net_name`</sub>
@@ -1013,7 +1022,9 @@
 - 部品表はシンボルを型番でまとめ、数量を集計する。 <sub>`bom_groups_by_value_and_counts`</sub>
 - 接地の印 (定義にネット名を持つシンボル) は部品ではないので、部品表に載せない。普通のシンボルは載ったまま。 <sub>`bom_leaves_out_ground_marks`</sub>
 - ネット名が空白だけのシンボルは普通の部品なので、部品表に載る。 <sub>`bom_keeps_a_symbol_whose_net_name_is_blank`</sub>
+- 部品表は電源の印を載せず、同じ参照記号のコネクタ接点を1つのコネクタとして数える (別の参照記号は別に数える)。 <sub>`bom_counts_contacts_of_one_designator_as_one_connector`</sub>
 - 電線リストでは、接地の印に届いた電線の端を、空の参照記号とピン番号ではなく印のネット名で書く。 <sub>`a_wire_end_on_a_ground_mark_is_written_as_its_net_name`</sub>
+- 電線リストでは、電源の印に届いた電線の端を、印の値 (ネット名) で書く。 <sub>`a_wire_end_on_a_power_rail_is_written_as_its_value`</sub>
 - 接地の印に届いた電線は、同じ名前の別の印の先にあるデバイスが1つならそこまで辿る。印そのものはデバイスに数えない。 <sub>`a_ground_mark_end_follows_the_net_to_the_one_device_beyond_the_other_mark`</sub>
 - 部品表の先頭列は盤のアイテム番号なので、盤図面のバルーンと部品表が突き合わせられる。 <sub>`bom_starts_with_the_panel_item_number`</sub>
 - まだ盤に置いていない部品はアイテム番号の欄が空欄になり、部品表の他の欄はそのまま出る。 <sub>`bom_leaves_the_item_number_empty_for_unplaced_parts`</sub>
@@ -1198,6 +1209,9 @@
 - ワイヤ途中のジャンクションは、その位置の幾何学的長さ比でワイヤ抵抗を分割する。 <sub>`junction_splits_wire_resistance_proportionally`</sub>
 - 離れた場所の同名ネットラベルはmΩ抵抗で橋渡しされ、論理接続が保たれる。 <sub>`same_name_labels_are_bridged`</sub>
 - 間に配線の無い2つの接地の印 (ネット名を持つシンボル) を通る帰り道は、デッキでも1つにつながったノードになる。 <sub>`a_return_path_through_two_ground_marks_is_one_node`</sub>
+- 間に配線の無い、同じ値の2つの電源の印は、接地の印と同じにデッキでも1つのノードになる。値が違えばつながらない。 <sub>`power_rails_with_the_same_value_are_one_node_in_the_deck`</sub>
+- 配線の途中のコネクタ接点は、デッキでは 0Ω の素通し (同番号ピンの橋) になり、接点の先の配線は手前の配線と同じかたまりに入る。 <sub>`a_connector_contact_is_a_pass_through_in_the_deck`</sub>
+- シミュレーションに模型の無い部品 (トランジスタ・フォトカプラ・オペアンプ・TVS) は、役割の無い部品が今そうであるように、デッキに素子を作らない。電流はその部品を通らない。 <sub>`parts_without_a_model_add_no_elements`</sub>
 - 電源の無い図面は変換できない(明示的なNoSourceエラー)。 <sub>`no_battery_is_an_error`</sub>
 - 電源が「電源の役割を付けたユーザーシンボル」だけの図面も変換できる: 電源の負極が接地になり、負荷は定電流源になり、浮いた部分も解けるよう全ノードに大きな漏れ抵抗が入る。 <sub>`a_user_source_and_load_become_spice_sources`</sub>
 - 同梱の battery と電源の役割のユーザーシンボルが両方あるときは、battery の負極が接地になる。 <sub>`a_built_in_battery_is_ground_before_a_user_source`</sub>
@@ -1225,6 +1239,8 @@
 ### SVG出力 (JIS図枠)
 
 - 出力SVGにはJIS図枠・表題欄の文字・配線・参照記号が含まれる。 <sub>`svg_contains_frame_wire_and_symbol`</sub>
+- コネクタ接点は半径1mmの円に参照記号と極の番号を添えて描かれ、電源の印は値 (ネット名) を棒の近くに印字する。 <sub>`svg_draws_the_connector_contact_and_the_power_rail`</sub>
+- 図面の補助の記号を1枚に並べた SVG を、目で確かめるために書き出す (手で実行する)。 <sub>`draws_every_drawing_aid_symbol_for_a_proof_image`</sub>
 - ブロックシンボルは、インスタンスの属性から外形・ピン番号・ピン名まで描かれる。 <sub>`svg_draws_block_outline_with_pin_numbers_and_names`</sub>
 - Task 5 の挙動の回帰テスト (最初から通る): プラグの黒い差し込みは、コネクタの無い同じブロックより黒く塗った多角形が1つ多い形で描かれるので、この SVG から作る PDF・PNG にも出る。 <sub>`svg_draws_a_plug_insert_as_a_black_polygon`</sub>
 - 独自の列を持つ改訂欄は、テンプレートの見出し語と、各列に対応する改訂の項目を、改訂欄が指定する行高で印字する。 <sub>`a_configured_revision_table_prints_its_own_columns`</sub>
@@ -1444,6 +1460,10 @@
 - 変流器は一次導体が鉄心を貫き、二次側にS1・S2の2端子を持つ。 <sub>`current_transformer_has_primary_through_and_secondary_terminals`</sub>
 - 差込接続器のプラグとソケットは向かい合う形で、プラグはくさび形、ソケットはそれを受ける半円形になる。 <sub>`connector_plug_and_socket_face_each_other`</sub>
 - 多極機器は極ごと(端子1-2・3-4・5-6)に導通するため、相どうしがつながっている扱いにはならない。 <sub>`multipole_devices_conduct_pole_by_pole`</sub>
+- 図面の補助の記号は、期待するピンを持つ: トランジスタは B C E、フォトカプラは A K C E、オペアンプは - + OUT V+ V-、TVS ダイオードは2ピン、電源の印は1ピン、コネクタ接点は同じ番号の左右2ピン。 <sub>`the_drawing_aid_symbols_have_their_pins`</sub>
+- 図面の補助の記号のピンは、すべて2.5mmグリッド上にあり、描かれたリード線の端に一致する (ピンが外形から離れて浮かない)。 <sub>`drawing_aid_symbol_pins_are_on_the_grid_and_at_lead_ends`</sub>
+- 定義の性質: 電源の印は値からネット名を取り、コネクタ接点は貫通で、それぞれ自然な分類に入る。ほかの同梱シンボルはこの性質を使わない。 <sub>`net_from_value_and_through_belong_only_to_the_new_marks`</sub>
+- 置いた電源の印は、自分の値からネット名を取る。2つの印は別々の名前になり、値が空なら名前は無い。 <sub>`a_placed_power_rail_is_named_by_its_value`</sub>
 
 ### ユーザーシンボルライブラリ
 
@@ -1479,6 +1499,10 @@
 - シンボルのネット名は保存して読み直しても残る。ネット名の無いシンボルは、その項目を書き出さない。 <sub>`a_net_name_is_kept_and_written_only_when_set`</sub>
 - シンボルのシミュレーションの役割 (例: 「ピン1と2の負荷」) は保存して読み直しても残る。役割の無いシンボルは、その項目を書き出さない。 <sub>`a_simulation_role_is_kept_and_written_only_when_set`</sub>
 - シミュレーションの役割は、ピンの数が合わない (負荷は2つ、変換器は4つ) か、シンボルに無いピンを指すと断られる。 <sub>`a_simulation_role_with_wrong_pins_is_refused`</sub>
+- net_from_value と through は保存して読み直しても残る。使わないシンボルはその項目を書き出さないので、これまでのシンボルファイルは変わらない。 <sub>`net_from_value_and_through_are_written_only_when_set`</sub>
+- ユーザーシンボルは、固定のネット名と net_from_value を同時には決められない。どちらか一方だけなら保存できる。 <sub>`a_fixed_net_and_net_from_value_conflict`</sub>
+- 貫通のシンボルは同じ番号の接続点が2つ以上要る。組が無ければ断られる。 <sub>`a_through_symbol_needs_a_pair_of_same_numbered_pins`</sub>
+- 貫通のユーザーシンボルは、シンボルファイルに保存して読み直しても貫通の印が残る。 <sub>`a_saved_through_symbol_loads_back_with_its_marks`</sub>
 
 ### 開始テンプレート
 
@@ -1705,6 +1729,9 @@
 - 接地の印 (定義にネット名を持つシンボル) に参照記号が無くても指摘しない。普通のシンボルに無ければ、これまでどおり指摘する。 <sub>`a_ground_mark_needs_no_reference_designator`</sub>
 - 同じ参照記号を持つ接地の印どうしは重複として指摘しない (印は部品ではない)。 <sub>`ground_marks_sharing_a_reference_are_not_duplicates`</sub>
 - ネット名が空白だけのシンボルは普通のシンボルなので、参照記号が無ければ指摘する。 <sub>`a_blank_net_name_still_needs_a_reference_designator`</sub>
+- 値が空 (空白だけも同じ) の電源の印には erc.empty_net_name の警告が1件付く。値があれば付かない。 <sub>`a_power_rail_without_a_value_is_warned`</sub>
+- 電源の印は参照記号が無くてよく、同じ参照記号を持っても重複とは指摘しない (印は部品ではない)。 <sub>`power_rails_need_no_reference_and_may_share_one`</sub>
+- 同じ参照記号 (コネクタ名) のコネクタ接点を何個置いても重複とは指摘しない。参照記号が無い接点は指摘し、普通の部品と参照記号を分け合えば重複になる。 <sub>`connector_contacts_share_one_designator`</sub>
 - 接地の印 (ネット名 GND) と別の名前のネットラベルを配線でつなぐと、ラベルの衝突として指摘される。 <sub>`a_ground_mark_and_a_different_label_on_one_net_conflict`</sub>
 - ネット名の違う2つの印 (GND と PE) を配線でつなぐと、ラベルの衝突として指摘される。 <sub>`two_marks_with_different_net_names_on_one_net_conflict`</sub>
 - 接地の印と同じ名前のネットラベルが1つのネットにあっても、衝突にはならない。 <sub>`a_ground_mark_and_a_same_named_label_do_not_conflict`</sub>
@@ -1790,6 +1817,7 @@
 - ラベル名が違うネットは、シートを跨いでも統合されず別のネットのままになる。 <sub>`differently_named_labels_stay_separate_nets`</sub>
 - 別々のシートにある接地の印 (ネット名を持つシンボル) は、プロジェクト全体でその名前の1つのネットになる。 <sub>`ground_marks_on_two_sheets_merge_into_one_project_net`</sub>
 - あるシートの接地の印は、別のシートにある同じ名前の普通のネットラベルとつながる。 <sub>`a_ground_mark_joins_a_same_named_label_on_another_sheet`</sub>
+- 別々のシートにある同じ値の電源の印は、その値の名前のプロジェクト全体の1つのネットになり、別のシートの同名のネットラベルともつながる。値が違えばつながらない。 <sub>`power_rails_join_across_sheets_by_value`</sub>
 - ラベルの相手先は、他のシートにある同名ラベルの住所「/シート.ゾーン」になる。 <sub>`cross_reference_address_uses_slash_sheet_dot_zone`</sub>
 - 相手側のシートのラベルからも元のシートが見えるので、双方に相手先が表示される。 <sub>`cross_reference_is_shown_on_both_sides`</sub>
 - 同じネットが複数のシートに続くときは、相手先の住所が全て列挙される。 <sub>`multiple_counterparts_are_all_listed`</sub>
@@ -3205,6 +3233,8 @@
 - 同じ方向にもう1本足しても、接続点が同じ点に重なることはない <sub>`symbol editor canvas geometry`</sub>
 - 過不足のないシンボルは指摘ゼロで保存できる <sub>`symbol editor validation`</sub>
 - free_pins を付けたシンボルは、グリッド外の接続点があっても保存前チェックを通る。座標が数でなければ指摘される <sub>`symbol editor validation`</sub>
+- ネット名を固定 (net) と値から取る (net_from_value) の両方で決めたシンボルは指摘され、どちらか一方なら通る <sub>`symbol editor validation`</sub>
+- 貫通 (through) のシンボルは、同じ番号の接続点が2つ以上なければ指摘される <sub>`symbol editor validation`</sub>
 - 2.5mmグリッドから外れた接続点は保存前に指摘される <sub>`symbol editor validation`</sub>
 - 同じ位置に同じ番号の接続点が2つあると保存前に指摘される <sub>`symbol editor validation`</sub>
 - 同じ位置に別番号の接続点が重なっていると保存前に指摘される <sub>`symbol editor validation`</sub>

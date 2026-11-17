@@ -1497,6 +1497,30 @@ A mark needs no reference designator: the checks for missing and repeated design
 
 **What closed it.** A pin may leave out its number when its name is unique in the block (the name is the key in the pin tools, the netlist and the exports, and nothing is printed outside the box). A side may hold spacer rows and bold caption rows that are not pins. A block attribute sets the text height and the minimum width follows it. The pin-table editor keeps these rows when a block is edited and saved. Old files draw as before.
 
+### G51 — A connector contact cannot sit on a wire as a pass-through · quality
+
+**Closed 2026-11-18** (library symbol `connector_contact`, definition property `through`; no format change).
+
+**Current behaviour (verified).** The only way to show where a wire passes through a connector pole was a connector block or a terminal, which are not small marks, or two separate wires with a label. Function sheets that show a small circle for each pole on the wire could not be drawn, and several contacts of one connector tripped the duplicate-designator check.
+
+**What closed it.** A small circle with two same-numbered pins is one node (the netlist already joined same-numbered pins; a definition property now declares it, and user symbols may use it). Its designator is the connector and its value is the pole; contacts of one designator are not duplicates, a blank designator is still reported, and the parts list counts one connector per designator. The simulation treats it as a zero-ohm bridge.
+
+### G52 — Common semiconductor symbols are missing from the library · quality
+
+**Closed 2026-11-18** (`transistor_npn`, `transistor_pnp`, `photocoupler`, `opamp`, `tvs_diode`).
+
+**Current behaviour (verified).** Transistors, photocouplers, operational amplifiers and bidirectional surge absorbers had to be drawn as generic boxes by hand or as user symbols.
+
+**What closed it.** Five symbols drawn after JIS C 0617 with named pins on the 2.5 mm grid, each pin at the end of its lead. They have no simulation model and are treated like any part without a role.
+
+### G53 — A power mark cannot take its net name from its value · quality
+
+**Closed 2026-11-18** (library symbol `power_rail`, definition property `net_from_value`, check `erc.empty_net_name`; no format change).
+
+**Current behaviour (verified).** A mark with a fixed net name needed one symbol definition per supply voltage, so a power mark for a new rail could not be placed without creating a user symbol.
+
+**What closed it.** One mark whose instance value is the net name: marks with the same value, labels of that name and fixed-net marks form one net, across sheets too. A blank value is warned. Like the fixed-net marks it is left out of the parts list and the designator checks, and it is not given a designator when placed.
+
 ## Summary by impact
 
 | Impact | Gaps |

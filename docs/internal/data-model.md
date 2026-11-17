@@ -201,6 +201,7 @@ title_block{origin,w,h,row_h,grid_lines[],cells[{x,y,w,h,text|bind,size,align,we
 Commandエンジンの外(ファイルのドメイン)なので、保存・削除は`doc:patch`にもundo履歴にも乗らない。
 定義に `free_pins: true` を書いたシンボルは、接続点を2.5mmグリッドに縛らない(検証は有限の数であることだけ。同梱シンボルとブロックは対象外)。
 定義に `net`(例 `"GND"`)を書いたシンボルは、置いた全てのピンがその名前のネットラベルと同じ働きをする(接地の印。ネットリストだけの規則で、図面には何も描かない。空白だけの名前は無しと同じ)。
+定義に `net_from_value: true` を書いたシンボル(同梱の `power_rail`)は、ネット名を固定の `net` ではなく置いた部品の値から取る(`net` とは同時に書けない。値が空白だけなら名前なし)。定義に `through: true` を書いたシンボル(同梱の `connector_contact`)は、同じ番号の接続点を1つの節点とする宣言で(結ぶ規則そのものはネットリストが元から持つ)、参照記号を分け合え、部品表は同じ参照記号を1つの部品と数え、保存時に同じ番号の接続点が2つ以上あることを確かめる。2つとも定義の項目で、プロジェクトファイルには入らないので format_version は変わらない(29のまま)。ユーザーシンボルのファイルにも書き出され、使わなければ書かれない。
 定義に `sim`(例 `{"role": "load", "pins": ["1", "2"]}`)を書いたシンボルは、DC動作点シミュレーションでその役割を持つ(`source` / `load` / `fuse` / `conductor` / `converter` / `none`。`pins` は source・load が [+, −]、converter が [入力+, 入力−, 出力+, 出力−]、fuse・conductor は導通するピンで省略時は同梱と同じ極の規則 = 1..2n の番号なら 1-2・3-4…、それ以外は全ピン)。値は置いた部品の `attrs`(`voltage`・`r_int_ohm`・`i_max_a`・`current_a`・`v_min`・`rating_a`・`v_out`・`eta`・`i_out_a`・`i_limit_a`(変換器の電流制限)・`v_in_min`(変換器の入力の低電圧停止)・`pin_rating_a`)。プロジェクトの形式は変わらない(format_version据え置き)。
 
 ## 2. 部品DB(parts.sqlite)
