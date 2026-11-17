@@ -2974,6 +2974,8 @@ mod tests {
             text_slots: vec![],
             free_pins: false,
             net: None,
+            net_from_value: false,
+            through: false,
             sim: None,
         };
         write_symbol_block_body(&mut w, "1", &def);

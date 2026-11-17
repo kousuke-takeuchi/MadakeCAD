@@ -177,7 +177,8 @@ fn base_bom_rows(project: &Project) -> Vec<Vec<String>> {
 }
 
 /// [`base_bom_rows`] の本体。シートのシンボル定義の引き方を渡せる (テストでユーザーシンボルを足すため)。
-/// ネット名を持つシンボル (接地の印など) は部品ではないので載せない。
+/// ネット名を持つシンボル (接地の印・電源の印) は部品ではないので載せない。
+/// 貫通のシンボル (コネクタの接点) は、同じ参照記号を1つのコネクタとして数える。
 fn base_bom_rows_with(
     project: &Project,
     defs_for: impl Fn(&crate::model::Sheet) -> Vec<crate::symbol::SymbolDef>,
@@ -187,10 +188,20 @@ fn base_bom_rows_with(
     for sheet in &project.sheets {
         let defs = defs_for(sheet);
         let marks: std::collections::BTreeSet<&str> =
-            defs.iter().filter(|d| d.net_name().is_some()).map(|d| d.id.as_str()).collect();
+            defs.iter().filter(|d| d.is_net_mark()).map(|d| d.id.as_str()).collect();
+        let throughs: std::collections::BTreeSet<&str> =
+            defs.iter().filter(|d| d.through).map(|d| d.id.as_str()).collect();
         for entity in sheet.entities.values() {
             if let Entity::Symbol(s) = entity {
                 if marks.contains(s.symbol_id.as_str()) {
+                    continue;
+                }
+                // 貫通のシンボル (コネクタの接点) は、同じ参照記号を1つのコネクタとして数える (値は極の番号なので行を分けない)
+                if throughs.contains(s.symbol_id.as_str()) {
+                    let refs = groups.entry((String::new(), s.symbol_id.clone())).or_default();
+                    if !refs.contains(&s.reference) {
+                        refs.push(s.reference.clone());
+                    }
                     continue;
                 }
                 groups
@@ -528,7 +539,7 @@ fn mark_ids(sheet: &Sheet, defs: &[SymbolDef]) -> std::collections::BTreeSet<cra
         .entities
         .values()
         .filter_map(|e| match e {
-            Entity::Symbol(s) if by_id.get(s).is_some_and(|d| d.net_name().is_some()) => Some(s.id),
+            Entity::Symbol(s) if by_id.get(s).is_some_and(|d| d.is_net_mark()) => Some(s.id),
             _ => None,
         })
         .collect()
@@ -835,6 +846,31 @@ mod tests {
         assert_eq!(rows[0][3], "test_blank_mark");
     }
 
+    /// The parts list leaves out power rails, and counts the contacts of one connector designator as one connector (several designators, several rows' worth).
+    /// 部品表は電源の印を載せず、同じ参照記号のコネクタ接点を1つのコネクタとして数える (別の参照記号は別に数える)。
+    #[test]
+    fn bom_counts_contacts_of_one_designator_as_one_connector() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        let mut put = |symbol_id: &str, reference: &str, value: &str| {
+            let mut e = sym(reference, value);
+            if let Entity::Symbol(s) = &mut e {
+                s.symbol_id = symbol_id.into();
+            }
+            sheet.entities.insert(e.id(), e);
+        };
+        for pole in ["1", "2", "3"] {
+            put("connector_contact", "J7", pole);
+        }
+        put("connector_contact", "J8", "1");
+        put("power_rail", "", "V24");
+        put("power_rail", "", "V5");
+        let rows = base_bom_rows(&project);
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        assert_eq!((rows[0][1].as_str(), rows[0][3].as_str(), rows[0][4].as_str()), ("J7, J8", "connector_contact", "2"));
+    }
+
     fn mark_at(x: f64, y: f64) -> Entity {
         let mut g = sym("", "");
         if let Entity::Symbol(s) = &mut g {
@@ -876,6 +912,26 @@ mod tests {
         assert_eq!(rows.len(), 1, "{rows:?}");
         let (from, to, _) = &rows[0];
         assert!([from.as_str(), to.as_str()].contains(&"GND"), "{rows:?}");
+        assert!([from.as_str(), to.as_str()].contains(&"R1:1"), "{rows:?}");
+    }
+
+    /// In the wire list, a wire end on a power rail is written as the rail's value (its net name).
+    /// 電線リストでは、電源の印に届いた電線の端を、印の値 (ネット名) で書く。
+    #[test]
+    fn a_wire_end_on_a_power_rail_is_written_as_its_value() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let mut rail = mark_at(0.0, 0.0);
+        if let Entity::Symbol(s) = &mut rail {
+            s.symbol_id = "power_rail".into();
+            s.value = "V24".into();
+        }
+        for e in [resistor("R1", 20.0, 0.0), wire_between((0.0, 0.0), (12.5, 0.0)), rail] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let rows = from_to_rows(&sheet);
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        let (from, to, _) = &rows[0];
+        assert!([from.as_str(), to.as_str()].contains(&"V24"), "{rows:?}");
         assert!([from.as_str(), to.as_str()].contains(&"R1:1"), "{rows:?}");
     }
 

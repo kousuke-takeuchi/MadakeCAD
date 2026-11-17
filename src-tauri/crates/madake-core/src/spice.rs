@@ -210,7 +210,13 @@ pub fn build_deck_with(
                     let pins = pin_positions(s, def);
                     attachments.extend(pins.iter().map(|(_, p)| *p));
                     // ネット名を持つシンボル (接地の印など) のピンは、その名前のネットラベルとして橋を張る
-                    if let Some(name) = def.net_name() {
+                    // 値からネット名を取る印 (電源の印) は、置いた部品の値がその名前
+                    let net = if def.net_from_value {
+                        Some(s.value.trim()).filter(|v| !v.is_empty())
+                    } else {
+                        def.net_name()
+                    };
+                    if let Some(name) = net {
                         labels.entry(name).or_default().extend(pins.iter().map(|(_, p)| (s.id, *p)));
                     }
                     if let Some(sim) = &def.sim {

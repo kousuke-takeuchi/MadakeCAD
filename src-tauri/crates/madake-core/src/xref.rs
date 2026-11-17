@@ -802,6 +802,48 @@ mod tests {
         assert!(net.members.iter().any(|m| m.net.pins.iter().any(|p| p.reference == "R2")), "{net:?}");
     }
 
+    /// 2枚のシートの抵抗のピン2を、値 `v1` / `v2` の電源の印へ下ろす。シート2の印の代わりに `label` があればそのネットラベルを置く。
+    fn rail_project(v1: &str, v2: &str, label_name: Option<&str>) -> Project {
+        let mut project = Project::new("t");
+        project.sheets.push(Sheet::new("Sheet2", PaperSize::A3, Orientation::Landscape));
+        let (s1, s2) = (project.sheets[0].id, project.sheets[1].id);
+        let rail = |v: &str| {
+            let mut e = symbol("power_rail", "", 120.0, 60.0);
+            if let Entity::Symbol(s) = &mut e {
+                s.value = v.into();
+            }
+            e
+        };
+        for e in [symbol("resistor", "R1", 100.0, 50.0), wire(&[(107.5, 50.0), (120.0, 50.0), (120.0, 60.0)]), rail(v1)] {
+            project.sheet_mut(s1).unwrap().entities.insert(e.id(), e);
+        }
+        let end = match label_name {
+            Some(n) => label(n, 120.0, 60.0),
+            None => rail(v2),
+        };
+        for e in [symbol("resistor", "R2", 100.0, 50.0), wire(&[(107.5, 50.0), (120.0, 50.0), (120.0, 60.0)]), end] {
+            project.sheet_mut(s2).unwrap().entities.insert(e.id(), e);
+        }
+        project
+    }
+
+    /// Power rail marks with the same value on two sheets join into one project net named by the value, and a rail also joins a same-named label on another sheet; a different value stays apart.
+    /// 別々のシートにある同じ値の電源の印は、その値の名前のプロジェクト全体の1つのネットになり、別のシートの同名のネットラベルともつながる。値が違えばつながらない。
+    #[test]
+    fn power_rails_join_across_sheets_by_value() {
+        let defs = |_: &Sheet| crate::symbol::builtin_symbols();
+        let net = extract_netlist_project_with(&rail_project("V24", "V24", None), defs);
+        let n = project_net_with_pin(&net, "R1");
+        assert_eq!(n.name, "V24", "{n:?}");
+        assert!(n.members.iter().any(|m| m.net.pins.iter().any(|p| p.reference == "R2")), "{n:?}");
+        let net = extract_netlist_project_with(&rail_project("V24", "", Some("V24")), defs);
+        let n = project_net_with_pin(&net, "R1");
+        assert!(n.members.iter().any(|m| m.net.pins.iter().any(|p| p.reference == "R2")), "{n:?}");
+        let net = extract_netlist_project_with(&rail_project("V24", "V5", None), defs);
+        let n = project_net_with_pin(&net, "R1");
+        assert!(!n.members.iter().any(|m| m.net.pins.iter().any(|p| p.reference == "R2")), "{n:?}");
+    }
+
     /// The cross-reference of a label is the address "/sheet.zone" of the same-named label on another sheet.
     /// ラベルの相手先は、他のシートにある同名ラベルの住所「/シート.ゾーン」になる。
     #[test]

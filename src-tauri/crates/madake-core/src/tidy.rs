@@ -1211,6 +1211,8 @@ mod tests {
             text_slots: vec![],
             free_pins: true,
             net: None,
+            net_from_value: false,
+            through: false,
             sim: None,
         };
         let mut defs = builtin_symbols();

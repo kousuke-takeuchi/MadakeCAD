@@ -728,6 +728,8 @@ mod tests {
             text_slots: vec![TextSlot { key: crate::symbol::SLOT_TAG.into(), at: Point::new(0.0, -3.0), height: 2.5 }],
             free_pins: true,
             net: None,
+            net_from_value: false,
+            through: false,
             sim: Some(SimSpec { role, pins: sim_pins.iter().map(|p| (*p).into()).collect() }),
         }
     }

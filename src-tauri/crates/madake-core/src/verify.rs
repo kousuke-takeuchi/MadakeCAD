@@ -104,6 +104,8 @@ fn project_label_conflicts(project: &crate::model::Project) -> Vec<Diagnostic> {
 const LABEL_CONFLICT: &str = "erc.label_conflict";
 /// 参照記号の重複判定で、嵌合1極のプラグ/ソケットをまとめる分類名。
 const MATE_HALF: &str = "mate_half";
+/// 貫通のシンボル (コネクタの接点) の分類の印。参照記号の重複の検査で、同じ参照記号を分け合える種類を表す。
+const THROUGH_KIND: &str = "through";
 
 /// 浮きネットラベル (配線にもピンにも載っていない) の診断コード。
 pub const DANGLING_LABEL: &str = "erc.dangling_label";
@@ -547,8 +549,17 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
                 vec![s.id],
             ));
         }
+        // 値からネット名を取る印 (電源の印) は、値が空だと名前が無くどこともつながらない
+        if def.net_from_value && s.value.trim().is_empty() {
+            diags.push(diag(
+                Severity::Warning,
+                "erc.empty_net_name",
+                format!("電源の印に値 (ネット名) が入っていません ({})", s.symbol_id),
+                vec![s.id],
+            ));
+        }
         // ネット名を持つシンボル (接地の印など) は参照記号を持たないのが普通なので、未設定を指摘しない
-        if s.reference.trim().is_empty() && def.net_name().is_none() {
+        if s.reference.trim().is_empty() && !def.is_net_mark() {
             diags.push(diag(
                 Severity::Warning,
                 "erc.empty_reference",
@@ -602,7 +613,7 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
     for e in sheet.entities.values() {
         if let Entity::Symbol(s) = e {
             // 接地の印 (ネット名を持つシンボル) は部品ではないので、同じ参照記号でも重複にしない
-            if s.reference.trim().is_empty() || defs.get(s).is_some_and(|d| d.net_name().is_some()) {
+            if s.reference.trim().is_empty() || defs.get(s).is_some_and(|d| d.is_net_mark()) {
                 continue;
             }
             let category = defs
@@ -611,6 +622,9 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
                 .unwrap_or_default();
             let kind = if crate::mate::is_mate_half(&s.symbol_id) {
                 MATE_HALF.to_string()
+            } else if defs.get(s).is_some_and(|d| d.through) {
+                // 貫通のシンボル (コネクタの接点) は、同じ参照記号 (コネクタ名) で何個置いてもよい
+                format!("{THROUGH_KIND}:{}", s.symbol_id)
             } else {
                 category
             };
@@ -619,7 +633,9 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
     }
     for (reference, members) in &by_ref {
         let shared_ok = members.iter().all(|(_, cat)| cat == "relay")
-            || members.iter().all(|(_, cat)| cat == MATE_HALF);
+            || members.iter().all(|(_, cat)| cat == MATE_HALF)
+            // 貫通のシンボルだけが、同じ種類どうしで1つの参照記号を分け合う
+            || members.iter().all(|(_, cat)| cat.starts_with(THROUGH_KIND) && cat == &members[0].1);
         if members.len() >= 2 && !shared_ok {
             diags.push(diag(
                 Severity::Error,
@@ -1455,6 +1471,67 @@ mod tests {
         symbols.push(crate::symbol::test_net_mark("test_blank_mark", "  "));
         let empty = verify_sheet(&sheet, &symbols).into_iter().filter(|d| d.code == "erc.empty_reference").count();
         assert_eq!(empty, 1);
+    }
+
+    fn with_ref_value(mut e: Entity, reference: &str, value: &str) -> Entity {
+        if let Entity::Symbol(s) = &mut e {
+            s.reference = reference.into();
+            s.value = value.into();
+        }
+        e
+    }
+
+    /// A power rail with a blank value (or only spaces) gets one erc.empty_net_name warning; with a value it gets none.
+    /// 値が空 (空白だけも同じ) の電源の印には erc.empty_net_name の警告が1件付く。値があれば付かない。
+    #[test]
+    fn a_power_rail_without_a_value_is_warned() {
+        for (value, expected) in [("", 1), ("  ", 1), ("V24", 0)] {
+            let sheet = sheet_with(vec![wire(&[(0.0, 10.0), (20.0, 10.0)]), with_ref_value(mark("power_rail", 20.0, 10.0), "", value)]);
+            let found: Vec<_> = verify_sheet(&sheet, &sheet_symbol_defs(&sheet)).into_iter().filter(|d| d.code == "erc.empty_net_name").collect();
+            assert_eq!(found.len(), expected, "value {value:?}: {found:?}");
+            if expected == 1 {
+                assert_eq!(found[0].severity, Severity::Warning);
+            }
+        }
+    }
+
+    /// Power rails need no reference designator and may share one: they are marks, not parts.
+    /// 電源の印は参照記号が無くてよく、同じ参照記号を持っても重複とは指摘しない (印は部品ではない)。
+    #[test]
+    fn power_rails_need_no_reference_and_may_share_one() {
+        let sheet = sheet_with(vec![
+            wire(&[(0.0, 10.0), (20.0, 10.0)]),
+            with_ref_value(mark("power_rail", 0.0, 10.0), "", "V24"),
+            with_ref_value(mark("power_rail", 20.0, 10.0), "", "V24"),
+            with_ref_value(mark("power_rail", 40.0, 10.0), "PWR", "V5"),
+            with_ref_value(mark("power_rail", 60.0, 10.0), "PWR", "V5"),
+        ]);
+        let diags = verify_sheet(&sheet, &sheet_symbol_defs(&sheet));
+        assert!(!diags.iter().any(|d| d.code == "erc.empty_reference" || d.code == "erc.duplicate_reference"), "{diags:?}");
+    }
+
+    /// Several connector contacts of one designator are not duplicates, a contact with no designator is still reported, and a contact sharing a designator with an ordinary part is a duplicate.
+    /// 同じ参照記号 (コネクタ名) のコネクタ接点を何個置いても重複とは指摘しない。参照記号が無い接点は指摘し、普通の部品と参照記号を分け合えば重複になる。
+    #[test]
+    fn connector_contacts_share_one_designator() {
+        let contacts = |refs: &[&str], extra: Vec<Entity>| {
+            let mut v: Vec<Entity> = refs
+                .iter()
+                .enumerate()
+                .map(|(i, r)| with_ref_value(mark("connector_contact", 100.0 + 20.0 * i as f64, 10.0), r, &(i + 1).to_string()))
+                .collect();
+            v.extend(extra);
+            let sheet = sheet_with(v);
+            verify_sheet(&sheet, &sheet_symbol_defs(&sheet))
+        };
+        let dups = |d: &[Diagnostic]| d.iter().filter(|x| x.code == "erc.duplicate_reference").count();
+        let empties = |d: &[Diagnostic]| d.iter().filter(|x| x.code == "erc.empty_reference").count();
+        let d = contacts(&["J7", "J7", "J7"], vec![]);
+        assert_eq!((dups(&d), empties(&d)), (0, 0), "{d:?}");
+        let d = contacts(&["J7", ""], vec![]);
+        assert_eq!(empties(&d), 1, "{d:?}");
+        let d = contacts(&["J7"], vec![symbol("resistor", "J7", 50.0, 50.0)]);
+        assert_eq!(dups(&d), 1, "{d:?}");
     }
 
     fn mark(symbol_id: &str, x: f64, y: f64) -> Entity {

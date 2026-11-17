@@ -1167,6 +1167,8 @@ mod tests {
             text_slots: vec![],
             free_pins: false,
             net: None,
+            net_from_value: false,
+            through: false,
             sim: None,
         };
         let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
@@ -1720,6 +1722,8 @@ mod tests {
             text_slots: vec![],
             free_pins: true,
             net: None,
+            net_from_value: false,
+            through: false,
             sim: None,
         };
         let mut sheet = Sheet::new("S", crate::model::PaperSize::A3, crate::model::Orientation::Landscape);
@@ -1773,6 +1777,8 @@ mod tests {
             text_slots: vec![],
             free_pins: false,
             net: net.map(str::to_string),
+            net_from_value: false,
+            through: false,
             sim: None,
         }
     }
@@ -1840,6 +1846,114 @@ mod tests {
         let net = net_of(&nets, "R3:2");
         assert!(net.pins.iter().any(|p| p.reference == "R1") && net.pins.iter().any(|p| p.reference == "R2"), "{net:?}");
         assert_eq!(net.name, "GND");
+    }
+
+    fn with_value(mut e: Entity, value: &str) -> Entity {
+        if let Entity::Symbol(s) = &mut e {
+            s.value = value.into();
+        }
+        e
+    }
+
+    /// R1 and R2 each hang from a power rail mark with the given value (no wire between the marks); R3 is tied to a net label named `label_name` when given.
+    fn rail_sheet(v1: &str, v2: &str, label_name: Option<&str>) -> Sheet {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let mut entities = vec![
+            symbol("resistor", "R1", 100.0, 50.0),
+            symbol("resistor", "R2", 100.0, 100.0),
+            with_value(symbol("power_rail", "", 120.0, 60.0), v1),
+            with_value(symbol("power_rail", "", 120.0, 110.0), v2),
+            wire(&[(107.5, 50.0), (120.0, 50.0), (120.0, 60.0)]),
+            wire(&[(107.5, 100.0), (120.0, 100.0), (120.0, 110.0)]),
+        ];
+        if let Some(name) = label_name {
+            entities.push(symbol("resistor", "R3", 100.0, 150.0));
+            entities.push(wire(&[(107.5, 150.0), (130.0, 150.0)]));
+            entities.push(Entity::NetLabel(NetLabel { id: Uuid::new_v4(), at: Point::new(130.0, 150.0), name: name.into(), rotation: 0, attrs: Default::default() }));
+        }
+        for e in entities {
+            sheet.entities.insert(e.id(), e);
+        }
+        sheet
+    }
+
+    /// Two power rail marks with the same value join into one net named after that value, with no wire between them.
+    /// 同じ値の電源の印が2つあれば、間に配線が無くても、その値の名前の1つのネットにまとまる。
+    #[test]
+    fn two_power_rails_with_the_same_value_join_into_one_net() {
+        let nets = extract_netlist(&rail_sheet("V24", "V24", None), &builtin_symbols());
+        let net = net_of(&nets, "R1:2");
+        assert!(net.pins.iter().any(|p| p.reference == "R2" && p.pin == "2"), "{net:?}");
+        assert_eq!(net.name, "V24");
+    }
+
+    /// Power rails with different values stay separate nets, each named by its own value.
+    /// 値の違う電源の印どうしはつながらず、それぞれの値の名前の別のネットになる。
+    #[test]
+    fn power_rails_with_different_values_stay_separate() {
+        let nets = extract_netlist(&rail_sheet("V24", "V5", None), &builtin_symbols());
+        let a = net_of(&nets, "R1:2");
+        assert!(!a.pins.iter().any(|p| p.reference == "R2"), "{a:?}");
+        assert_eq!(a.name, "V24");
+        assert_eq!(net_of(&nets, "R2:2").name, "V5");
+    }
+
+    /// A power rail with a blank value has no net name: it joins nothing, and a value of only spaces counts as blank.
+    /// 値が空の電源の印はネット名を持たず、何ともつながらない。空白だけの値も空とみなす。
+    #[test]
+    fn a_power_rail_with_a_blank_value_joins_nothing() {
+        for blank in ["", "   "] {
+            let nets = extract_netlist(&rail_sheet(blank, blank, None), &builtin_symbols());
+            let a = net_of(&nets, "R1:2");
+            assert!(!a.pins.iter().any(|p| p.reference == "R2"), "{a:?}");
+            assert_eq!(a.label, None);
+        }
+    }
+
+    /// A power rail joins a net label of the same name and a fixed-net mark of the same name into one net.
+    /// 電源の印は、同じ名前のネットラベルとも、同じ名前を固定で持つ印とも、1つのネットにまとまる。
+    #[test]
+    fn a_power_rail_joins_a_label_and_a_fixed_net_mark_of_the_same_name() {
+        let nets = extract_netlist(&rail_sheet("V24", "V24", Some("V24")), &builtin_symbols());
+        let net = net_of(&nets, "R3:2");
+        assert!(net.pins.iter().any(|p| p.reference == "R1") && net.pins.iter().any(|p| p.reference == "R2"), "{net:?}");
+        // 固定の名前の印 (GND の印の定義に V24 を持たせる) とも同じネット
+        let mut symbols = builtin_symbols();
+        let mut mark = net_symbol_def(Some("V24"));
+        mark.id = "user_v24_mark".into();
+        symbols.push(mark);
+        let mut sheet = rail_sheet("V24", "V5", None);
+        let m = symbol("user_v24_mark", "", 120.0, 110.0);
+        // R2 の下の印を、値 V5 の印から固定名 V24 の印へ付け替える
+        let rail2 = sheet.entities.values().find(|e| matches!(e, Entity::Symbol(s) if s.value == "V5")).map(|e| e.id()).unwrap();
+        sheet.entities.remove(&rail2);
+        sheet.entities.insert(m.id(), m);
+        let nets = extract_netlist(&sheet, &symbols);
+        let net = net_of(&nets, "R1:2");
+        assert!(net.pins.iter().any(|p| p.reference == "R2" && p.pin == "2"), "{net:?}");
+    }
+
+    /// A connector contact on a wire is a pass-through: the wires on its left and right are one net, and the net lists the contact once under its designator and pole.
+    /// 配線の途中のコネクタ接点は素通しで、左右の配線は1つのネットになり、ネットには接点が参照記号とピン1つ分だけ載る。
+    #[test]
+    fn a_connector_contact_passes_the_wire_through_and_is_listed_once() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        // R1 のピン2 (107.5,50) — 接点 J7 (原点120,50: ピンは117.5 と 122.5) — R2 のピン1 (142.5,50 は 150 に置く)
+        for e in [
+            symbol("resistor", "R1", 100.0, 50.0),
+            with_value(symbol("connector_contact", "J7", 120.0, 50.0), "3"),
+            symbol("resistor", "R2", 150.0, 50.0),
+            wire(&[(107.5, 50.0), (117.5, 50.0)]),
+            wire(&[(122.5, 50.0), (142.5, 50.0)]),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let nets = extract_netlist(&sheet, &builtin_symbols());
+        let net = net_of(&nets, "R1:2");
+        assert!(net.pins.iter().any(|p| p.reference == "R2" && p.pin == "1"), "{net:?}");
+        let contacts: Vec<_> = net.pins.iter().filter(|p| p.reference == "J7").collect();
+        assert_eq!(contacts.len(), 1, "{net:?}");
+        assert_eq!(contacts[0].pin, "1");
     }
 
     /// Every pin of a rotated two-pin symbol with a net name joins that net at its rotated position.

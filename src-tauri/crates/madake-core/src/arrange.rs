@@ -111,7 +111,7 @@ fn phys_groups(sheet: &Sheet, defs: &[SymbolDef]) -> Vec<PhysGroup> {
         .entities
         .values()
         .filter_map(|e| match e {
-            Entity::Symbol(s) if idx.get(s).is_some_and(|d| d.net_name().is_some()) => Some(s.id),
+            Entity::Symbol(s) if idx.get(s).is_some_and(|d| d.is_net_mark()) => Some(s.id),
             _ => None,
         })
         .collect();
@@ -1717,7 +1717,7 @@ fn pin_contacts(sheet: &Sheet, defs: &[SymbolDef]) -> BTreeSet<(EntityId, Entity
     for e in sheet.entities.values() {
         let at: Vec<Point> = match e {
             Entity::NetLabel(l) => vec![l.at],
-            Entity::Symbol(s) if idx.get(s).is_some_and(|d| d.net_name().is_some()) => {
+            Entity::Symbol(s) if idx.get(s).is_some_and(|d| d.is_net_mark()) => {
                 pp.iter().filter(|q| q.entity == s.id).map(|q| q.pos).collect()
             }
             _ => continue,
@@ -2234,6 +2234,8 @@ mod tests {
             text_slots: vec![],
             free_pins: false,
             net: None,
+            net_from_value: false,
+            through: false,
             sim: None,
         }
     }

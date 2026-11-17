@@ -29,6 +29,17 @@ pub struct SymbolDef {
     /// 無い・空白だけなら普通のシンボル。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub net: Option<String>,
+    /// ネット名を置いた部品の値 (`value`) から取る (電源の印)。`net` が固定の名前なのに対し、こちらは
+    /// インスタンスごとに値がネット名になる。同じ値の印どうし・同名のネットラベル・固定の名前の印と
+    /// 1つのネットになる (シートを跨いでも)。値が空白だけなら名前が無く、検証が警告する。`net` とは同時に使えない。
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub net_from_value: bool,
+    /// 貫通: 同じ番号のピンどうしを1つの節点とする (接点つきのコネクタを配線の途中に置くときなど)。
+    /// ネットリストは同じ番号のピンを今までも常に結ぶので結び方は変わらず、この印は意図の宣言になる:
+    /// 参照記号を共有してもよく (重複を指摘しない)、部品表は同じ参照記号を1つの部品として数え、
+    /// 保存時には同じ番号のピンが2つ以上あることを確かめる。
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub through: bool,
     /// シミュレーションでの電気的な役割 (電源・負荷・ヒューズ・導通・変換器)。無ければカテゴリで決める従来の扱い。
     /// ユーザーシンボルでもシミュレーションに参加できるようにする。値は置いた部品の属性 (attrs) が持つ。
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -77,6 +88,12 @@ impl SymbolDef {
     /// ネット名 (前後の空白を落としたもの)。無い・空白だけなら None。
     pub fn net_name(&self) -> Option<&str> {
         self.net.as_deref().map(str::trim).filter(|n| !n.is_empty())
+    }
+
+    /// ネット名の印か (固定の名前を持つか、値からネット名を取る)。値が空の `net_from_value` も印として扱い、
+    /// 参照記号の検査や部品表から外す。名前そのものは [`DefIndex::get`] が返す定義の [`net_name`](Self::net_name) が持つ。
+    pub fn is_net_mark(&self) -> bool {
+        self.net_from_value || self.net_name().is_some()
     }
 }
 
@@ -301,6 +318,8 @@ fn sym(
         text_slots,
         free_pins: false,
         net: None,
+        net_from_value: false,
+        through: false,
         sim: None,
     }
 }
@@ -1225,6 +1244,182 @@ pub fn builtin_symbols() -> Vec<SymbolDef> {
         vec![pin("1", "", 7.5, 0.0, PinDir::Right)],
     ));
 
+    // ---- 配線の途中のコネクタ接点・半導体・電源の印 (シート分割した図面向け) ----
+    out.extend(drawing_aid_symbols());
+    // 分類ごとに連続して並べる (安定ソートなので、同じ分類の中の並びは今までどおり。新しい記号は各分類の最後に付く)
+    let rank = |c: &str| CATEGORY_ORDER.iter().position(|x| *x == c).unwrap_or(CATEGORY_ORDER.len());
+    out.sort_by_key(|d| rank(&d.category));
+
+    out
+}
+
+/// 矢じり (中抜きでない線の三角): 先端 `tip` から向き `(dx, dy)` の反対へ長さ `len`、片側の半幅 `half`。
+fn arrow_head(tip: (f64, f64), dir: (f64, f64), len: f64, half: f64) -> Primitive {
+    let n = (dir.0.hypot(dir.1)).max(1e-9);
+    let (ux, uy) = (dir.0 / n, dir.1 / n);
+    let (bx, by) = (tip.0 - ux * len, tip.1 - uy * len);
+    line(&[(bx - uy * half, by + ux * half), tip, (bx + uy * half, by - ux * half)])
+}
+
+/// トランジスタ (JIS C 0617 / IEC 60617 の円の外形つき)。ピン B (左)・C (上)・E (下)。
+/// NPN はエミッタの矢が外向き、PNP は内向き (ベースへ向く)。
+fn transistor_symbol(npn: bool) -> SymbolDef {
+    let mut prims = vec![
+        circle(0.0, 0.0, 5.0, false),
+        line(&[(-7.5, 0.0), (-2.5, 0.0)]),
+        line(&[(-2.5, -3.0), (-2.5, 3.0)]),
+        // コレクタ・エミッタ: ベースの板から斜めに出て、2.5mmグリッド上のピンへ垂直に伸びる
+        line(&[(-2.5, -1.25), (2.5, -3.75), (2.5, -7.5)]),
+        line(&[(-2.5, 1.25), (2.5, 3.75), (2.5, 7.5)]),
+    ];
+    let d = (2.0, 1.0); // エミッタの斜線の向き (ベース → 外)
+    if npn {
+        prims.push(arrow_head((1.5, 3.25), d, 2.2, 0.9));
+    } else {
+        prims.push(arrow_head((-1.0, 2.0), (-d.0, -d.1), 2.2, 0.9));
+    }
+    let (id, name, name_ja, kw): (&str, &str, &str, &[&str]) = if npn {
+        ("transistor_npn", "Transistor (NPN)", "トランジスタ(NPN)", &["transistor", "npn", "トランジスタ"])
+    } else {
+        ("transistor_pnp", "Transistor (PNP)", "トランジスタ(PNP)", &["transistor", "pnp", "トランジスタ"])
+    };
+    sym(
+        id,
+        name,
+        name_ja,
+        "semiconductor",
+        "Q",
+        kw,
+        prims,
+        vec![
+            pin("B", "B", -7.5, 0.0, PinDir::Left),
+            pin("C", "C", 2.5, -7.5, PinDir::Up),
+            pin("E", "E", 2.5, 7.5, PinDir::Down),
+        ],
+    )
+}
+
+fn drawing_aid_symbols() -> Vec<SymbolDef> {
+    let mut out = Vec::new();
+
+    // コネクタの接点: 配線の途中の小さな丸。左右のピンは同じ番号 = 1つの節点 (貫通)。
+    // 参照記号がコネクタ (J7)、型番が極の番号。同じ参照記号の接点を何個置いてもよい。
+    let mut contact = sym(
+        "connector_contact",
+        "Connector contact (on a wire)",
+        "コネクタ接点(配線の途中)",
+        "connector",
+        "J",
+        &["connector", "contact", "pole", "pass-through", "コネクタ", "接点", "極", "中継"],
+        vec![
+            circle(0.0, 0.0, 1.0, false),
+            line(&[(-2.5, 0.0), (-1.0, 0.0)]),
+            line(&[(1.0, 0.0), (2.5, 0.0)]),
+        ],
+        vec![pin("1", "", -2.5, 0.0, PinDir::Left), pin("1", "", 2.5, 0.0, PinDir::Right)],
+    );
+    contact.through = true;
+    out.push(contact);
+
+    out.push(transistor_symbol(true));
+    out.push(transistor_symbol(false));
+
+    // フォトカプラ: 発光ダイオードとフォトトランジスタを1つの外形に入れる。A・K は左、C・E は右。
+    let mut pc = vec![
+        rect(-10.0, -8.75, 10.0, 8.75, false),
+        // 発光ダイオード (アノード上・カソード下)
+        line(&[(-12.5, -5.0), (-5.0, -5.0), (-5.0, -2.5)]),
+        line(&[(-7.0, -2.5), (-3.0, -2.5), (-5.0, 1.5), (-7.0, -2.5)]),
+        line(&[(-7.0, 1.5), (-3.0, 1.5)]),
+        line(&[(-5.0, 1.5), (-5.0, 5.0), (-12.5, 5.0)]),
+        // 光 (発光側 → 受光側)
+        line(&[(-2.0, -1.5), (1.0, -1.5)]),
+        arrow_head((1.0, -1.5), (1.0, 0.0), 1.2, 0.6),
+        line(&[(-2.0, 1.0), (1.0, 1.0)]),
+        arrow_head((1.0, 1.0), (1.0, 0.0), 1.2, 0.6),
+        // フォトトランジスタ (NPN。ベースは外へ出さない)
+        line(&[(3.0, -3.0), (3.0, 3.0)]),
+        line(&[(3.0, -1.25), (5.0, -2.25), (5.0, -5.0), (12.5, -5.0)]),
+        line(&[(3.0, 1.25), (5.0, 2.25), (5.0, 5.0), (12.5, 5.0)]),
+    ];
+    pc.push(arrow_head((4.4, 1.95), (2.0, 1.0), 1.8, 0.7));
+    out.push(sym(
+        "photocoupler",
+        "Photocoupler",
+        "フォトカプラ",
+        "semiconductor",
+        "PC",
+        &["photocoupler", "optocoupler", "opto", "isolator", "フォトカプラ", "オプトカプラ", "絶縁"],
+        pc,
+        vec![
+            pin("A", "A", -12.5, -5.0, PinDir::Left),
+            pin("K", "K", -12.5, 5.0, PinDir::Left),
+            pin("C", "C", 12.5, -5.0, PinDir::Right),
+            pin("E", "E", 12.5, 5.0, PinDir::Right),
+        ],
+    ));
+
+    // オペアンプ: 三角形。反転入力 (-) が上、非反転入力 (+) が下。電源 V+ は上、V- は下。
+    out.push(sym(
+        "opamp",
+        "Operational amplifier",
+        "オペアンプ",
+        "semiconductor",
+        "U",
+        &["opamp", "operational amplifier", "オペアンプ", "演算増幅器"],
+        vec![
+            line(&[(-7.5, -10.0), (-7.5, 10.0), (10.0, 0.0), (-7.5, -10.0)]),
+            line(&[(-12.5, -5.0), (-7.5, -5.0)]),
+            line(&[(-12.5, 5.0), (-7.5, 5.0)]),
+            line(&[(10.0, 0.0), (12.5, 0.0)]),
+            line(&[(0.0, -10.0), (0.0, -5.7)]),
+            line(&[(0.0, 10.0), (0.0, 5.7)]),
+            text(-5.0, -5.0, "-", 2.5),
+            text(-5.0, 5.0, "+", 2.5),
+        ],
+        vec![
+            pin("-", "IN-", -12.5, -5.0, PinDir::Left),
+            pin("+", "IN+", -12.5, 5.0, PinDir::Left),
+            pin("OUT", "OUT", 12.5, 0.0, PinDir::Right),
+            pin("V+", "V+", 0.0, -10.0, PinDir::Up),
+            pin("V-", "V-", 0.0, 10.0, PinDir::Down),
+        ],
+    ));
+
+    // 双方向サージ吸収ダイオード (TVS): ツェナーを背中合わせ (アノード同士) に並べる。
+    out.push(sym(
+        "tvs_diode",
+        "TVS diode (bidirectional)",
+        "サージ吸収ダイオード(双方向)",
+        "semiconductor",
+        "D",
+        &["tvs", "surge", "suppressor", "transient", "サージ", "サージ吸収", "双方向"],
+        vec![
+            line(&[(-7.5, 0.0), (-5.0, 0.0)]),
+            line(&[(5.0, 0.0), (7.5, 0.0)]),
+            line(&[(0.0, -3.0), (0.0, 3.0), (-5.0, 0.0), (0.0, -3.0)]),
+            line(&[(0.0, -3.0), (0.0, 3.0), (5.0, 0.0), (0.0, -3.0)]),
+            line(&[(-6.0, -3.0), (-5.0, -3.0), (-5.0, 3.0), (-4.0, 3.0)]),
+            line(&[(4.0, -3.0), (5.0, -3.0), (5.0, 3.0), (6.0, 3.0)]),
+        ],
+        pins_lr("1", "", "2", ""),
+    ));
+
+    // 電源の印: 置いた部品の値がネット名。同じ値の印どうし (シートを跨いでも) が1つのネットになる。
+    // 値は棒の上に印字される。参照記号は付けない (部品ではなく、部品表・参照記号の検査の対象外)。
+    let mut rail = sym(
+        "power_rail",
+        "Power rail (net name = value)",
+        "電源の印(値がネット名)",
+        "power",
+        "PWR",
+        &["power", "rail", "vcc", "supply", "net", "電源", "電源レール", "ネット名"],
+        vec![line(&[(0.0, 0.0), (0.0, -2.5)]), line(&[(-3.0, -2.5), (3.0, -2.5)])],
+        vec![pin("1", "", 0.0, 0.0, PinDir::Down)],
+    );
+    rail.net_from_value = true;
+    out.push(rail);
+
     out
 }
 
@@ -1584,10 +1779,14 @@ impl<'a> DefIndex<'a> {
                 .ok()
                 .map(std::borrow::Cow::Owned);
         }
-        self.by_id
-            .get(inst.symbol_id.as_str())
-            .copied()
-            .map(std::borrow::Cow::Borrowed)
+        let def = self.by_id.get(inst.symbol_id.as_str()).copied()?;
+        if def.net_from_value {
+            // 値から取るネット名は、インスタンスごとに違う。名前を入れた写しを返す (空白だけなら名前なし)
+            let mut own = def.clone();
+            own.net = Some(inst.value.trim().to_string());
+            return Some(std::borrow::Cow::Owned(own));
+        }
+        Some(std::borrow::Cow::Borrowed(def))
     }
 
     /// `symbol_id`だけで引く(ブロックは見本の定義になる)。
@@ -1647,6 +1846,8 @@ pub(crate) fn test_net_mark(id: &str, net: &str) -> SymbolDef {
         text_slots: vec![],
         free_pins: false,
         net: Some(net.into()),
+        net_from_value: false,
+        through: false,
         sim: None,
     }
 }
@@ -2603,5 +2804,81 @@ mod tests {
         // 番号が連番でない切替接点は1グループのまま (共通端子で全体がつながる)
         let co = def("relay_contact_co");
         assert_eq!(conducting_pin_groups(&co).len(), 1);
+    }
+
+    /// The drawing-aid symbols exist with the pins a reader expects: transistors B C E, photocoupler A K C E, op-amp - + OUT V+ V-, two-pin TVS diode, one-pin power rail, two same-numbered contact pins.
+    /// 図面の補助の記号は、期待するピンを持つ: トランジスタは B C E、フォトカプラは A K C E、オペアンプは - + OUT V+ V-、TVS ダイオードは2ピン、電源の印は1ピン、コネクタ接点は同じ番号の左右2ピン。
+    #[test]
+    fn the_drawing_aid_symbols_have_their_pins() {
+        let numbers = |id: &str| -> Vec<String> { resolve_symbol(id).unwrap_or_else(|| panic!("{id}")).pins.iter().map(|p| p.number.clone()).collect() };
+        assert_eq!(numbers("transistor_npn"), ["B", "C", "E"]);
+        assert_eq!(numbers("transistor_pnp"), ["B", "C", "E"]);
+        assert_eq!(numbers("photocoupler"), ["A", "K", "C", "E"]);
+        assert_eq!(numbers("opamp"), ["-", "+", "OUT", "V+", "V-"]);
+        assert_eq!(numbers("tvs_diode"), ["1", "2"]);
+        assert_eq!(numbers("power_rail"), ["1"]);
+        assert_eq!(numbers("connector_contact"), ["1", "1"]);
+    }
+
+    /// Every pin of the drawing-aid symbols is on the 2.5 mm grid and is the end of a drawn lead line (no pin floats away from the outline).
+    /// 図面の補助の記号のピンは、すべて2.5mmグリッド上にあり、描かれたリード線の端に一致する (ピンが外形から離れて浮かない)。
+    #[test]
+    fn drawing_aid_symbol_pins_are_on_the_grid_and_at_lead_ends() {
+        for id in ["transistor_npn", "transistor_pnp", "photocoupler", "opamp", "tvs_diode", "power_rail", "connector_contact"] {
+            let def = resolve_symbol(id).unwrap();
+            for pin in &def.pins {
+                assert!((pin.at.x / 2.5 - (pin.at.x / 2.5).round()).abs() < 1e-9 && (pin.at.y / 2.5 - (pin.at.y / 2.5).round()).abs() < 1e-9, "{id} {}", pin.number);
+                let at_end = def.primitives.iter().any(|prim| match prim {
+                    Primitive::Line { pts } => {
+                        let near = |q: &Point| (q.x - pin.at.x).abs() < 1e-9 && (q.y - pin.at.y).abs() < 1e-9;
+                        near(&pts[0]) || near(pts.last().unwrap())
+                    }
+                    _ => false,
+                });
+                assert!(at_end, "{id}: pin {} is not at the end of a lead line", pin.number);
+            }
+        }
+    }
+
+    /// Definition properties: the power rail takes its net name from the value, the connector contact is a pass-through, and both are in their natural categories; nothing else uses these properties.
+    /// 定義の性質: 電源の印は値からネット名を取り、コネクタ接点は貫通で、それぞれ自然な分類に入る。ほかの同梱シンボルはこの性質を使わない。
+    #[test]
+    fn net_from_value_and_through_belong_only_to_the_new_marks() {
+        let rail = resolve_symbol("power_rail").unwrap();
+        assert!(rail.net_from_value && rail.net.is_none() && rail.is_net_mark());
+        assert_eq!(rail.category, "power");
+        let contact = resolve_symbol("connector_contact").unwrap();
+        assert!(contact.through && !contact.net_from_value);
+        assert_eq!((contact.category.as_str(), contact.ref_prefix.as_str()), ("connector", "J"));
+        for d in builtin_symbols() {
+            if d.id != "power_rail" {
+                assert!(!d.net_from_value, "{}", d.id);
+            }
+            if d.id != "connector_contact" {
+                assert!(!d.through, "{}", d.id);
+            }
+        }
+    }
+
+    /// A placed power rail takes its net name from its own value: two instances give two different names, and a blank value gives none.
+    /// 置いた電源の印は、自分の値からネット名を取る。2つの印は別々の名前になり、値が空なら名前は無い。
+    #[test]
+    fn a_placed_power_rail_is_named_by_its_value() {
+        let defs = builtin_symbols();
+        let idx = DefIndex::new(&defs);
+        let inst = |v: &str| crate::model::SymbolInstance {
+            id: uuid::Uuid::new_v4(),
+            symbol_id: "power_rail".into(),
+            at: Point::new(0.0, 0.0),
+            rotation: 0,
+            mirror: false,
+            reference: String::new(),
+            value: v.into(),
+            attrs: Default::default(),
+        };
+        assert_eq!(idx.get(&inst(" V24 ")).unwrap().net_name(), Some("V24"));
+        assert_eq!(idx.get(&inst("V5")).unwrap().net_name(), Some("V5"));
+        assert_eq!(idx.get(&inst("  ")).unwrap().net_name(), None);
+        assert!(idx.get(&inst("")).unwrap().is_net_mark());
     }
 }

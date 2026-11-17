@@ -73,6 +73,8 @@ pub mod code {
     pub const SLOT_DUPLICATE: &str = "symbol.slot_duplicate";
     pub const SLOT_HEIGHT: &str = "symbol.slot_height";
     pub const SIM_PINS: &str = "symbol.sim_pins";
+    pub const NET_CONFLICT: &str = "symbol.net_conflict";
+    pub const THROUGH_NO_PAIR: &str = "symbol.through_no_pair";
 }
 
 /// 保存できない理由1件。[`validate`]は見つかった理由を**全部**返す(直す回数を減らす)。
@@ -392,6 +394,24 @@ pub fn validate(def: &SymbolDef) -> Vec<SymbolError> {
             format!("参照記号のスロット({SLOT_TAG})は必須です"),
         ));
     }
+    if def.net_from_value && def.net_name().is_some() {
+        errors.push(SymbolError::new(
+            code::NET_CONFLICT,
+            "ネット名を固定 (net) と値から取る (net_from_value) の両方では決められません。どちらか一方にしてください",
+        ));
+    }
+    if def.through {
+        let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+        for pin in &def.pins {
+            *counts.entry(pin.number.trim()).or_default() += 1;
+        }
+        if !counts.values().any(|&n| n >= 2) {
+            errors.push(SymbolError::new(
+                code::THROUGH_NO_PAIR,
+                "貫通 (through) のシンボルには、同じ番号の接続点が2つ以上要ります",
+            ));
+        }
+    }
     if let Some(sim) = &def.sim {
         if let Some(n) = sim.required_pins() {
             if sim.pins.len() != n {
@@ -563,6 +583,8 @@ mod tests {
             }],
             free_pins: false,
             net: None,
+            net_from_value: false,
+            through: false,
             sim: None,
         }
     }
@@ -1005,5 +1027,66 @@ mod tests {
         // ヒューズ・導通はピンを省略できる (全ピンが導通)
         def.sim = Some(SimSpec { role: SimRole::Fuse, pins: vec![] });
         assert!(validate(&def).is_empty());
+    }
+
+    /// net_from_value and through are kept through save and load, and a symbol without them is written without the fields, so existing symbol files stay as they are.
+    /// net_from_value と through は保存して読み直しても残る。使わないシンボルはその項目を書き出さないので、これまでのシンボルファイルは変わらない。
+    #[test]
+    fn net_from_value_and_through_are_written_only_when_set() {
+        let mut def = sample();
+        let plain = serde_json::to_string(&def).unwrap();
+        assert!(!plain.contains("net_from_value") && !plain.contains("through"), "{plain}");
+        def.net_from_value = true;
+        def.pins.push(crate::symbol::PinDef { number: "1".into(), name: String::new(), at: Point::new(0.0, 5.0), dir: crate::symbol::PinDir::Left, contacts: vec![] });
+        def.through = true;
+        let text = serde_json::to_string(&def).unwrap();
+        assert!(text.contains("\"net_from_value\":true") && text.contains("\"through\":true"), "{text}");
+        let back: SymbolDef = serde_json::from_str(&text).unwrap();
+        assert!(back.net_from_value && back.through);
+        assert!(validate(&normalize(&back)).is_empty(), "{:?}", validate(&normalize(&back)));
+        // 古いファイル (どちらの項目も無い) は今までどおり読める
+        let old: SymbolDef = serde_json::from_str(&plain).unwrap();
+        assert!(!old.net_from_value && !old.through);
+    }
+
+    /// A user symbol may not set both a fixed net name and net_from_value; each alone is fine.
+    /// ユーザーシンボルは、固定のネット名と net_from_value を同時には決められない。どちらか一方だけなら保存できる。
+    #[test]
+    fn a_fixed_net_and_net_from_value_conflict() {
+        let mut def = sample();
+        def.net = Some("GND".into());
+        assert!(validate(&def).is_empty());
+        def.net = None;
+        def.net_from_value = true;
+        assert!(validate(&def).is_empty());
+        def.net = Some("GND".into());
+        assert!(validate(&def).iter().any(|e| e.code == code::NET_CONFLICT));
+    }
+
+    /// A through symbol needs at least two connection points with the same number; without a pair it is refused.
+    /// 貫通のシンボルは同じ番号の接続点が2つ以上要る。組が無ければ断られる。
+    #[test]
+    fn a_through_symbol_needs_a_pair_of_same_numbered_pins() {
+        let mut def = sample();
+        def.through = true;
+        assert!(validate(&def).iter().any(|e| e.code == code::THROUGH_NO_PAIR), "{:?}", validate(&def));
+        let first = def.pins[0].number.clone();
+        def.pins[1].number = first;
+        assert!(validate(&def).is_empty(), "{:?}", validate(&def));
+    }
+
+    /// A through user symbol saved to a symbol file loads back from it with the through mark kept.
+    /// 貫通のユーザーシンボルは、シンボルファイルに保存して読み直しても貫通の印が残る。
+    #[test]
+    fn a_saved_through_symbol_loads_back_with_its_marks() {
+        let dir = tmp("through");
+        let mut def = sample();
+        def.id = "user_contact".into();
+        def.through = true;
+        def.pins[1].number = def.pins[0].number.clone();
+        save_to(&dir, &def).unwrap();
+        let library = list_from(Some(&dir));
+        assert!(library.issues.is_empty(), "{:?}", library.issues);
+        assert!(library.symbols[0].through);
     }
 }

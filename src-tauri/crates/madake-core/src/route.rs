@@ -1640,6 +1640,8 @@ mod tests {
             text_slots: vec![],
             free_pins: false,
             net: None,
+            net_from_value: false,
+            through: false,
             sim: None,
         }
     }
