@@ -770,10 +770,6 @@ fn shifted(b: Bounds, ax: Axis, d: f64) -> Bounds {
     }
 }
 
-fn overlap(a: &Bounds, b: &Bounds) -> bool {
-    a.0 < b.2 - EPS && b.0 < a.2 - EPS && a.1 < b.3 - EPS && b.1 < a.3 - EPS
-}
-
 /// 基準の座標を、組の最初の座標との差が tol 未満のものどうしの組に分ける ([`align_moves`] の分け方)。
 /// 組の幅が tol を超えないので、近い座標が鎖のように続いても1つの組にはならない。組は keys の添字。
 fn key_groups(keys: &[f64], tol: f64) -> Vec<Vec<usize>> {
@@ -1068,7 +1064,7 @@ fn kept_links(sheet: &Sheet, owners: &Owners, lay: &Layout, keep: &[EntityId]) -
     keep.iter()
         .filter_map(|id| match sheet.entities.get(id) {
             Some(Entity::Wire(w)) => {
-                let o = owners.of(w.points[0])?;
+                let o = w.points.first().copied().and_then(|q| owners.of(q))?;
                 let mut c = w.clone();
                 c.id = uuid::Uuid::new_v4();
                 c.points.iter_mut().for_each(|p| *p = p.translated(lay.dx[o], lay.dy[o]));
@@ -1481,21 +1477,17 @@ fn check_stubs(after: &Sheet, defs: &[SymbolDef], stubs: &[Stub]) -> Result<(), 
 
 /// 検算: 計画を当てた写しで、ピンの分け方・ネットごとの名前 (新しい `ARR_<n>` を除く)・ラベルでつなぐ短い線の孤立を確かめる。
 fn verify_after(before: &Sheet, after: &Sheet, defs: &[SymbolDef], fresh: &BTreeSet<String>, stubs: &[Stub]) -> Result<(), String> {
-    // 計画で消したシンボル (新しいラベルに置き換えた電源マーク) のピンは、前の分け方から外して比べる
-    let pb: BTreeSet<BTreeSet<(EntityId, String)>> = pin_partition(before, defs)
-        .into_iter()
-        .map(|g| g.into_iter().filter(|p| after.entities.contains_key(&p.0)).collect::<BTreeSet<_>>())
-        .filter(|g| !g.is_empty())
-        .collect();
+    // 並べ直しは部品を消さない (消えた部品があれば断る)
+    if before.entities.values().any(|e| matches!(e, Entity::Symbol(_)) && !after.entities.contains_key(&e.id())) {
+        return Err("並べ直しの検算で部品が消えたため、何も変えませんでした".into());
+    }
+    let pb = pin_partition(before, defs);
     let pa = pin_partition(after, defs);
     if pb != pa {
         return Err(format!("並べ直しの検算で接続が変わったため、何も変えませんでした ({})", partition_diff(before, &pb, &pa)));
     }
-    let mut nb: Vec<(BTreeSet<(EntityId, String)>, BTreeSet<String>)> = name_key(before, defs, fresh)
-        .into_iter()
-        .map(|(g, n)| (g.into_iter().filter(|p| after.entities.contains_key(&p.0)).collect::<BTreeSet<_>>(), n))
-        .filter(|(g, n)| !(g.is_empty() && n.is_empty()))
-        .collect();
+    let mut nb: Vec<(BTreeSet<(EntityId, String)>, BTreeSet<String>)> =
+        name_key(before, defs, fresh).into_iter().filter(|(g, n)| !(g.is_empty() && n.is_empty())).collect();
     nb.sort();
     let na: Vec<(BTreeSet<(EntityId, String)>, BTreeSet<String>)> =
         name_key(after, defs, fresh).into_iter().filter(|(g, n)| !(g.is_empty() && n.is_empty())).collect();
@@ -1604,6 +1596,16 @@ fn apply_plan(sheet: &Sheet, plan: &ArrangePlan) -> Sheet {
         s.entities.insert(e.id(), e.clone());
     }
     s
+}
+
+/// ネットごとのラベル名 (同じネットの別のかたまりのラベルも含む。ポートの接点のネットは除く)。
+fn net_label_names(sheet: &Sheet, defs: &[SymbolDef]) -> BTreeMap<String, String> {
+    // ポートの接点のネットのラベル名は「<ラベル>.<接点>」で、図面にその文字のラベルは無いので借りない
+    extract_netlist(sheet, defs)
+        .into_iter()
+        .filter(|n| n.contact.is_none())
+        .filter_map(|n| n.label.clone().map(|l| (n.name.clone(), l)))
+        .collect()
 }
 
 /// 引けた経路の形: 配線の点列とジャンクションの位置。
@@ -1719,8 +1721,7 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
     let unit_terms: Vec<Vec<usize>> = c.units.iter().map(|u| term_units(&u.net, &u.terms, &owners)).collect::<Result<_, _>>()?;
     let mut taken = taken_set(sheet, defs, ctx);
     // ネットごとのラベル名 (同じネットの別のかたまりのラベルも含む)
-    let net_labels: BTreeMap<String, String> =
-        extract_netlist(sheet, defs).into_iter().filter_map(|n| n.label.clone().map(|l| (n.name.clone(), l))).collect();
+    let net_labels = net_label_names(sheet, defs);
     // 他から指されているid (消さない)
     let pointed: BTreeSet<EntityId> = sheet.entities.values().flat_map(|e| e.refs()).chain(ctx.protected.iter().copied()).collect();
     // この計画で新しく作った `ARR_<n>` の名前 (検算で数えない)
@@ -3769,5 +3770,71 @@ mod tests {
         let (lines, _) = route_shape(&c.units[mid], r);
         assert!(lines.iter().all(|l| l.windows(2).all(|w| seg_dist(end, w[0], w[1]) > 1.0)), "{lines:?}");
         assert!(outcome[far].is_some());
+    }
+
+    /// The self-check refuses a plan that deletes a part, even one without pins.
+    /// 検算は、部品を消す計画を断る (ピンの無い部品でも)。
+    #[test]
+    fn the_self_check_refuses_a_deleted_part() {
+        let (mut before, _, a2) = two_wired_parts();
+        let w = place(&mut before, "wall_h", (75.0, 100.0), "");
+        for gone in [a2, w] {
+            let mut after = before.clone();
+            after.entities.remove(&gone);
+            assert!(verify_after(&before, &after, &defs(), &BTreeSet::new(), &[]).is_err());
+        }
+    }
+
+    /// Port-contact names such as "BUS.VBUS" are never borrowed as a fallback label name, because no label with that text is on the sheet.
+    /// 「BUS.VBUS」のようなポートの接点の名前は、代わりのラベル名に借りない (その文字のラベルは図面に無いため)。
+    #[test]
+    fn contact_net_names_are_not_borrowed_for_labels() {
+        use crate::block::port_fixtures::{pin_at as port_pin, port_block, USB};
+        let mut sh = new_sheet();
+        let hub = Entity::Symbol(port_block("39", 100.0, 100.0, "right", "U3", &USB));
+        let dongle = Entity::Symbol(port_block("LTE1", 200.0, 100.0, "left", "P1", &USB));
+        let (hub, dongle) = (hub.id(), {
+            sh.entities.insert(hub.id(), hub);
+            let id = dongle.id();
+            sh.entities.insert(id, dongle);
+            id
+        });
+        let (a, b) = (port_pin(&sh, hub, "U3"), port_pin(&sh, dongle, "P1"));
+        old_wire(&mut sh, &[(a.x, a.y), (b.x, b.y)]);
+        label(&mut sh, ((a.x + b.x) / 2.0, a.y), "BUS");
+        let ds = crate::symbol::sheet_symbol_defs(&sh);
+        let nets = extract_netlist(&sh, &ds);
+        assert!(nets.iter().any(|n| n.contact.is_some() && n.label.is_some()), "{nets:?}");
+        let names = net_label_names(&sh, &ds);
+        assert!(names.values().all(|l| !l.contains('.')), "{names:?}");
+    }
+
+    /// A kept link whose wire has no points is skipped instead of panicking.
+    /// 点の無い配線を残す線に指定しても、止まらずに飛ばす。
+    #[test]
+    fn a_kept_link_without_points_is_skipped() {
+        let mut sh = new_sheet();
+        let w = old_wire(&mut sh, &[]);
+        let us = units(&sh, &defs());
+        let owners = Owners::new(&sh, &defs(), &us);
+        assert!(kept_links(&sh, &owners, &identity_layout(), &[w]).is_empty());
+    }
+
+    /// When every stub candidate would touch something, the plain 2.5 mm stub is used and the stub check then refuses it, naming the stub.
+    /// どの短い線の候補も何かに触れるときは 2.5 mm のまっすぐな線を使い、検算がそれを断る (短い線のことを挙げて)。
+    #[test]
+    fn a_stub_with_no_free_candidate_is_refused_by_the_stub_check() {
+        let (grid, fb) = stub_fixture();
+        // ピンの東・北・南のすぐ先に点: どの候補もどれかの点の上を通る
+        let dots = [p(61.25, 50.0), p(60.0, 51.25), p(60.0, 48.75)];
+        let (es, ss) = stub_entities(&grid, &fb, &mut vec![], &mut dots.to_vec());
+        assert_eq!(stub_points(&es), vec![(60.0, 50.0), (62.5, 50.0)]);
+        let mut sh = new_sheet();
+        for e in es {
+            sh.entities.insert(e.id(), e);
+        }
+        junction(&mut sh, (61.25, 50.0));
+        let err = check_stubs(&sh, &defs(), &ss).expect_err("touching stub");
+        assert!(err.contains("ジャンクション"), "{err}");
     }
 }

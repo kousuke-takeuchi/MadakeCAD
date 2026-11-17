@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3612 specification clauses** across 6 areas.
+**3616 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -105,6 +105,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A branch that starts at a bend, and the junction there, follow the bend when it moves, so the cluster stays connected. <sub>`a_branch_at_a_bend_follows_the_bend`</sub>
 - An unroutable cluster whose stretched wire would leave a moved mid-wire pin behind is joined by labels, and the arrange is not refused. <sub>`a_stretch_that_would_drop_a_mid_wire_pin_falls_back_to_labels`</sub>
 - A route drawn in the same round as a new label stub, and crossed by it, is drawn again in the next round around the stub; routes the stub does not touch are kept as they are. <sub>`a_route_crossed_by_a_new_stub_is_routed_again_next_round`</sub>
+- The self-check refuses a plan that deletes a part, even one without pins. <sub>`the_self_check_refuses_a_deleted_part`</sub>
+- Port-contact names such as "BUS.VBUS" are never borrowed as a fallback label name, because no label with that text is on the sheet. <sub>`contact_net_names_are_not_borrowed_for_labels`</sub>
+- A kept link whose wire has no points is skipped instead of panicking. <sub>`a_kept_link_without_points_is_skipped`</sub>
+- When every stub candidate would touch something, the plain 2.5 mm stub is used and the stub check then refuses it, naming the stub. <sub>`a_stub_with_no_free_candidate_is_refused_by_the_stub_check`</sub>
 
 ### block
 

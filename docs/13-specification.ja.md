@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3612仕様項目**。
+全6領域・**3616仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -105,6 +105,10 @@
 - 曲がり角から出る枝の線とそこのジャンクションは、曲がり角が動くと一緒に動き、かたまりはつながったまま。 <sub>`a_branch_at_a_bend_follows_the_bend`</sub>
 - 引けないかたまりで、伸び縮みさせると線の途中のピン (整列で動く部品) が外れるなら、ラベルでつなぎ、並べ直し全体は断らない。 <sub>`a_stretch_that_would_drop_a_mid_wire_pin_falls_back_to_labels`</sub>
 - 同じ回に置いたラベルの短い線と交わる経路は、次の回にその線を避けて引き直し、触れない経路はそのまま使う。 <sub>`a_route_crossed_by_a_new_stub_is_routed_again_next_round`</sub>
+- 検算は、部品を消す計画を断る (ピンの無い部品でも)。 <sub>`the_self_check_refuses_a_deleted_part`</sub>
+- 「BUS.VBUS」のようなポートの接点の名前は、代わりのラベル名に借りない (その文字のラベルは図面に無いため)。 <sub>`contact_net_names_are_not_borrowed_for_labels`</sub>
+- 点の無い配線を残す線に指定しても、止まらずに飛ばす。 <sub>`a_kept_link_without_points_is_skipped`</sub>
+- どの短い線の候補も何かに触れるときは 2.5 mm のまっすぐな線を使い、検算がそれを断る (短い線のことを挙げて)。 <sub>`a_stub_with_no_free_candidate_is_refused_by_the_stub_check`</sub>
 
 ### block
 
