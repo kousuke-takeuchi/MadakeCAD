@@ -409,6 +409,14 @@ export function draftIssues(draft: BlockDraft): BlockIssue[] {
       }
     });
   }
+  // 番号なしのピンの名前は、番号付きのピンの名前とも重ならない (Rust側 parse_block_spec と同じ)
+  const pinRows = allRows(draft).filter((r) => isFilled(r) && !isSpecialRow(r));
+  const numberedNames = new Set(pinRows.filter((r) => r.no.trim() !== "").map((r) => r.name.trim()));
+  for (const row of pinRows) {
+    const key = rowKey(row);
+    const known = issues.some((i) => i.code === "duplicate" && i.no === key);
+    if (row.no.trim() === "" && key !== "" && numberedNames.has(key) && !known) issues.push({ code: "duplicate", no: key });
+  }
   // 1つのまとめ名は1つのまとまり (同じ辺の隣り合うピン、同じ種類) だけ (Rust側 check_connectors の最後の決まり)
   const pins = pinsOf(draft);
   const seenRefs = new Set<string>();

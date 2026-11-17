@@ -270,7 +270,8 @@ fn snap_up(v: f64, step: f64) -> f64 {
 }
 
 /// 辺のピン`i`番目(全`n`個)の中央揃えオフセット (mm)。
-/// 他の動的シンボル([`crate::symbol::dynamic_symbol`])と同じ規則。
+/// 他の動的シンボル([`crate::symbol::dynamic_symbol`])と同じ規則。テストだけが使う (描画はすき間の行を数える [`side_offsets`])。
+#[cfg(test)]
 pub(crate) fn offset(i: usize, n: usize) -> f64 {
     (i as f64 - (n - 1) as f64 / 2.0) * BLOCK_PIN_PITCH_MM
 }
@@ -421,6 +422,12 @@ pub fn parse_block_spec(attrs: &BTreeMap<String, String>) -> Result<BlockSpec, S
             }
             check_contacts(no, &pin.contacts)?;
         }
+    }
+    // 番号の無いピンの名前は、番号付きのピンの名前とも重ならない (名前がそのピンの唯一の名札だから)
+    let numbered_names: std::collections::BTreeSet<&str> =
+        pins.all().filter(|p| p.is_pin() && p.numbered()).map(|p| p.name.trim()).collect();
+    if let Some(pin) = pins.all().find(|p| p.is_pin() && !p.numbered() && numbered_names.contains(p.key())) {
+        return Err(format!("duplicate block pin name: {}", pin.key()));
     }
     check_connectors(&pins)?;
     let rows: usize = sides.iter().map(|list| side_rows(list)).sum();
@@ -3125,6 +3132,17 @@ mod tests {
         assert_eq!(err(r#"{"left":[{"no":"A"},{"name":"A"}]}"#), "duplicate block pin name: A");
         assert_eq!(err(r#"{"left":[{"name":"  "}]}"#), "block pin number must not be empty");
         assert_eq!(err(r#"{"left":[{"no":"","name":""}]}"#), "block pin number must not be empty");
+    }
+
+    /// An unnumbered pin's name must be unique in the whole block: a numbered pin with the same name (on any side, in either order) is refused, while numbered pins may still share a name with each other.
+    /// 番号の無いピンの名前はブロック全体で一意でなければならない: 同じ名前の番号付きのピンがあれば (どの辺でも、どちらが先でも) 断る。番号付きのピンどうしは今までどおり同じ名前でよい。
+    #[test]
+    fn an_unnumbered_pin_may_not_share_its_name_with_a_numbered_pin() {
+        let err = |pins: &str| block_symbol(&attrs(&[(BLOCK_PINS_ATTR, pins)])).expect_err("断る");
+        assert_eq!(err(r#"{"left":[{"no":"1","name":"EN"}],"right":[{"name":"EN"}]}"#), "duplicate block pin name: EN");
+        assert_eq!(err(r#"{"left":[{"name":" EN "}],"right":[{"no":"1","name":"EN"}]}"#), "duplicate block pin name: EN");
+        assert_eq!(err(r#"{"left":[{"name":"P"},{"no":"1","name":"P"}],"right":[{"no":"1","name":"P"}]}"#), "duplicate block pin name: P");
+        assert!(block_symbol(&attrs(&[(BLOCK_PINS_ATTR, r#"{"left":[{"no":"1","name":"GND"},{"no":"2","name":"GND"},{"name":"EN"}]}"#)])).is_ok());
     }
 
     /// With the numbers drawn inside, an unnumbered pin shows its name where the number would be (the name is its only identity).

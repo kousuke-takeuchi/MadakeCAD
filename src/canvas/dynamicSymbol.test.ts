@@ -1139,6 +1139,14 @@ describe("block pin rows and text size (Rust twin)", () => {
     expect(err('{"left":[{"name":"  "}]}')).toThrow("block pin number must not be empty");
   });
 
+  // ja: 番号の無いピンの名前が番号付きのピンの名前と同じなら (どの辺でも、どちらが先でも) Rust と同じ文言で断る。番号付きどうしは同じ名前でよい
+  it("refuses an unnumbered pin whose name is also a numbered pin's name", () => {
+    const err = (pins: string) => () => sym(pins);
+    expect(err('{"left":[{"no":"1","name":"EN"}],"right":[{"name":"EN"}]}')).toThrow("duplicate block pin name: EN");
+    expect(err('{"left":[{"name":" EN "}],"right":[{"no":"1","name":"EN"}]}')).toThrow("duplicate block pin name: EN");
+    expect(() => sym('{"left":[{"no":"1","name":"GND"},{"no":"2","name":"GND"},{"name":"EN"}]}')).not.toThrow();
+  });
+
   // ja: すき間の行は前後のピンを行数だけ離し、箱の高さにも数える
   it("leaves the gap rows empty between pins and counts them in the height", () => {
     const def = sym('{"left":[{"no":"1"},{"gap":2},{"no":"2"}]}');

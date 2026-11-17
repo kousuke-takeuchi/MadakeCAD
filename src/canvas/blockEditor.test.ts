@@ -283,6 +283,13 @@ describe("checks on the pin table", () => {
     expect(draftIssues(both)).toEqual([{ code: "duplicate", no: "A" }]);
   });
 
+  // ja: 番号なしのピンの名前が番号付きのピンの名前と同じなら重複と指摘される (保存すると断られる組み合わせ)
+  it("reports an unnumbered pin whose name is also a numbered pin's name", () => {
+    const d = draft();
+    d.rows.right = [{ no: "", name: "入力1" }];
+    expect(draftIssues(d)).toEqual([{ code: "duplicate", no: "入力1" }]);
+  });
+
   // ja: 手動の外形がピンの並びより小さいと指摘される(必要な寸法つき)
   it("reports a hand-set outline that is too small for its pins", () => {
     const d = draft();

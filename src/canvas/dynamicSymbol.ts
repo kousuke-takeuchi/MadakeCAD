@@ -955,6 +955,10 @@ export function parseBlockSpec(attrs: Record<string, string>): {
       checkContacts(no, pin.contacts ?? []);
     }
   });
+  // 番号の無いピンの名前は、番号付きのピンの名前とも重ならない (Rust側 parse_block_spec と同じ)
+  const numberedNames = new Set(all.filter(isNumbered).map((p) => (p.name ?? "").trim()));
+  const clash = all.find((p) => !isNumbered(p) && numberedNames.has(blockPinKey(p)));
+  if (clash) throw new Error(`duplicate block pin name: ${blockPinKey(clash)}`);
   checkConnectors(pins);
   const rowCount = BLOCK_SIDES.reduce((n, k) => n + sideRows(sideOf(pins, k)), 0);
   if (rowCount > BLOCK_ROW_MAX) {
