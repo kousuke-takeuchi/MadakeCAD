@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3657 specification clauses** across 6 areas.
+**3700 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -189,6 +189,22 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - When a left/right feed-through pair is not merged because the top side has a pin, the box is wide enough for both numbers: with four-character numbers it is as wide as the same block without the feed-through rule. <sub>`an_unmerged_feedthrough_pair_gets_room_for_both_numbers`</sub>
 - A block with block_leads "none" puts its pins on the outline itself and draws no lead lines, so a wire runs straight to the box; the outline and the numbers are the same as with leads. <sub>`a_leadless_block_puts_its_pins_on_the_outline`</sub>
 - block_leads accepts only "lead" and "none", and "none" is refused unless the numbers are drawn inside (a number outside sits on the lead). <sub>`block_leads_accepts_lead_and_none_and_needs_numbers_inside`</sub>
+- A pin with no number is keyed by its name (get_pins, netlist and connect_pins use that key), and nothing is printed outside the box for it; the name stays inside. <sub>`a_pin_without_a_number_is_keyed_by_its_name`</sub>
+- A block whose pins all lack numbers is valid: every pin is keyed by its name and no number text is drawn at all. <sub>`a_block_of_only_unnumbered_pins_is_valid`</sub>
+- Two pins without a number that share a name are refused, and so is an unnumbered pin whose name is another pin's number; a pin with neither number nor name is refused as before. <sub>`unnumbered_pins_need_unique_names`</sub>
+- With the numbers drawn inside, an unnumbered pin shows its name where the number would be (the name is its only identity). <sub>`an_unnumbered_pin_shows_its_name_when_numbers_are_inside`</sub>
+- A gap entry leaves that many pin positions empty on its side: the pins around it sit that many rows apart, and the gap itself has no pin. <sub>`a_gap_row_leaves_pin_positions_empty`</sub>
+- The box grows to hold the gap rows too, so a block with a gap is taller than the same pins without it. <sub>`a_gap_row_counts_toward_the_height_of_the_box`</sub>
+- Pins stay on the grid of the block's pitch when a gap sits between them, for both pitches. <sub>`pins_around_a_gap_stay_on_the_pitch_grid`</sub>
+- A gap is 1 to 20 rows, stands alone in its entry, and the whole block may not exceed the row limit. <sub>`a_gap_row_is_one_to_twenty_and_stands_alone`</sub>
+- A caption entry takes one row on its side and prints its text inside the box on that row, bold and left aligned on the left side; it has no pin. <sub>`a_caption_row_prints_bold_text_on_its_row_without_a_pin`</sub>
+- A caption on the right side is right aligned; on the top side it sits on the column at the name row; a blank caption is refused. <sub>`captions_align_to_their_side_and_must_not_be_blank`</sub>
+- Captions and gaps do not count as pins: the pin limit is about pins only, and a caption's width is kept apart from the opposite side's names. <sub>`captions_and_gaps_are_not_pins_but_their_width_is_kept`</sub>
+- block_pin_text sets the height of pin names, captions and numbers; the box grows so names do not meet the opposite side, and the default is today's 2 mm. <sub>`block_pin_text_scales_the_texts_and_widens_the_box`</sub>
+- block_pin_text accepts 1.5 to 5.0 mm only, and refuses anything else with the attribute name. <sub>`block_pin_text_accepts_only_one_and_a_half_to_five_millimetres`</sub>
+- Texts keep their size with a manual block size too: a bigger text widens a manual width that would let names meet, and a block that does not use the attribute is unchanged. <sub>`block_pin_text_widens_a_manual_width_only_when_set`</sub>
+- Bold text is part of the drawn shape: a caption row changes a block's export name, and the old unbold shapes keep theirs. <sub>`a_caption_row_changes_the_export_name_of_the_shape`</sub>
+- Importing a block back from KiCad or DXF keeps block_pin_text with the pin table. <sub>`importing_a_block_keeps_block_pin_text`</sub>
 
 ### cable
 
@@ -443,6 +459,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A symbol whose definition cannot be resolved is reported in the export report instead of disappearing without a word. <sub>`an_unresolvable_symbol_is_reported_as_skipped`</sub>
 - A rotated or mirrored symbol's pins land on exactly the paper positions the model gives them, so the exported pin still meets the wire drawn to it, and reading the file back gives the same rotation and mirror. <sub>`rotated_symbol_pins_meet_their_wires_in_the_exported_dxf`</sub>
 - The TAG1/CAT attributes of a block with top pins are right-justified (group 72 = 2) with their anchor left of the box; a block without top pins keeps them centred (72 = 1). <sub>`top_pin_block_tag_attributes_are_right_justified_left_of_the_box`</sub>
+- Blocks with unnumbered pins, spacer and caption rows and a text size export to DXF and import back with the same pin table, text size and drawing. <sub>`unnumbered_pins_and_pin_rows_survive_a_dxf_round_trip`</sub>
 
 ### Frame templates (plot frames)
 
@@ -520,7 +537,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A shape drawn on a sheet survives a save and reload with its kind, points and look unchanged. <sub>`a_shape_survives_a_save_and_reload`</sub>
 - A panel sheet and the panel entities on it survive a save and reload unchanged. <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - A project file saved before text styling existed opens with every note unstyled (left-aligned, default colour, not bold) and is brought up to the current format version. <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- The current file format version is 28, the version that added the sheet's tag destination style. <sub>`the_current_format_version_is_twenty_eight`</sub>
+- The current file format version is 29, the version that added unnumbered block pins, spacer and caption rows and the block text size. <sub>`the_current_format_version_is_twenty_nine`</sub>
+- A version 28 file opens as version 29 with its blocks drawn exactly as before, and a block with unnumbered pins, spacer and caption rows and a text size survives save and load with the same drawing. <sub>`block_rows_and_text_size_survive_save_and_load`</sub>
 - A version 27 file opens as version 28 with sheets in the zone style, the style survives save and load, and the default style is not written to the file. <sub>`xref_style_loads_from_old_files_and_round_trips`</sub>
 - A version 23 project file opens in this build and becomes the current version; its sheets get the default wire weight and still show their wire notes. <sub>`a_version_23_file_opens_as_the_current_version`</sub>
 - A version 22 project file opens in this build and becomes the current version; its blocks keep their attributes and pins unchanged. <sub>`a_version_22_file_opens_as_the_current_version`</sub>
@@ -577,6 +595,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Quotes, backslashes and newlines in text are escaped so the exported file parses and reads back unchanged. <sub>`strings_are_escaped_and_read_back`</sub>
 - Importing a schematic exported by MadakeCAD resolves "MadakeCAD:<id>" library ids directly, including parametric terminal blocks and connectors. <sub>`madakecad_lib_ids_resolve_directly_on_import`</sub>
 - A dashed wire with its own weight exports to KiCad as a dashed stroke of that width and imports back dashed with the same weight; a plain wire stays solid with no weight of its own. <sub>`a_dashed_wire_survives_a_kicad_round_trip`</sub>
+- A block whose pins have no numbers exports to KiCad keyed by pin name, and a block with spacer and caption rows and a text size imports back drawn the same, with the same pin table. <sub>`unnumbered_pins_and_pin_rows_survive_a_kicad_round_trip`</sub>
 
 ### leader
 
@@ -720,6 +739,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A net-name symbol that touches no wire does not pull any other part's pin into a net. <sub>`a_lone_net_symbol_joins_no_other_part`</sub>
 - A plain wire labelled J7.2 on a sheet that also has a port labelled J7 stays an ordinary net named J7.2 when the port has no contact 2, and the port's nets do not take its pins. <sub>`a_dotted_label_with_no_matching_contact_is_an_ordinary_net_name`</sub>
 - When the port labelled J7 does have a contact named 2, a plain wire labelled J7.2 taps that contact and joins its net. <sub>`a_dotted_label_on_a_real_port_net_still_taps_the_contact`</sub>
+- A block whose only pins have no numbers joins nets under the pin names, so a wire to such a pin is a named net pin and not an unconnected one. <sub>`unnumbered_block_pins_join_nets_under_their_names`</sub>
 
 ### ngspice runner
 
@@ -857,6 +877,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A mate pair sits on the 2.5 mm grid and its two halves only touch, so the tidy metrics count no overlap and no off-grid point for it. <sub>`a_mate_pair_is_tidy`</sub>
 - The plug half of a mate pair hides its designator, so the shared designator is printed once, on the socket. <sub>`the_plug_hides_the_shared_designator`</sub>
 - get_pins shows a port pin's contacts and leaves them out for plain pins. <sub>`part_pins_show_contacts`</sub>
+- A block of unnumbered pins is wired by pin name (get_pins reports the name as the key, connect_pins accepts it), and spacer and caption rows are not pins. <sub>`unnumbered_block_pins_are_reported_and_wired_by_name`</sub>
 
 ### PLC I/O
 
@@ -1363,6 +1384,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A tag_dest replaces the outside text in the zone style and the inside text in the sheet-name style, also when drawing the sheet alone. <sub>`tag_dest_replaces_the_text_in_both_styles`</sub>
 - With no other sheet carrying the name, the sheet-name flag shows only the name, and an untagged label keeps its outside zone address in that style. <sub>`a_flag_without_a_destination_shows_only_the_name`</sub>
 - A sheet with no tags and the default style renders byte-identical SVG to the sheet rendered with the zone style set explicitly, and the flow-out flag moves only the polygon. <sub>`the_default_style_renders_as_before_and_flow_out_only_moves_the_polygon`</sub>
+- A block's caption row is drawn in bold inside the box, an unnumbered pin prints its name once and no number, and a spacer row draws nothing. <sub>`svg_draws_block_captions_in_bold_and_unnumbered_pins_by_name`</sub>
+- block_pin_text sets the font size of the pin names, captions and numbers in the drawing, and writing the default size explicitly changes nothing. <sub>`svg_draws_block_texts_at_the_block_pin_text_size`</sub>
 
 ### Symbol library
 
@@ -1853,6 +1876,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Regression test for Tasks 1-8 (already passes): place_symbol with a connector on a block pin returns that pin 5 mm from the box edge, and the sheet image of such a block renders. <sub>`a_connector_pin_is_placed_five_millimetres_from_the_box`</sub>
 - Regression test for Tasks 1-8 (already passes): place_symbol refuses an unknown connector kind and a connector name on a USB socket, with the reason. <sub>`place_symbol_refuses_a_bad_connector`</sub>
 - place_symbol tells the agent which connector kinds exist, how to group terminal blocks and JST sockets with connector_ref, and to read pin positions with get_pins, both in its description and in the attrs schema. <sub>`place_symbol_describes_connectors`</sub>
+- A block whose only pins have no numbers is keyed by pin name everywhere: place_symbol and get_pins return the name as the key and skip spacer and caption rows, connect_pins wires by name, verification finds no unconnected pin, and the netlist lists the pins by name. <sub>`a_block_of_unnumbered_pins_is_keyed_by_name_in_every_pin_tool`</sub>
+- The place_symbol description tells the agent about unnumbered pins, spacer and caption rows and block_pin_text. <sub>`place_symbol_describes_unnumbered_pins_spacers_captions_and_the_text_size`</sub>
 
 ### Frame templates (REST)
 
@@ -2533,7 +2558,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - reports a pin number on neighbouring sides or three times as a duplicate <sub>`checks on the pin table`</sub>
 - reports a feed-through pin whose two sides have different names <sub>`checks on the pin table`</sub>
 - reports contacts or a connector picture on a feed-through pin <sub>`checks on the pin table`</sub>
-- reports a row that has a name but no pin number <sub>`checks on the pin table`</sub>
+- accepts a row that has a name but no pin number as an unnumbered pin <sub>`checks on the pin table`</sub>
+- reports a row that has neither a pin number nor a name <sub>`checks on the pin table`</sub>
+- reports an unnumbered pin whose name is already another pin's key <sub>`checks on the pin table`</sub>
 - reports a hand-set outline that is too small for its pins <sub>`checks on the pin table`</sub>
 - reports a block with more than 200 pins <sub>`checks on the pin table`</sub>
 - lists the pins a wire actually reaches <sub>`pins that are already wired`</sub>
@@ -2559,12 +2586,20 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - snaps a fine block size to 2.5 mm steps, never below 5 mm <sub>`connector pictures on a fine block and size snapping`</sub>
 - snaps a coarse block size to 5 mm steps, never below 5 mm <sub>`connector pictures on a fine block and size snapping`</sub>
 - keeps block_leads and block_caption through an edit and in the preview <sub>`leadless and caption attributes in the editor draft`</sub>
+- keeps spacer rows, caption rows and unnumbered pins exactly when a block is opened and saved <sub>`spacer and caption rows, unnumbered pins and the text size in the editor`</sub>
+- moves, edits and removes spacer and caption rows like other rows <sub>`spacer and caption rows, unnumbered pins and the text size in the editor`</sub>
+- reports a gap outside 1 to 20, a blank caption and too many rows <sub>`spacer and caption rows, unnumbered pins and the text size in the editor`</sub>
+- counts spacer rows in the outline checks and previews the same drawing <sub>`spacer and caption rows, unnumbered pins and the text size in the editor`</sub>
+- does not count spacer and caption rows as pins or in the next pin number <sub>`spacer and caption rows, unnumbered pins and the text size in the editor`</sub>
+- warns about a wired unnumbered pin only when its name changes <sub>`spacer and caption rows, unnumbered pins and the text size in the editor`</sub>
+- keeps a valid block_pin_text even when the pin table cannot be read <sub>`spacer and caption rows, unnumbered pins and the text size in the editor`</sub>
 - opens a pin table with one pin per side when the generic block is picked <sub>`starting a new block from the insert dialog`</sub>
 - hands the edited table to the placement as block attributes <sub>`starting a new block from the insert dialog`</sub>
 - seeds the hand-set size with the automatic one when switching to manual <sub>`starting a new block from the insert dialog`</sub>
 - refuses to place while two pins on one side share a number <sub>`starting a new block from the insert dialog`</sub>
 - loads the pin table of the selected block <sub>`editing a block that is already on the drawing`</sub>
 - applies the table as a single update_entity, keeping the tag, part number and position <sub>`editing a block that is already on the drawing`</sub>
+- keeps spacer rows, caption rows, unnumbered pins and the text size when an edit is applied <sub>`editing a block that is already on the drawing`</sub>
 - keeps attributes that are not part of the pin table <sub>`editing a block that is already on the drawing`</sub>
 - refuses to apply a connector picture on a fine block <sub>`editing a block that is already on the drawing`</sub>
 - refuses to apply a connector picture on a block with numbers inside <sub>`editing a block that is already on the drawing`</sub>
@@ -2686,6 +2721,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - does not change what the block itself draws <sub>`block caption place (Rust twin)`</sub>
 - puts the pins of a leadless block on the outline and draws no leads <sub>`leadless blocks (Rust twin)`</sub>
 - accepts only "lead" and "none <sub>`leadless blocks (Rust twin)`</sub>
+- keys an unnumbered pin by its name and prints nothing outside the box for it <sub>`block pin rows and text size (Rust twin)`</sub>
+- refuses duplicate names of unnumbered pins and a pin with neither number nor name <sub>`block pin rows and text size (Rust twin)`</sub>
+- leaves the gap rows empty between pins and counts them in the height <sub>`block pin rows and text size (Rust twin)`</sub>
+- words the gap, caption and row-limit refusals exactly like Rust <sub>`block pin rows and text size (Rust twin)`</sub>
+- draws a caption row bold inside the box on its row without a pin <sub>`block pin rows and text size (Rust twin)`</sub>
+- scales the texts with block_pin_text and refuses values outside 1.5 to 5.0 <sub>`block pin rows and text size (Rust twin)`</sub>
+- draws the default size exactly like a block without the attribute <sub>`block pin rows and text size (Rust twin)`</sub>
 
 ### frameEditor
 
@@ -2990,6 +3032,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - turns arcs with the symbol so the contactor half circle keeps facing its moving contact <sub>`rotateArcAngles`</sub>
 - mirrors arcs left to right while keeping the clockwise drawing direction <sub>`rotateArcAngles`</sub>
 - shrinks symbol lettering with the zoom instead of keeping a minimum size, and drops it when unreadable <sub>`drawSymbol text placement`</sub>
+- draws a symbol text primitive in bold only when it is marked bold <sub>`drawSymbol text placement`</sub>
 - keeps the lettering inside a symbol where the symbol definition puts it, whatever the rotation <sub>`drawSymbol text placement`</sub>
 - keeps a one- or two-character terminal number inside its own mark, whatever the rotation <sub>`drawSymbol text placement`</sub>
 - puts an unturned terminal block's number just over a third of a character height below its mark centre on the canvas, a smaller offset than the exported drawing's half <sub>`drawSymbol text placement`</sub>

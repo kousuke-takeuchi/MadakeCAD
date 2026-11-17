@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3657仕様項目**。
+全6領域・**3700仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -189,6 +189,22 @@
 - 上辺にピンがあって左右の貫通ピンの番号をまとめないとき、箱は左右2つの番号が収まる幅になる: 4文字の番号なら、貫通でない同じ形のブロックと同じ幅になる。 <sub>`an_unmerged_feedthrough_pair_gets_room_for_both_numbers`</sub>
 - block_leads が "none" のブロックは、ピンを外形の辺の上に置き、リード線を描かない。配線は箱へ直接つながる。外形と番号はリード線ありと同じ。 <sub>`a_leadless_block_puts_its_pins_on_the_outline`</sub>
 - block_leads は "lead" と "none" だけを受け付ける。"none" は番号を内側に描くブロックでなければ断る (外側の番号はリード線の上に書くため)。 <sub>`block_leads_accepts_lead_and_none_and_needs_numbers_inside`</sub>
+- 番号の無いピンは名前を鍵にする (get_pins・ネットリスト・connect_pins はその鍵を使う)。箱の外には何も書かず、名前は内側に書く。 <sub>`a_pin_without_a_number_is_keyed_by_its_name`</sub>
+- ピンがすべて番号無しのブロックも成り立つ: ピンはどれも名前が鍵で、番号の文字は1つも描かれない。 <sub>`a_block_of_only_unnumbered_pins_is_valid`</sub>
+- 番号が無く名前が同じ2本のピンは断る。無番号ピンの名前が別のピンの番号と同じ場合も断る。番号も名前も無いピンは、これまでどおり断る。 <sub>`unnumbered_pins_need_unique_names`</sub>
+- 番号を内側に描くブロックでは、無番号のピンは番号の位置に名前を書く (名前がそのピンの唯一の名札だから)。 <sub>`an_unnumbered_pin_shows_its_name_when_numbers_are_inside`</sub>
+- すき間の行は、その辺のピンの位置をその数だけ空ける: 前後のピンはその行数だけ離れ、すき間自体はピンにならない。 <sub>`a_gap_row_leaves_pin_positions_empty`</sub>
+- 箱はすき間の行も含めて大きくなる: すき間のあるブロックは、同じピンですき間の無いものより背が高い。 <sub>`a_gap_row_counts_toward_the_height_of_the_box`</sub>
+- すき間をはさんでも、ピンはそのブロックの間隔のグリッドに乗る (5mm間隔でも2.5mm間隔でも)。 <sub>`pins_around_a_gap_stay_on_the_pitch_grid`</sub>
+- すき間は1〜20行で、1つの項目の中に他のものを混ぜない。ブロック全体の行数にも上限がある。 <sub>`a_gap_row_is_one_to_twenty_and_stands_alone`</sub>
+- 見出しの行はその辺の1行を使い、箱の内側のその行に太字で書く (左辺では左寄せ)。ピンにはならない。 <sub>`a_caption_row_prints_bold_text_on_its_row_without_a_pin`</sub>
+- 右辺の見出しは右寄せ。上辺では、その列の名前の行に書く。空の見出しは断る。 <sub>`captions_align_to_their_side_and_must_not_be_blank`</sub>
+- 見出しとすき間はピンに数えない: ピンの上限はピンだけが対象で、見出しの幅は向かい側の名前とぶつからないよう確保される。 <sub>`captions_and_gaps_are_not_pins_but_their_width_is_kept`</sub>
+- block_pin_text はピン名・見出し・番号の文字の高さを決める。箱は名前が向かい側にぶつからないよう広がり、既定は今までの2mm。 <sub>`block_pin_text_scales_the_texts_and_widens_the_box`</sub>
+- block_pin_text は1.5〜5.0mmだけを受け付け、それ以外は属性名を含むメッセージで断る。 <sub>`block_pin_text_accepts_only_one_and_a_half_to_five_millimetres`</sub>
+- 外形を手で決めたブロックでも文字の大きさは効く: 名前がぶつかる手動の幅は広がり、属性を使わないブロックは変わらない。 <sub>`block_pin_text_widens_a_manual_width_only_when_set`</sub>
+- 太字は描かれた形の一部: 見出しの行があるとブロックの書き出し名が変わり、太字でない従来の形の名前は変わらない。 <sub>`a_caption_row_changes_the_export_name_of_the_shape`</sub>
+- KiCad や DXF から読み戻したブロックも、block_pin_text をピン表と一緒に保つ。 <sub>`importing_a_block_keeps_block_pin_text`</sub>
 
 ### cable
 
@@ -443,6 +459,7 @@
 - シンボル定義が見つからないシンボルは、黙って消えるのではなく書き出し結果の内訳で報告される。 <sub>`an_unresolvable_symbol_is_reported_as_skipped`</sub>
 - 回転・ミラーしたシンボルのピンはモデルどおりの用紙座標に着地するので、書き出したDXFでもピンがそのピンへ引いた配線の端と一致し、読み戻すと同じ回転角・ミラーになる。 <sub>`rotated_symbol_pins_meet_their_wires_in_the_exported_dxf`</sub>
 - 上辺にピンのあるブロックの TAG1/CAT 属性は右揃え (72 = 2) で、基準点は外形の左。上辺にピンの無いブロックは今まで通り中央揃え (72 = 1)。 <sub>`top_pin_block_tag_attributes_are_right_justified_left_of_the_box`</sub>
+- 番号のないピン・すき間と見出しの行・文字の高さを持つブロックは、DXFへ書き出して読み戻しても、同じピン表・文字の高さ・絵に戻る。 <sub>`unnumbered_pins_and_pin_rows_survive_a_dxf_round_trip`</sub>
 
 ### 図枠テンプレート (プロットフレーム)
 
@@ -520,7 +537,8 @@
 - シートに描いた図形は、種類・頂点・見た目を保ったまま保存して読み直せる。 <sub>`a_shape_survives_a_save_and_reload`</sub>
 - 盤レイアウトシートと、その上の盤エンティティは保存して読み直しても変わらない。 <sub>`a_panel_sheet_survives_a_save_and_reload`</sub>
 - テキスト装飾が無かった頃のプロジェクトファイルは、全ての注記が装飾なし (左揃え・既定色・太字でない) で開き、現行のファイル形式へ更新される。 <sub>`an_old_project_file_opens_with_unstyled_notes`</sub>
-- 現行のファイル形式バージョンは28 (シートのタグの行き先の書き方を追加した版) である。 <sub>`the_current_format_version_is_twenty_eight`</sub>
+- 現行のファイル形式バージョンは29 (ブロックの番号なしのピン・すき間と見出しの行・文字の大きさを追加した版) である。 <sub>`the_current_format_version_is_twenty_nine`</sub>
+- 形式28のファイルは形式29として開き、ブロックは前と同じに描かれる。番号なしのピン・すき間と見出しの行・文字の大きさを持つブロックは、保存して開き直しても同じ絵になる。 <sub>`block_rows_and_text_size_survive_save_and_load`</sub>
 - 版 27 のファイルは版 28 として開き、シートはゾーン住所の書き方になる。書き方は保存して開き直しても残り、既定の書き方はファイルに書かれない。 <sub>`xref_style_loads_from_old_files_and_round_trips`</sub>
 - 形式23のプロジェクトファイルはこのビルドで開け、現行の形式になる。シートの配線は既定の太さで、配線注記も出たままになる。 <sub>`a_version_23_file_opens_as_the_current_version`</sub>
 - 形式22のプロジェクトファイルはこのビルドで開け、現行の形式になる。ブロックの属性とピンはそのまま残る。 <sub>`a_version_22_file_opens_as_the_current_version`</sub>
@@ -577,6 +595,7 @@
 - 注記内の引用符・バックスラッシュ・改行はエスケープされ、書き出したファイルは正しく解釈されて同じ文字列に戻る。 <sub>`strings_are_escaped_and_read_back`</sub>
 - MadakeCADが書き出した回路図の"MadakeCAD:<id>"ライブラリidは、端子台・コネクタの動的シンボルも含めそのまま同じシンボルに戻る。 <sub>`madakecad_lib_ids_resolve_directly_on_import`</sub>
 - 自分の太さを持つ破線の配線は、KiCadへその太さの破線として書き出され、読み戻しても破線・同じ太さになる。普通の配線は実線・太さなしのまま。 <sub>`a_dashed_wire_survives_a_kicad_round_trip`</sub>
+- 番号のないピンだけのブロックは、ピン名を鍵にしてKiCadへ書き出される。見出し・すき間の行と文字の高さを持つブロックは、読み戻しても同じ絵・同じピン表に戻る。 <sub>`unnumbered_pins_and_pin_rows_survive_a_kicad_round_trip`</sub>
 
 ### leader
 
@@ -720,6 +739,7 @@
 - どの配線にも触れていないネット名付きシンボルは、ほかの部品のピンをネットへ引き込まない。 <sub>`a_lone_net_symbol_joins_no_other_part`</sub>
 - J7 というラベルのポートがあるシートでも、ポートに接点2が無ければ、普通の配線の J7.2 ラベルは J7.2 という普通のネットのままで、ポートのネットにその配線のピンは入らない。 <sub>`a_dotted_label_with_no_matching_contact_is_an_ordinary_net_name`</sub>
 - J7 というラベルのポートに接点「2」があれば、普通の配線の J7.2 ラベルはその接点に繋がり、接点のネットに入る。 <sub>`a_dotted_label_on_a_real_port_net_still_taps_the_contact`</sub>
+- 番号のあるピンが1つも無いブロックは、ピン名でネットに参加する。そのピンへ届いた配線は、名前のついたネットのピンになり、未接続にはならない。 <sub>`unnumbered_block_pins_join_nets_under_their_names`</sub>
 
 ### ngspiceランナー
 
@@ -857,6 +877,7 @@
 - かみ合わせの組は2.5mmグリッドにのり、2つは接するだけなので、整頓指標は組を重なりにもグリッド外にも数えない。 <sub>`a_mate_pair_is_tidy`</sub>
 - かみ合わせの組のプラグ側は参照記号を印字しないので、共有する記号はソケット側に1回だけ描かれる。 <sub>`the_plug_hides_the_shared_designator`</sub>
 - get_pins はポートのピンの接点を出し、普通のピンには出さない。 <sub>`part_pins_show_contacts`</sub>
+- 番号のないピンのブロックはピン名で配線できる (get_pins は名前を鍵として返し、connect_pins はそれを受け付ける)。すき間と見出しの行はピンではない。 <sub>`unnumbered_block_pins_are_reported_and_wired_by_name`</sub>
 
 ### PLC I/O
 
@@ -1363,6 +1384,8 @@
 - tag_dest は、ゾーン住所の書き方では旗の外の文字を、シート名の書き方では旗の中の文字を置き換える。シート単体の出力でも同じ。 <sub>`tag_dest_replaces_the_text_in_both_styles`</sub>
 - 他のシートに同名が無いと、シート名の旗には名前だけが出る。タグの無いラベルは、この書き方でも旗の外でなくラベルの脇にゾーン住所を描く。 <sub>`a_flag_without_a_destination_shows_only_the_name`</sub>
 - 既定の書き方のシートは、ゾーン住所の書き方を明示した場合とバイトまで同じSVGになる。tag_flow out は旗の多角形だけを変える。 <sub>`the_default_style_renders_as_before_and_flow_out_only_moves_the_polygon`</sub>
+- ブロックの見出しの行は箱の中に太字で描かれる。番号のないピンは名前を1回だけ書いて番号は書かず、すき間の行は何も描かない。 <sub>`svg_draws_block_captions_in_bold_and_unnumbered_pins_by_name`</sub>
+- block_pin_text は図面のピン名・見出し・番号の文字の大きさを決める。既定の大きさを明示しても何も変わらない。 <sub>`svg_draws_block_texts_at_the_block_pin_text_size`</sub>
 
 ### シンボルライブラリ
 
@@ -1853,6 +1876,8 @@
 - Tasks 1-8 の挙動の回帰テスト (最初から通る): ブロックのピンに connector を付けた place_symbol は、そのピンを外形から5mmの位置で返し、そのブロックのシート画像も描ける。 <sub>`a_connector_pin_is_placed_five_millimetres_from_the_box`</sub>
 - Tasks 1-8 の挙動の回帰テスト (最初から通る): place_symbol は知らないコネクタの種類と、USB の口に付けたコネクタの名前を理由付きで断る。 <sub>`place_symbol_refuses_a_bad_connector`</sub>
 - place_symbol は説明と attrs のスキーマの両方で、コネクタの種類、端子台・JST を connector_ref でまとめること、ピンの位置を get_pins で読むことをエージェントに伝える。 <sub>`place_symbol_describes_connectors`</sub>
+- 番号のあるピンが無いブロックは、どこでもピン名が鍵になる: place_symbol と get_pins は名前を鍵として返し、すき間と見出しの行は返さず、connect_pins は名前で配線でき、検証は未接続ピンを出さず、ネットリストもピン名で並ぶ。 <sub>`a_block_of_unnumbered_pins_is_keyed_by_name_in_every_pin_tool`</sub>
+- place_symbol の説明には、番号なしのピン・すき間と見出しの行・block_pin_text が書かれている。 <sub>`place_symbol_describes_unnumbered_pins_spacers_captions_and_the_text_size`</sub>
 
 ### 図枠テンプレート (REST)
 
@@ -2533,7 +2558,9 @@
 - 隣り合う辺に同じ番号を置いたとき、貫通ピンの組が3本になったときは重複として指摘される <sub>`checks on the pin table`</sub>
 - 貫通ピンの両側で名前が違うと指摘される <sub>`checks on the pin table`</sub>
 - 貫通ピンに接点やコネクタの絵を付けると指摘される <sub>`checks on the pin table`</sub>
-- ピン名だけ書いて番号が空の行は指摘される <sub>`checks on the pin table`</sub>
+- ピン名があって番号が空の行は、名前が鍵の番号なしのピンとして通る <sub>`checks on the pin table`</sub>
+- 番号もピン名も空で接点だけある行は指摘される <sub>`checks on the pin table`</sub>
+- 番号なしのピンの名前が他のピンの鍵と重なると、貫通ピンにはならず重複と指摘される <sub>`checks on the pin table`</sub>
 - 手動の外形がピンの並びより小さいと指摘される(必要な寸法つき) <sub>`checks on the pin table`</sub>
 - ピンが多すぎる(200本超)ブロックは指摘される <sub>`checks on the pin table`</sub>
 - 配線が接続点に届いているピンは「配線済み」として拾われる <sub>`pins that are already wired`</sub>
@@ -2559,12 +2586,20 @@
 - 2.5mm間隔のブロックの大きさは2.5mm刻みに丸められ、5mm未満にはならない <sub>`connector pictures on a fine block and size snapping`</sub>
 - 5mm間隔のブロックの大きさは5mm刻みに丸められ、5mm未満にはならない <sub>`connector pictures on a fine block and size snapping`</sub>
 - リード線なし・参照記号を中に書くブロックを編集して書き戻しても、2つの属性は残り、プレビューも同じ形で描く。属性の無いブロックには増えない <sub>`leadless and caption attributes in the editor draft`</sub>
+- すき間・見出しの行と番号なしのピンは、開いて保存し直しても属性の JSON が1文字も変わらない <sub>`spacer and caption rows, unnumbered pins and the text size in the editor`</sub>
+- すき間・見出しの行も並べ替えと削除ができ、行数や文字を書き換えられる (行は消えず、ピンの指摘も出ない) <sub>`spacer and caption rows, unnumbered pins and the text size in the editor`</sub>
+- すき間の行数が範囲外・見出しが空・行が多すぎるときは指摘される <sub>`spacer and caption rows, unnumbered pins and the text size in the editor`</sub>
+- すき間は箱の大きさに数えるので、手動の外形が小さいと指摘され、プレビューは配置後と同じ形になる <sub>`spacer and caption rows, unnumbered pins and the text size in the editor`</sub>
+- ピンの数・次の番号にすき間と見出しの行は数えない <sub>`spacer and caption rows, unnumbered pins and the text size in the editor`</sub>
+- 番号なしのピンに配線があれば名前で鍵が決まるので、名前が変わると「接続が外れる」警告になり、残れば出ない <sub>`spacer and caption rows, unnumbered pins and the text size in the editor`</sub>
+- 読めない属性でも block_pin_text は範囲内なら残る。範囲外の値は下書きに持たない <sub>`spacer and caption rows, unnumbered pins and the text size in the editor`</sub>
 - 部品挿入で「ブロック(汎用)」を選ぶと、左右1本ずつのピン表が開く <sub>`starting a new block from the insert dialog`</sub>
 - 編集したピン表はそのまま配置に使う属性になる(配置後もこの形で描かれる) <sub>`starting a new block from the insert dialog`</sub>
 - 「手動」に切り替えると、そのときの自動寸法が編集できる初期値として入る <sub>`starting a new block from the insert dialog`</sub>
 - 同じ辺でピン番号が重なっているあいだは配置できない(指摘が出る) <sub>`starting a new block from the insert dialog`</sub>
 - プロパティの「ピン表を編集…」は、そのブロックのピン表を読み込んで開く <sub>`editing a block that is already on the drawing`</sub>
 - 適用するとupdate_entityコマンドが1回だけ実行され、参照記号・型番・位置は変わらない <sub>`editing a block that is already on the drawing`</sub>
+- すき間・見出しの行・番号なしのピン・文字の高さを持つブロックは、ピンを足して適用しても、それらの行と属性が残る <sub>`editing a block that is already on the drawing`</sub>
 - ブロック以外の属性(定格など)は編集しても残る <sub>`editing a block that is already on the drawing`</sub>
 - 2.5mm間隔のブロックにコネクタの絵を付けると、適用できなくなる <sub>`editing a block that is already on the drawing`</sub>
 - 番号を内側に描くブロックにコネクタの絵を付けると、5mm間隔でも適用できなくなる <sub>`editing a block that is already on the drawing`</sub>
@@ -2686,6 +2721,13 @@
 - block_caption はブロック自身の絵を変えない: 図形とピンは属性の有無で同じ <sub>`block caption place (Rust twin)`</sub>
 - block_leads が "none" のブロックは、ピンを外形の辺の上に置き、リード線を描かない。外形と番号はリード線ありと同じ <sub>`leadless blocks (Rust twin)`</sub>
 - block_leads は "lead" と "none" だけを受け付け、"none" は番号を内側に描くブロックでなければ断る <sub>`leadless blocks (Rust twin)`</sub>
+- 番号の無いピンは名前を鍵にし、外には何も書かず、名前は内側に書く <sub>`block pin rows and text size (Rust twin)`</sub>
+- 番号なしで名前が同じ2本・番号なしの名前が別のピンの番号と同じ・番号も名前も無いピンは Rust と同じ文言で断る <sub>`block pin rows and text size (Rust twin)`</sub>
+- すき間の行は前後のピンを行数だけ離し、箱の高さにも数える <sub>`block pin rows and text size (Rust twin)`</sub>
+- すき間は1〜20行で他の項目を混ぜず、行数の合計にも上限がある。文言は Rust と同じ <sub>`block pin rows and text size (Rust twin)`</sub>
+- 見出しの行は1行を使って箱の中に太字で書き、ピンにならない。左辺は左寄せ、右辺は右寄せ <sub>`block pin rows and text size (Rust twin)`</sub>
+- block_pin_text は文字の高さを変え、1.5〜5.0mm 以外は Rust と同じ文言で断る <sub>`block pin rows and text size (Rust twin)`</sub>
+- 2mm を明示しても今までと同じ絵になる (属性を使わないブロックは変わらない) <sub>`block pin rows and text size (Rust twin)`</sub>
 
 ### frameEditor
 
@@ -2990,6 +3032,7 @@
 - シンボル内の弧はシンボルと一緒に回るので、電磁接触器の半円はどの回転角でも可動接点の側を向く <sub>`rotateArcAngles`</sub>
 - ミラーは弧を左右反転させるが、描画方向(開始→終了を時計回り)は保つ <sub>`rotateArcAngles`</sub>
 - ズームアウトしても文字だけ大きいまま残らない。図形と同じ割合で縮み、読めない大きさになったら描かない <sub>`drawSymbol text placement`</sub>
+- シンボルの図形の文字に bold があるものだけが太字のフォントで描かれる (ブロックの見出しの行) <sub>`drawSymbol text placement`</sub>
 - シンボルの中の文字は、シンボルを回しても反転しても定義どおりの場所に描かれる <sub>`drawSymbol text placement`</sub>
 - 1〜2文字の端子番号は、どの向きに回しても反転しても自分の印(丸)の中に丸ごと収まる <sub>`drawSymbol text placement`</sub>
 - 画面のキャンバスでは、回していない端子台の番号は印の中心から文字高の約1/3(1/2.8)だけ下にベースラインが来る(出力図面の1/2より小さい) <sub>`drawSymbol text placement`</sub>

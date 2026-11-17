@@ -1489,6 +1489,14 @@ A mark needs no reference designator: the checks for missing and repeated design
 
 **What closed it.** A sheet setting chooses between the zone address outside and the destination sheet names inside the flag; a label may carry its own free destination text and a flag direction. Text measuring and arrange placement follow the wider flag. A dotted net name that is not a port-contact tap is pinned by tests as an ordinary name that joins across sheets.
 
+### G50 — Block pins cannot skip numbers, leave rows empty or carry group captions · quality
+
+**Closed 2026-11-18** (pin-table entries without a number, `{"gap": n}` and `{"caption": "text"}`, block attribute `block_pin_text`; format 29).
+
+**Current behaviour (verified).** Every block pin needed a number, pins were packed edge to edge with no way to leave a row empty, a group of pins could not be named inside the box, and pin text had one fixed size. Function sheets whose unit boxes carry only the pins in use, grouped under captions and with gaps between groups, could not be drawn.
+
+**What closed it.** A pin may leave out its number when its name is unique in the block (the name is the key in the pin tools, the netlist and the exports, and nothing is printed outside the box). A side may hold spacer rows and bold caption rows that are not pins. A block attribute sets the text height and the minimum width follows it. The pin-table editor keeps these rows when a block is edited and saved. Old files draw as before.
+
 ## Summary by impact
 
 | Impact | Gaps |
