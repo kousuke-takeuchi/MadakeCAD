@@ -1606,4 +1606,51 @@ mod tests {
         wires.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
         assert_eq!(wires, vec![(50.0, true, Some(2.0)), (60.0, false, None)]);
     }
+
+    /// A block whose pins have no numbers exports to KiCad keyed by pin name, and a block with spacer and caption rows and a text size imports back drawn the same, with the same pin table.
+    /// 番号のないピンだけのブロックは、ピン名を鍵にしてKiCadへ書き出される。見出し・すき間の行と文字の高さを持つブロックは、読み戻しても同じ絵・同じピン表に戻る。
+    #[test]
+    fn unnumbered_pins_and_pin_rows_survive_a_kicad_round_trip() {
+        let sheet = crate::block::rows_block_sheet();
+        let (text, _) = export_kicad_sch(&sheet, &defs(&sheet));
+        let root = parse_sexpr(&text).unwrap();
+        let mut keys: Vec<String> = Vec::new();
+        fn walk(n: &SExpr, keys: &mut Vec<String>) {
+            if n.name() == Some("pin") {
+                if let Some(num) = n.child("number").and_then(|c| c.arg_str(0)) {
+                    keys.push(num.to_string());
+                }
+            }
+            if let SExpr::List(items) = n {
+                for c in items {
+                    walk(c, keys);
+                }
+            }
+        }
+        walk(&root, &mut keys);
+        for key in ["EN", "IN", "OUT", "VIN", "7", "1"] {
+            assert!(keys.iter().any(|k| k == key), "{key}: {keys:?}");
+        }
+        let (project, report) = import_kicad_sch(&text, "往復").unwrap();
+        assert!(report.skipped.is_empty(), "{report:?}");
+        for reference in ["BN", "BR"] {
+            let back = entities_of(&project.sheets[0])
+                .into_iter()
+                .find_map(|e| match e {
+                    Entity::Symbol(s) if s.reference == reference => Some(s),
+                    _ => None,
+                })
+                .expect("ブロックが読み戻される");
+            let orig = sheet
+                .entities
+                .values()
+                .find_map(|e| match e {
+                    Entity::Symbol(s) if s.reference == reference => Some(s),
+                    _ => None,
+                })
+                .unwrap();
+            assert_eq!(back.attrs, orig.attrs, "{reference}");
+            assert_eq!(crate::block::drawn_like(&back.attrs), crate::block::drawn_like(&orig.attrs), "{reference}");
+        }
+    }
 }

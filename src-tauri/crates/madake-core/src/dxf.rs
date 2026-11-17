@@ -3330,4 +3330,29 @@ mod tests {
             }
         }
     }
+
+    /// Blocks with unnumbered pins, spacer and caption rows and a text size export to DXF and import back with the same pin table, text size and drawing.
+    /// 番号のないピン・すき間と見出しの行・文字の高さを持つブロックは、DXFへ書き出して読み戻しても、同じピン表・文字の高さ・絵に戻る。
+    #[test]
+    fn unnumbered_pins_and_pin_rows_survive_a_dxf_round_trip() {
+        let sheet = crate::block::rows_block_sheet();
+        let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
+        let (project, report) = import_dxf(&dxf, "往復", &DxfImportOptions::default()).unwrap();
+        assert!(report.skipped.is_empty(), "{report:?}");
+        for reference in ["BN", "BR"] {
+            let find = |s: &Sheet| {
+                s.entities
+                    .values()
+                    .find_map(|e| match e {
+                        Entity::Symbol(i) if i.reference == reference => Some(i.clone()),
+                        _ => None,
+                    })
+                    .expect("ブロックがある")
+            };
+            let (back, orig) = (find(&project.sheets[0]), find(&sheet));
+            assert_eq!(back.attrs, orig.attrs, "{reference}");
+            assert_eq!(crate::block::drawn_like(&back.attrs), crate::block::drawn_like(&orig.attrs), "{reference}");
+        }
+        assert!(dxf.contains("BLOCK_PIN_TEXT"), "文字の高さの属性が書き出される");
+    }
 }

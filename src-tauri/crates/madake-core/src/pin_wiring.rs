@@ -868,4 +868,28 @@ mod tests {
         let json = serde_json::to_value(part_pins(&r, &plain)).unwrap();
         assert!(json["pins"][0].get("contacts").is_none(), "{json}");
     }
+
+    /// A block of unnumbered pins is wired by pin name (get_pins reports the name as the key, connect_pins accepts it), and spacer and caption rows are not pins.
+    /// 番号のないピンのブロックはピン名で配線できる (get_pins は名前を鍵として返し、connect_pins はそれを受け付ける)。すき間と見出しの行はピンではない。
+    #[test]
+    fn unnumbered_block_pins_are_reported_and_wired_by_name() {
+        let mut b = inst("block", 100.0, 50.0, 0, false, "U1");
+        b.attrs.insert(
+            "block_pins".into(),
+            r#"{"left":[{"caption":"IN"},{"name":"EN"},{"gap":1},{"name":"SDA"}],"right":[{"name":"OUT"}]}"#.into(),
+        );
+        let r = inst("resistor", 150.0, 50.0, 0, false, "R1");
+        let sheet = sheet_with(vec![b, r]);
+        let defs = sheet_symbol_defs(&sheet);
+        let parts = find_parts(&sheet, &defs, "U1");
+        let keys: Vec<&str> = parts[0].pins.iter().map(|p| p.number.as_str()).collect();
+        assert_eq!(keys, ["EN", "SDA", "OUT"]);
+        assert!(parts[0].pins.iter().all(|p| p.name == p.number));
+        let pin = resolve_pin(&sheet, &defs, "U1.SDA").unwrap();
+        assert_eq!(pin.pin.number, "SDA");
+        let points = plan_connection(&sheet, &defs, "U1.OUT", "R1.1", &[]).unwrap();
+        assert!(points.len() >= 2);
+        let err = resolve_pin(&sheet, &defs, "U1.IN").expect_err("見出しの行はピンではない");
+        assert!(err.contains("EN") && err.contains("SDA"), "{err}");
+    }
 }

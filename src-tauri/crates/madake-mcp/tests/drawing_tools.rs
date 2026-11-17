@@ -739,3 +739,51 @@ fn place_symbol_describes_connectors() {
     assert!(schema.contains("connector_ref") && schema.contains("jst_xh_f"), "attrs の説明にコネクタが無い");
     assert!(schema.contains("同じ種類の"), "attrs の説明に connector_ref のピンは同じ種類という条件が無い");
 }
+
+/// A block whose only pins have no numbers is keyed by pin name everywhere: place_symbol and get_pins return the name as the key and skip spacer and caption rows, connect_pins wires by name, verification finds no unconnected pin, and the netlist lists the pins by name.
+/// 番号のあるピンが無いブロックは、どこでもピン名が鍵になる: place_symbol と get_pins は名前を鍵として返し、すき間と見出しの行は返さず、connect_pins は名前で配線でき、検証は未接続ピンを出さず、ネットリストもピン名で並ぶ。
+#[tokio::test]
+async fn a_block_of_unnumbered_pins_is_keyed_by_name_in_every_pin_tool() {
+    let (doc, bridge) = fixture();
+    let sheet = first_sheet(&doc);
+    let pins_a = r#"{"left":[{"caption":"IN"},{"name":"EN"},{"gap":2}],"right":[{"name":"OUT"}]}"#;
+    let pins_b = r#"{"left":[{"name":"SIG"}]}"#;
+    let placed = place_block(&bridge, sheet, "U1", 60.0, 60.0, pins_a).await;
+    let keys = |v: &Value| -> Vec<String> {
+        v.as_array().unwrap().iter().map(|p| p["number"].as_str().unwrap().to_string()).collect()
+    };
+    assert_eq!(keys(&placed["pins"]), ["EN", "OUT"]);
+    place_block(&bridge, sheet, "U2", 140.0, 60.0, pins_b).await;
+    let got = call(&bridge, "get_pins", json!({"sheet_id": sheet, "reference": "U1"})).await;
+    assert_eq!(keys(&got["parts"][0]["pins"]), ["EN", "OUT"]);
+    assert_eq!(got["parts"][0]["pins"][0]["name"], "EN");
+    call(&bridge, "connect_pins", json!({"sheet_id": sheet, "from": "U1.OUT", "to": "U2.SIG"})).await;
+    let diagnostics = call(&bridge, "run_verification", json!({"sheet_id": sheet})).await;
+    let unconnected: Vec<&str> = diagnostics
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|d| d["code"] == "erc.unconnected_pin")
+        .filter_map(|d| d["message"].as_str())
+        .collect();
+    assert_eq!(unconnected.len(), 1, "{unconnected:?}");
+    assert!(unconnected[0].contains("EN"), "{unconnected:?}");
+    let err = call_err(&bridge, "connect_pins", json!({"sheet_id": sheet, "from": "U1.IN", "to": "U2.SIG"})).await;
+    assert!(err.contains("EN") && err.contains("OUT"), "{err}");
+    let nets = call(&bridge, "get_netlist", json!({"sheet_id": sheet})).await;
+    let text = nets.to_string();
+    assert!(text.contains("OUT") && text.contains("SIG"), "{text}");
+}
+
+/// The place_symbol description tells the agent about unnumbered pins, spacer and caption rows and block_pin_text.
+/// place_symbol の説明には、番号なしのピン・すき間と見出しの行・block_pin_text が書かれている。
+#[test]
+fn place_symbol_describes_unnumbered_pins_spacers_captions_and_the_text_size() {
+    let tools = tool_descriptions();
+    let place = &tools.iter().find(|(t, _)| t == "place_symbol").expect("place_symbol").1;
+    for word in ["no を省く", "gap", "caption", "block_pin_text"] {
+        assert!(place.contains(word), "{word}");
+    }
+    let get = &tools.iter().find(|(t, _)| t == "get_pins").expect("get_pins").1;
+    assert!(get.contains("すき間") && get.contains("見出し"), "{get}");
+}

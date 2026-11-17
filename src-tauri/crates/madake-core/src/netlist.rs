@@ -1936,4 +1936,23 @@ mod tests {
         let other = nets.iter().find(|n| n.name == "J7.1").expect("接点1のネット");
         assert_eq!(pins_of(other), vec!["39:U3/1"]);
     }
+
+    /// A block whose only pins have no numbers joins nets under the pin names, so a wire to such a pin is a named net pin and not an unconnected one.
+    /// 番号のあるピンが1つも無いブロックは、ピン名でネットに参加する。そのピンへ届いた配線は、名前のついたネットのピンになり、未接続にはならない。
+    #[test]
+    fn unnumbered_block_pins_join_nets_under_their_names() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        let block = crate::block::test_block("CTRL1", "", 100.0, 50.0, r#"{"left":[{"name":"EN"}],"right":[{"name":"OUT"}]}"#);
+        // 右ピンの位置はブロックの定義から読む。R1のピン1 (x=142.5) へ配線
+        let Entity::Symbol(inst) = &block else { unreachable!() };
+        let out = crate::block::block_symbol(&inst.attrs).unwrap().pins.iter().find(|p| p.number == "OUT").unwrap().at;
+        for e in [block, symbol("resistor", "R1", 150.0, 50.0), wire(&[(100.0 + out.x, 50.0 + out.y), (142.5, 50.0)])] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let nets = extract_netlist(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let net = nets.iter().find(|n| n.pins.len() == 2).expect("接続ネット");
+        let mut refs: Vec<_> = net.pins.iter().map(|p| format!("{}:{}", p.reference, p.pin)).collect();
+        refs.sort();
+        assert_eq!(refs, vec!["CTRL1:OUT", "R1:1"]);
+    }
 }

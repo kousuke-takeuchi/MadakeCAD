@@ -1260,6 +1260,25 @@ pub(crate) fn fine_block_sheet() -> (crate::model::Sheet, BTreeMap<String, Strin
     (sheet, attrs)
 }
 
+/// テスト用: 番号のあるピンが1つも無いブロック ("BN") と、見出し・すき間の行と文字の高さを持つブロック ("BR") を並べた用紙
+/// (DXF/KiCad の往復の試験が共有する)。
+#[cfg(test)]
+pub(crate) fn rows_block_sheet() -> crate::model::Sheet {
+    use crate::model::{Orientation, PaperSize, Sheet};
+    let mut sheet = Sheet::new("Sheet1", PaperSize::A3, Orientation::Landscape);
+    let named = test_block("BN", "", 60.0, 60.0, r#"{"left":[{"name":"EN"},{"name":"IN"}],"right":[{"name":"OUT"}]}"#);
+    let rows = test_block(
+        "BR", "", 140.0, 60.0,
+        r#"{"left":[{"caption":"POWER"},{"name":"VIN"},{"gap":2},{"no":"7","name":"GND"}],"right":[{"no":"1"},{"gap":1}]}"#,
+    );
+    let crate::model::Entity::Symbol(mut rows_inst) = rows else { unreachable!() };
+    rows_inst.attrs.insert(BLOCK_PIN_TEXT_ATTR.into(), "3".into());
+    for e in [named, crate::model::Entity::Symbol(rows_inst)] {
+        sheet.entities.insert(e.id(), e);
+    }
+    sheet
+}
+
 /// テスト用: ブロックの属性から引いた、ピンの (番号, 位置) と外形の図形 (往復の前後の比較に使う)。
 #[cfg(test)]
 pub(crate) fn drawn_like(attrs: &BTreeMap<String, String>) -> (Vec<String>, String) {
