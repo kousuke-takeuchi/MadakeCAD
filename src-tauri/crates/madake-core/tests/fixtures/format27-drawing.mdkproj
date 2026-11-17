@@ -1,0 +1,464 @@
+{
+  "format_version": 27,
+  "name": "Format 27 sample",
+  "sheets": [
+    {
+      "id": "9aae8bed-4fee-4b46-862b-8fe235de343f",
+      "name": "Power",
+      "kind": "schematic",
+      "size": "A3",
+      "orientation": "Landscape",
+      "zone_cols": 4,
+      "zone_rows": 6,
+      "title_block": {
+        "company": "",
+        "title": "",
+        "drawing_no": "",
+        "scale": "",
+        "date": "",
+        "designed": "",
+        "drawn": "",
+        "checked": "",
+        "approved": "",
+        "rev": ""
+      },
+      "revisions": [],
+      "annotation_text_mm": null,
+      "entities": {
+        "13bd2851-a6c6-4c59-abac-6631c61713d1": {
+          "kind": "symbol",
+          "id": "13bd2851-a6c6-4c59-abac-6631c61713d1",
+          "symbol_id": "test_gnd_mark",
+          "at": {
+            "x": 90.0,
+            "y": 140.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "",
+          "value": "",
+          "attrs": {}
+        },
+        "237c0eeb-bff9-40d0-9fab-e2b8bb85a920": {
+          "kind": "symbol",
+          "id": "237c0eeb-bff9-40d0-9fab-e2b8bb85a920",
+          "symbol_id": "test_gnd_mark",
+          "at": {
+            "x": 60.0,
+            "y": 140.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "",
+          "value": "",
+          "attrs": {}
+        },
+        "2853470d-438e-45ad-b53e-4bb683dfd042": {
+          "kind": "wire",
+          "id": "2853470d-438e-45ad-b53e-4bb683dfd042",
+          "points": [
+            {
+              "x": 60.0,
+              "y": 77.5
+            },
+            {
+              "x": 60.0,
+              "y": 95.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "2917c539-457a-4eca-a14d-d5bba7978214": {
+          "kind": "net_label",
+          "id": "2917c539-457a-4eca-a14d-d5bba7978214",
+          "at": {
+            "x": 120.0,
+            "y": 95.0
+          },
+          "name": "LOCAL",
+          "rotation": 0,
+          "attrs": {
+            "tag": "right"
+          }
+        },
+        "406462ac-a7e7-46e9-a391-b1961128c2b8": {
+          "kind": "symbol",
+          "id": "406462ac-a7e7-46e9-a391-b1961128c2b8",
+          "symbol_id": "block",
+          "at": {
+            "x": 150.0,
+            "y": 140.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "HUB",
+          "value": "",
+          "attrs": {
+            "block_pins": "{\"left\":[{\"no\":\"U1\",\"name\":\"USB\",\"connector\":\"usb_a_f\",\"contacts\":[\"VBUS\",\"D-\",\"D+\",\"GND\"]}],\"right\":[{\"no\":\"1\",\"name\":\"A\",\"connector\":\"screw\",\"connector_ref\":\"J3\"},{\"no\":\"2\",\"name\":\"B\",\"connector\":\"screw\",\"connector_ref\":\"J3\"}]}"
+          }
+        },
+        "4c7dfb46-07f3-4bfe-8e98-2d474eb051d7": {
+          "kind": "symbol",
+          "id": "4c7dfb46-07f3-4bfe-8e98-2d474eb051d7",
+          "symbol_id": "block",
+          "at": {
+            "x": 270.0,
+            "y": 60.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "U5",
+          "value": "",
+          "attrs": {
+            "block_caption": "inside",
+            "block_numbers": "inside",
+            "block_pins": "{\"left\":[{\"no\":\"1\"},{\"no\":\"2\"}],\"right\":[{\"no\":\"3\"}]}",
+            "block_pitch": "2.5"
+          }
+        },
+        "55eadbd5-9ac0-407e-aa6f-96610d65275c": {
+          "kind": "wire",
+          "id": "55eadbd5-9ac0-407e-aa6f-96610d65275c",
+          "points": [
+            {
+              "x": 52.5,
+              "y": 40.0
+            },
+            {
+              "x": 35.0,
+              "y": 40.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "67b1044d-dee3-4991-aa6d-71d5d5997210": {
+          "kind": "wire",
+          "id": "67b1044d-dee3-4991-aa6d-71d5d5997210",
+          "points": [
+            {
+              "x": 60.0,
+              "y": 140.0
+            },
+            {
+              "x": 60.0,
+              "y": 120.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "77e40b76-99d5-4e08-afe7-d64cd48b1abe": {
+          "kind": "net_label",
+          "id": "77e40b76-99d5-4e08-afe7-d64cd48b1abe",
+          "at": {
+            "x": 60.0,
+            "y": 95.0
+          },
+          "name": "SIG",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "89a342b5-f879-4ace-9f6e-5913defd51cb": {
+          "kind": "net_label",
+          "id": "89a342b5-f879-4ace-9f6e-5913defd51cb",
+          "at": {
+            "x": 35.0,
+            "y": 40.0
+          },
+          "name": "24V",
+          "rotation": 0,
+          "attrs": {
+            "tag": "left"
+          }
+        },
+        "976e292c-9d20-4976-b664-264e558c4f71": {
+          "kind": "symbol",
+          "id": "976e292c-9d20-4976-b664-264e558c4f71",
+          "symbol_id": "terminal_block_3p",
+          "at": {
+            "x": 250.0,
+            "y": 140.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "TB1",
+          "value": "",
+          "attrs": {}
+        },
+        "bda40c91-860b-4a27-9792-593cbf94863b": {
+          "kind": "symbol",
+          "id": "bda40c91-860b-4a27-9792-593cbf94863b",
+          "symbol_id": "block",
+          "at": {
+            "x": 320.0,
+            "y": 60.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "U6",
+          "value": "",
+          "attrs": {
+            "block_leads": "none",
+            "block_numbers": "inside",
+            "block_pins": "{\"left\":[{\"no\":\"1\"},{\"no\":\"2\"}],\"right\":[{\"no\":\"1\"},{\"no\":\"2\"}]}",
+            "block_pitch": "2.5",
+            "block_size": "{\"w\":5,\"h\":7.5}"
+          }
+        },
+        "bf5337c8-d262-4edd-b016-68935b04480a": {
+          "kind": "net_label",
+          "id": "bf5337c8-d262-4edd-b016-68935b04480a",
+          "at": {
+            "x": 90.0,
+            "y": 40.0
+          },
+          "name": "PUMP",
+          "rotation": 0,
+          "attrs": {
+            "tag": "right"
+          }
+        },
+        "c465d3ce-0ef2-4165-9b04-cfd36489b134": {
+          "kind": "symbol",
+          "id": "c465d3ce-0ef2-4165-9b04-cfd36489b134",
+          "symbol_id": "block",
+          "at": {
+            "x": 150.0,
+            "y": 60.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "CTRL1",
+          "value": "MainCtl",
+          "attrs": {
+            "block_pins": "{\"left\":[{\"no\":\"1\",\"name\":\"IN\"},{\"no\":\"2\",\"name\":\"EN\"}],\"right\":[{\"no\":\"3\",\"name\":\"OUT\"}],\"top\":[{\"no\":\"4\",\"name\":\"VCC\"}],\"bottom\":[{\"no\":\"5\"}]}"
+          }
+        },
+        "d8782b26-19a7-4666-b21f-4315f18c61ef": {
+          "kind": "symbol",
+          "id": "d8782b26-19a7-4666-b21f-4315f18c61ef",
+          "symbol_id": "resistor",
+          "at": {
+            "x": 60.0,
+            "y": 70.0
+          },
+          "rotation": 90,
+          "mirror": false,
+          "reference": "R2",
+          "value": "2k2",
+          "attrs": {}
+        },
+        "da2c9963-ba48-4c0b-bce5-6c818f9ce99c": {
+          "kind": "symbol",
+          "id": "da2c9963-ba48-4c0b-bce5-6c818f9ce99c",
+          "symbol_id": "block",
+          "at": {
+            "x": 220.0,
+            "y": 60.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "FT1",
+          "value": "",
+          "attrs": {
+            "block_pins": "{\"left\":[{\"no\":\"1\",\"name\":\"P\"},{\"no\":\"2\",\"name\":\"N\"}],\"right\":[{\"no\":\"1\",\"name\":\"P\"},{\"no\":\"2\",\"name\":\"N\"}]}"
+          }
+        },
+        "e0b2cfba-f0eb-47be-8523-5b06c9102017": {
+          "kind": "symbol",
+          "id": "e0b2cfba-f0eb-47be-8523-5b06c9102017",
+          "symbol_id": "resistor",
+          "at": {
+            "x": 60.0,
+            "y": 40.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "R1",
+          "value": "1k",
+          "attrs": {}
+        },
+        "f9b8cd4b-7ec4-4b54-bd04-3478c998167a": {
+          "kind": "wire",
+          "id": "f9b8cd4b-7ec4-4b54-bd04-3478c998167a",
+          "points": [
+            {
+              "x": 67.5,
+              "y": 40.0
+            },
+            {
+              "x": 90.0,
+              "y": 40.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        }
+      }
+    },
+    {
+      "id": "94a74f77-a5fe-4b4b-8019-71c667847c54",
+      "name": "Motor",
+      "kind": "schematic",
+      "size": "A3",
+      "orientation": "Landscape",
+      "zone_cols": 4,
+      "zone_rows": 6,
+      "title_block": {
+        "company": "",
+        "title": "",
+        "drawing_no": "",
+        "scale": "",
+        "date": "",
+        "designed": "",
+        "drawn": "",
+        "checked": "",
+        "approved": "",
+        "rev": ""
+      },
+      "revisions": [],
+      "annotation_text_mm": 2.5,
+      "entities": {
+        "3266022b-2563-47b7-9995-8892dc01b9ad": {
+          "kind": "net_label",
+          "id": "3266022b-2563-47b7-9995-8892dc01b9ad",
+          "at": {
+            "x": 100.0,
+            "y": 50.0
+          },
+          "name": "PUMP",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "5c44ef25-721b-45aa-b4f4-604583afe20b": {
+          "kind": "net_label",
+          "id": "5c44ef25-721b-45aa-b4f4-604583afe20b",
+          "at": {
+            "x": 200.0,
+            "y": 80.0
+          },
+          "name": "SIG",
+          "rotation": 0,
+          "attrs": {
+            "tag": "left"
+          }
+        },
+        "cc220eb1-5198-4797-ad10-7099d91c3ba1": {
+          "kind": "wire",
+          "id": "cc220eb1-5198-4797-ad10-7099d91c3ba1",
+          "points": [
+            {
+              "x": 80.0,
+              "y": 50.0
+            },
+            {
+              "x": 100.0,
+              "y": 50.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "e0d5f6f4-9935-49ea-b47c-9938a6078c24": {
+          "kind": "net_label",
+          "id": "e0d5f6f4-9935-49ea-b47c-9938a6078c24",
+          "at": {
+            "x": 150.0,
+            "y": 50.0
+          },
+          "name": "24V",
+          "rotation": 0,
+          "attrs": {
+            "tag": "right"
+          }
+        }
+      }
+    },
+    {
+      "id": "b8561034-3a85-48aa-ba23-d5cb5b6e4019",
+      "name": "Aux",
+      "kind": "schematic",
+      "size": "A4",
+      "orientation": "Landscape",
+      "zone_cols": 6,
+      "zone_rows": 6,
+      "title_block": {
+        "company": "",
+        "title": "",
+        "drawing_no": "",
+        "scale": "",
+        "date": "",
+        "designed": "",
+        "drawn": "",
+        "checked": "",
+        "approved": "",
+        "rev": ""
+      },
+      "revisions": [],
+      "annotation_text_mm": null,
+      "entities": {
+        "1ca6ffc6-19ae-44d6-be6f-56502ce61a02": {
+          "kind": "net_label",
+          "id": "1ca6ffc6-19ae-44d6-be6f-56502ce61a02",
+          "at": {
+            "x": 60.0,
+            "y": 60.0
+          },
+          "name": "PUMP",
+          "rotation": 0,
+          "attrs": {
+            "tag": "left"
+          }
+        },
+        "80dfa673-213a-4171-ba25-01686697c014": {
+          "kind": "wire",
+          "id": "80dfa673-213a-4171-ba25-01686697c014",
+          "points": [
+            {
+              "x": 60.0,
+              "y": 60.0
+            },
+            {
+              "x": 40.0,
+              "y": 60.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        }
+      }
+    }
+  ],
+  "wire_parts": [],
+  "plc_assignments": [],
+  "frame_template": null,
+  "no": null,
+  "mech_links": [],
+  "plc_generate": null
+}

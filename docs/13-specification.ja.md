@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3730仕様項目**。
+全6領域・**3734仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -192,6 +192,7 @@
 - 番号の無いピンは名前を鍵にする (get_pins・ネットリスト・connect_pins はその鍵を使う)。箱の外には何も書かず、名前は内側に書く。 <sub>`a_pin_without_a_number_is_keyed_by_its_name`</sub>
 - ピンがすべて番号無しのブロックも成り立つ: ピンはどれも名前が鍵で、番号の文字は1つも描かれない。 <sub>`a_block_of_only_unnumbered_pins_is_valid`</sub>
 - 番号が無く名前が同じ2本のピンは断る。無番号ピンの名前が別のピンの番号と同じ場合も断る。番号も名前も無いピンは、これまでどおり断る。 <sub>`unnumbered_pins_need_unique_names`</sub>
+- 番号の無いピンの名前はブロック全体で一意でなければならない: 同じ名前の番号付きのピンがあれば (どの辺でも、どちらが先でも) 断る。番号付きのピンどうしは今までどおり同じ名前でよい。 <sub>`an_unnumbered_pin_may_not_share_its_name_with_a_numbered_pin`</sub>
 - 番号を内側に描くブロックでは、無番号のピンは番号の位置に名前を書く (名前がそのピンの唯一の名札だから)。 <sub>`an_unnumbered_pin_shows_its_name_when_numbers_are_inside`</sub>
 - すき間の行は、その辺のピンの位置をその数だけ空ける: 前後のピンはその行数だけ離れ、すき間自体はピンにならない。 <sub>`a_gap_row_leaves_pin_positions_empty`</sub>
 - 箱はすき間の行も含めて大きくなる: すき間のあるブロックは、同じピンですき間の無いものより背が高い。 <sub>`a_gap_row_counts_toward_the_height_of_the_box`</sub>
@@ -1402,6 +1403,7 @@
 - 既定の書き方のシートは、ゾーン住所の書き方を明示した場合とバイトまで同じSVGになる。tag_flow out は旗の多角形だけを変える。 <sub>`the_default_style_renders_as_before_and_flow_out_only_moves_the_polygon`</sub>
 - ブロックの見出しの行は箱の中に太字で描かれる。番号のないピンは名前を1回だけ書いて番号は書かず、すき間の行は何も描かない。 <sub>`svg_draws_block_captions_in_bold_and_unnumbered_pins_by_name`</sub>
 - block_pin_text は図面のピン名・見出し・番号の文字の大きさを決める。既定の大きさを明示しても何も変わらない。 <sub>`svg_draws_block_texts_at_the_block_pin_text_size`</sub>
+- 形式27のファイル (3枚のシートのタグ付き・タグなしのラベル、古い種類のブロック全部、接地の印) をこのビルドで開くと、どのシートも形式27のビルドが描いたものとバイトまで同じSVGになる。 <sub>`a_format_27_file_renders_byte_identical_svg_after_migration`</sub>
 
 ### シンボルライブラリ
 
@@ -2589,6 +2591,7 @@
 - ピン名があって番号が空の行は、名前が鍵の番号なしのピンとして通る <sub>`checks on the pin table`</sub>
 - 番号もピン名も空で接点だけある行は指摘される <sub>`checks on the pin table`</sub>
 - 番号なしのピンの名前が他のピンの鍵と重なると、貫通ピンにはならず重複と指摘される <sub>`checks on the pin table`</sub>
+- 番号なしのピンの名前が番号付きのピンの名前と同じなら重複と指摘される (保存すると断られる組み合わせ) <sub>`checks on the pin table`</sub>
 - 手動の外形がピンの並びより小さいと指摘される(必要な寸法つき) <sub>`checks on the pin table`</sub>
 - ピンが多すぎる(200本超)ブロックは指摘される <sub>`checks on the pin table`</sub>
 - 配線が接続点に届いているピンは「配線済み」として拾われる <sub>`pins that are already wired`</sub>
@@ -2751,6 +2754,7 @@
 - block_leads は "lead" と "none" だけを受け付け、"none" は番号を内側に描くブロックでなければ断る <sub>`leadless blocks (Rust twin)`</sub>
 - 番号の無いピンは名前を鍵にし、外には何も書かず、名前は内側に書く <sub>`block pin rows and text size (Rust twin)`</sub>
 - 番号なしで名前が同じ2本・番号なしの名前が別のピンの番号と同じ・番号も名前も無いピンは Rust と同じ文言で断る <sub>`block pin rows and text size (Rust twin)`</sub>
+- 番号の無いピンの名前が番号付きのピンの名前と同じなら (どの辺でも、どちらが先でも) Rust と同じ文言で断る。番号付きどうしは同じ名前でよい <sub>`block pin rows and text size (Rust twin)`</sub>
 - すき間の行は前後のピンを行数だけ離し、箱の高さにも数える <sub>`block pin rows and text size (Rust twin)`</sub>
 - すき間は1〜20行で他の項目を混ぜず、行数の合計にも上限がある。文言は Rust と同じ <sub>`block pin rows and text size (Rust twin)`</sub>
 - 見出しの行は1行を使って箱の中に太字で書き、ピンにならない。左辺は左寄せ、右辺は右寄せ <sub>`block pin rows and text size (Rust twin)`</sub>

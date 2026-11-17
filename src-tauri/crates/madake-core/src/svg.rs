@@ -6147,4 +6147,25 @@ mod tests {
         assert_eq!(block_svg(pins, &[]), block_svg(pins, &[("block_pin_text", "2")]));
         assert_ne!(block_svg(pins, &[]), big);
     }
+
+    /// A format-27 file (tagged and plain labels on three sheets, blocks of every older kind, ground marks) opens in this build and every sheet renders byte-identical SVG to what the format-27 build drew.
+    /// 形式27のファイル (3枚のシートのタグ付き・タグなしのラベル、古い種類のブロック全部、接地の印) をこのビルドで開くと、どのシートも形式27のビルドが描いたものとバイトまで同じSVGになる。
+    #[test]
+    fn a_format_27_file_renders_byte_identical_svg_after_migration() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/format27-drawing.mdkproj");
+        let project = crate::io::load_project(&path).expect("形式27のファイルを開ける");
+        assert_eq!(project.format_version, crate::model::FORMAT_VERSION);
+        let mut symbols = builtin_symbols();
+        symbols.push(crate::symbol::test_net_mark("test_gnd_mark", "GND"));
+        let golden = [
+            include_str!("../tests/golden/format27-sheet1.svg"),
+            include_str!("../tests/golden/format27-sheet2.svg"),
+            include_str!("../tests/golden/format27-sheet3.svg"),
+        ];
+        assert_eq!(project.sheets.len(), golden.len());
+        for (i, (sheet, want)) in project.sheets.iter().zip(golden).enumerate() {
+            let got = project_sheet_to_svg(&project, sheet.id, &symbols).expect("シートを描ける");
+            assert!(got == want, "シート{} の SVG が形式27のビルドと違う", i + 1);
+        }
+    }
 }

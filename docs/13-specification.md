@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3730 specification clauses** across 6 areas.
+**3734 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -192,6 +192,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A pin with no number is keyed by its name (get_pins, netlist and connect_pins use that key), and nothing is printed outside the box for it; the name stays inside. <sub>`a_pin_without_a_number_is_keyed_by_its_name`</sub>
 - A block whose pins all lack numbers is valid: every pin is keyed by its name and no number text is drawn at all. <sub>`a_block_of_only_unnumbered_pins_is_valid`</sub>
 - Two pins without a number that share a name are refused, and so is an unnumbered pin whose name is another pin's number; a pin with neither number nor name is refused as before. <sub>`unnumbered_pins_need_unique_names`</sub>
+- An unnumbered pin's name must be unique in the whole block: a numbered pin with the same name (on any side, in either order) is refused, while numbered pins may still share a name with each other. <sub>`an_unnumbered_pin_may_not_share_its_name_with_a_numbered_pin`</sub>
 - With the numbers drawn inside, an unnumbered pin shows its name where the number would be (the name is its only identity). <sub>`an_unnumbered_pin_shows_its_name_when_numbers_are_inside`</sub>
 - A gap entry leaves that many pin positions empty on its side: the pins around it sit that many rows apart, and the gap itself has no pin. <sub>`a_gap_row_leaves_pin_positions_empty`</sub>
 - The box grows to hold the gap rows too, so a block with a gap is taller than the same pins without it. <sub>`a_gap_row_counts_toward_the_height_of_the_box`</sub>
@@ -1402,6 +1403,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A sheet with no tags and the default style renders byte-identical SVG to the sheet rendered with the zone style set explicitly, and the flow-out flag moves only the polygon. <sub>`the_default_style_renders_as_before_and_flow_out_only_moves_the_polygon`</sub>
 - A block's caption row is drawn in bold inside the box, an unnumbered pin prints its name once and no number, and a spacer row draws nothing. <sub>`svg_draws_block_captions_in_bold_and_unnumbered_pins_by_name`</sub>
 - block_pin_text sets the font size of the pin names, captions and numbers in the drawing, and writing the default size explicitly changes nothing. <sub>`svg_draws_block_texts_at_the_block_pin_text_size`</sub>
+- A format-27 file (tagged and plain labels on three sheets, blocks of every older kind, ground marks) opens in this build and every sheet renders byte-identical SVG to what the format-27 build drew. <sub>`a_format_27_file_renders_byte_identical_svg_after_migration`</sub>
 
 ### Symbol library
 
@@ -2589,6 +2591,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - accepts a row that has a name but no pin number as an unnumbered pin <sub>`checks on the pin table`</sub>
 - reports a row that has neither a pin number nor a name <sub>`checks on the pin table`</sub>
 - reports an unnumbered pin whose name is already another pin's key <sub>`checks on the pin table`</sub>
+- reports an unnumbered pin whose name is also a numbered pin's name <sub>`checks on the pin table`</sub>
 - reports a hand-set outline that is too small for its pins <sub>`checks on the pin table`</sub>
 - reports a block with more than 200 pins <sub>`checks on the pin table`</sub>
 - lists the pins a wire actually reaches <sub>`pins that are already wired`</sub>
@@ -2751,6 +2754,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - accepts only "lead" and "none <sub>`leadless blocks (Rust twin)`</sub>
 - keys an unnumbered pin by its name and prints nothing outside the box for it <sub>`block pin rows and text size (Rust twin)`</sub>
 - refuses duplicate names of unnumbered pins and a pin with neither number nor name <sub>`block pin rows and text size (Rust twin)`</sub>
+- refuses an unnumbered pin whose name is also a numbered pin's name <sub>`block pin rows and text size (Rust twin)`</sub>
 - leaves the gap rows empty between pins and counts them in the height <sub>`block pin rows and text size (Rust twin)`</sub>
 - words the gap, caption and row-limit refusals exactly like Rust <sub>`block pin rows and text size (Rust twin)`</sub>
 - draws a caption row bold inside the box on its row without a pin <sub>`block pin rows and text size (Rust twin)`</sub>
