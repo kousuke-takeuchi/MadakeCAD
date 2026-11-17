@@ -83,10 +83,23 @@ passed through. All options are validated before the engine lock is taken.
   wires untouched, as fixed obstacles.
 - A cluster whose labels and net-name symbols carry more than one name is refused before routing, whether
   it would be routed or kept.
-- A cluster that cannot be routed is **connected by labels** instead of being left broken: each terminal
-  gets a short lead and a net label with the cluster's net name, so connectivity is kept. When that name
-  is not unique to the cluster across the project (for example automatic N001 names or names shared by
-  other clusters), a fresh name `ARR_<n>` is used. The reply lists these clusters.
+- Routing runs in rounds. Clusters the router cannot route are handled one by one: first the old wire
+  shape is **stretched** (below); if that is not possible the cluster is **connected by labels**. The
+  stretched wires and label stubs are then placed as fixed lines and the remaining clusters are routed
+  again, so later wires keep clear of them; this repeats until no new cluster fails (at most 8 rounds).
+- **Stretching**: every point of the old wires is mapped through the column and row warps, each end that
+  sat on a terminal moves to the terminal's new position, the neighbouring point moves with it so the
+  wire keeps its right angles, and a two-point wire that would turn diagonal gets a jog halfway. The result
+  is used only if it touches no other line, pin, label or junction and crosses no other symbol's outline
+  (the symbols at its own terminals may be crossed); otherwise the cluster falls back to labels. Nets kept
+  this way are listed as `kept_shape`.
+- A cluster that falls back to labels is **connected by labels** instead of being left broken: each
+  terminal gets a short stub wire and a net label with the chosen name, so connectivity is kept. The stub
+  tries, in order, a straight line of 2.5, 5 and 7.5 mm in the pin direction, the router's grid lead, a
+  bent stub (half a step out, then sideways) and a straight line sideways; the first one that keeps 0.3 mm
+  from other lines and 1 mm from other pins, labels and junctions wins, else the first that does not
+  electrically touch anything, else the first. Stubs already placed count as obstacles for the next one.
+  The reply lists these clusters.
 - Clusters that reroute would not route are handled by what they touch:
   - all their terminals belong to one unit (or they touch no terminal at all): the wires move with that
     unit (or through `fx`/`fy`), unchanged in shape; this covers stubs with a free end;
@@ -96,9 +109,17 @@ passed through. All options are validated before the engine lock is taken.
   - they are used by a cable, shared by several nets (port contacts), pointed at by another entity or a
     FreeCAD link, carry lengths from different sources, or hold labels with different names: the whole
     arrange refuses and the reply names them.
-- The fallback name: the cluster's label name when it has labels (those labels are then deleted, since
-  the new labels carry the same name); else the net name of a net-name symbol in the cluster; else a fresh
-  `ARR_<n>` not used by any label or net-name symbol in the project.
+- The fallback name, in order: the cluster's own label name (those labels are then deleted, since the new
+  labels carry the same name, except labels another entity points at); else the label name of the same net
+  on another cluster (a label of the same name does not change connectivity); else the net name of a
+  net-name symbol (power or ground mark) in the cluster; else a fresh `ARR_<n>` not used by any label or
+  net-name symbol in the project.
+- Net-name symbols (power and ground marks) are never deleted. A wire that joins a mark's pin directly to
+  a pin of the same unit is kept and moves with that unit; neither of its ends gets a stub.
+- A cluster whose terminals all lie in one unit (a part and its own mark, for example) moves rigidly with
+  that unit and is not routed again.
+- A small circle shape (radius up to 1 mm) that sat on a wire is a connection dot: if, after the plan, it
+  no longer lies on any wire, it is removed.
 - Sheets that hold cables (`Cable`) or panel-layout entities are refused.
 - Before returning, the plan is applied to a copy of the sheet and the pin partition (which pins share a
   net) is compared with the original; so are, per net, the names its labels and net-name symbols give it
@@ -109,7 +130,7 @@ passed through. All options are validated before the engine lock is taken.
 
 ### Reply
 
-`{ moved: n_units, columns, rows, routed: [net], labelled: [{net, label}], before: TidyMetrics,
+`{ moved: n_units, columns, rows, routed: [net], labelled: [{net, label}], kept_shape: [net], before: TidyMetrics,
 after: TidyMetrics, wire_length_mm: {before, after}, size_mm: {before:[w,h], after:[w,h]} }`.
 
 ## Code shape
