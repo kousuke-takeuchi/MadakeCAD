@@ -160,7 +160,7 @@ Each refusal changes nothing and states the cause: source file missing or unread
 
 ## 5. Entry points
 
-- madake-core: `draft::plan_function_sheet(source: &Project, open: &Project, request: &DraftRequest, defs, ctx) -> Result<DraftPlan, String>` and `draft::check_function_sheets(source: &Project, open: &Project, ignore: &[String]) -> DraftCheck`.
+- madake-core: `draft::plan_function_sheet(source: &Project, open: &Project, request: &DraftRequest) -> Result<DraftPlan, String>` and `draft::check_function_sheets(source: &Project, open: &Project, ignore: &[String]) -> DraftCheck`.
 - `SharedDoc::draft_function_sheet` applies the plan as one batch.
 - MCP tools `draft_function_sheet`, `check_function_sheets`.
 - Link API `POST /api/v1/draft/function-sheet`, `POST /api/v1/draft/check`.
