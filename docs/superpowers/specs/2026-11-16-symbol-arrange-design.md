@@ -85,14 +85,23 @@ passed through. All options are validated before the engine lock is taken.
   it would be routed or kept.
 - Routing runs in rounds. Clusters the router cannot route are handled one by one: first the old wire
   shape is **stretched** (below); if that is not possible the cluster is **connected by labels**. The
-  stretched wires and label stubs are then placed as fixed lines and the remaining clusters are routed
-  again, so later wires keep clear of them; this repeats until no new cluster fails (at most 8 rounds).
+  stretched wires and label stubs are then placed as fixed lines, and in the next round only the clusters
+  whose route touches something placed in the round before (a line end or bend on it, it ending on a new
+  line, or a new label or junction within 1 mm; a plain crossing does not count) are routed again, around
+  everything placed so far and the routes kept; the others keep their route. This repeats until a round
+  has no new failure. Every round that goes on fails at least one more cluster, so there are at most the
+  number of clusters + 1 rounds, and the routes used always keep clear of every stub and stretched wire.
 - **Stretching**: every point of the old wires is mapped through the column and row warps, each end that
   sat on a terminal moves to the terminal's new position, the neighbouring point moves with it so the
-  wire keeps its right angles, and a two-point wire that would turn diagonal gets a jog halfway. The result
-  is used only if it touches no other line, pin, label or junction and crosses no other symbol's outline
-  (the symbols at its own terminals may be crossed); otherwise the cluster falls back to labels. Nets kept
-  this way are listed as `kept_shape`.
+  wire keeps its right angles, and a two-point wire that would turn diagonal gets a jog halfway. An end
+  that sat on a bend or end of another wire of the cluster (not on a terminal) follows that point the same
+  way; a junction follows its terminal or the wire point it sat on, else the warps. The result must keep
+  the cluster's own connections (netlist tolerance): every terminal (pins and labels, also in the middle of
+  a segment), every wire end that lay on another wire of the cluster (T-joints) and every junction must
+  still lie on the same wires as before. It is used only if that holds, it touches no other line, pin,
+  label or junction and it crosses no other symbol's outline (the symbols at its own terminals may be
+  crossed); otherwise the cluster falls back to labels instead of the whole arrange being refused. Nets
+  kept this way are listed as `kept_shape`.
 - A cluster that falls back to labels is **connected by labels** instead of being left broken: each
   terminal gets a short stub wire and a net label with the chosen name, so connectivity is kept. The stub
   tries, in order, a straight line of 2.5, 5 and 7.5 mm in the pin direction, the router's grid lead, a
@@ -111,7 +120,8 @@ passed through. All options are validated before the engine lock is taken.
     arrange refuses and the reply names them.
 - The fallback name, in order: the cluster's own label name (those labels are then deleted, since the new
   labels carry the same name, except labels another entity points at); else the label name of the same net
-  on another cluster (a label of the same name does not change connectivity); else the net name of a
+  on another cluster (a label of the same name does not change connectivity; never the `<label>.<contact>`
+  name of a port-contact net, which is not label text on the sheet); else the net name of a
   net-name symbol (power or ground mark) in the cluster; else a fresh `ARR_<n>` not used by any label or
   net-name symbol in the project.
 - Net-name symbols (power and ground marks) are never deleted. A wire that joins a mark's pin directly to
@@ -124,7 +134,8 @@ passed through. All options are validated before the engine lock is taken.
 - Before returning, the plan is applied to a copy of the sheet and the pin partition (which pins share a
   net) is compared with the original; so are, per net, the names its labels and net-name symbols give it
   (ignoring only fresh `ARR_<n>` names), the labels and net-name symbols sitting directly on pins, and
-  that every new label stub touches nothing but its own pin; any difference refuses with nothing changed.
+  that every new label stub touches nothing but its own pin, and that no symbol was deleted (arrange never
+  deletes parts or marks); any difference refuses with nothing changed.
 - The title block area is taken from the frame template's corner (`title_block.origin`), its width and
   height, plus the revision rows stacked above it.
 
