@@ -689,7 +689,7 @@
     "previewUnavailable": "The preview needs a pin table without problems",
     "issue": {
       "duplicate": "Pin number {no} is used twice",
-      "emptyNo": "Row {row} of the {side} has a name but no pin number",
+      "emptyNo": "Row {row} of the {side} has neither a pin number nor a name",
       "tooMany": "Too many pins: {count} (at most {max})",
       "sizeTooSmall": "The outline is too small for these pins (at least {w}x{h} mm)",
       "contactsTooFew": "Row {row} of the {side} has one contact: a port needs at least two",
@@ -700,7 +700,10 @@
       "connectorOnFine": "A 2.5 mm block cannot use a connector picture (pin {no})",
       "connectorOnInside": "A block with numbers inside cannot use a connector picture (pin {no})",
       "feedthroughName": "Feed-through pin {no} needs the same name on both sides",
-      "feedthroughPicture": "Feed-through pin {no} cannot have contacts or a connector picture"
+      "feedthroughPicture": "Feed-through pin {no} cannot have contacts or a connector picture",
+      "gapRange": "Row {row} of the {side}: the gap must be 1 to 20 rows",
+      "captionBlank": "Row {row} of the {side} has an empty caption",
+      "tooManyRows": "Too many rows: {count} (at most {max}, counting pins, captions and gaps)"
     },
     "wiredWarning": "Pins {pins} are wired: renumbering or deleting them disconnects those wires",
     "placeHint": "Place puts a ghost on the cursor (R rotates, Esc cancels)",
@@ -715,7 +718,10 @@
     "portCount": "{count} port(s)",
     "broken": "Cannot be read",
     "updatedLog": "{reference}: pin table updated ({pins} pins)",
-    "droppedLog": "Pins {pins} are gone: their wires are no longer connected"
+    "droppedLog": "Pins {pins} are gone: their wires are no longer connected",
+    "gapRow": "Empty rows",
+    "gapRowUnit": "row(s)",
+    "captionRow": "Caption"
   },
   "symbolPicker": {
     "title": "Insert a part",

@@ -257,11 +257,30 @@ describe("checks on the pin table", () => {
     expect(draftIssues(withConnector)).toEqual([{ code: "feedthroughPicture", no: "IN1" }]);
   });
 
-  // ja: ピン名だけ書いて番号が空の行は指摘される
-  it("reports a row that has a name but no pin number", () => {
+  // ja: ピン名があって番号が空の行は、名前が鍵の番号なしのピンとして通る
+  it("accepts a row that has a name but no pin number as an unnumbered pin", () => {
     const d = draft();
     d.rows.left[0].no = " ";
+    expect(draftIssues(d)).toEqual([]);
+    expect(blockSymbol(attrsFromDraft(d)).pins.map((p) => p.number)).toEqual(["入力1", "IN2", "OUT1"]);
+  });
+
+  // ja: 番号もピン名も空で接点だけある行は指摘される
+  it("reports a row that has neither a pin number nor a name", () => {
+    const d = draft();
+    d.rows.left[0] = { no: " ", name: "", contacts: "A, B" };
     expect(draftIssues(d)).toEqual([{ code: "emptyNo", side: "left", index: 0 }]);
+  });
+
+  // ja: 番号なしのピンの名前が他のピンの鍵と重なると、貫通ピンにはならず重複と指摘される
+  it("reports an unnumbered pin whose name is already another pin's key", () => {
+    const d = draft();
+    d.rows.left[0] = { no: "", name: "OUT1" };
+    expect(draftIssues(d)).toEqual([{ code: "duplicate", no: "OUT1" }]);
+    const both = draft();
+    both.rows.left = [{ no: "", name: "A" }];
+    both.rows.right = [{ no: "", name: "A" }];
+    expect(draftIssues(both)).toEqual([{ code: "duplicate", no: "A" }]);
   });
 
   // ja: 手動の外形がピンの並びより小さいと指摘される(必要な寸法つき)
@@ -533,3 +552,84 @@ describe("leadless and caption attributes in the editor draft", () => {
   });
 });
 
+describe("spacer and caption rows, unnumbered pins and the text size in the editor", () => {
+  const PINS_JSON =
+    '{"left":[{"caption":"POWER"},{"name":"VIN"},{"gap":2},{"no":"7","name":"GND"}],"right":[{"no":"1"},{"gap":1}]}';
+
+  // ja: すき間・見出しの行と番号なしのピンは、開いて保存し直しても属性の JSON が1文字も変わらない
+  it("keeps spacer rows, caption rows and unnumbered pins exactly when a block is opened and saved", () => {
+    const attrs = { block_pins: PINS_JSON, block_pin_text: "3" };
+    const d = draftFromAttrs(attrs);
+    expect(d.rows.left.map((r) => [r.no, r.name, r.gap, r.caption])).toEqual([
+      ["", "", undefined, "POWER"],
+      ["", "VIN", undefined, undefined],
+      ["", "", 2, undefined],
+      ["7", "GND", undefined, undefined],
+    ]);
+    expect(attrsFromDraft(d)).toEqual(attrs);
+  });
+
+  // ja: すき間・見出しの行も並べ替えと削除ができ、行数や文字を書き換えられる (行は消えず、ピンの指摘も出ない)
+  it("moves, edits and removes spacer and caption rows like other rows", () => {
+    const d = draftFromAttrs({ block_pins: PINS_JSON });
+    moveRow(d, "left", 2, -1);
+    expect(d.rows.left.map((r) => r.gap ?? r.caption ?? r.no)).toEqual(["POWER", 2, "", "7"]);
+    d.rows.left[1].gap = 3;
+    d.rows.left[0].caption = "SUPPLY";
+    expect(draftIssues(d)).toEqual([]);
+    expect(JSON.parse(attrsFromDraft(d).block_pins).left).toEqual([
+      { caption: "SUPPLY" },
+      { gap: 3 },
+      { name: "VIN" },
+      { no: "7", name: "GND" },
+    ]);
+    removeRow(d, "left", 1);
+    expect(JSON.parse(attrsFromDraft(d).block_pins).left).toHaveLength(3);
+  });
+
+  // ja: すき間の行数が範囲外・見出しが空・行が多すぎるときは指摘される
+  it("reports a gap outside 1 to 20, a blank caption and too many rows", () => {
+    const d = draftFromAttrs({ block_pins: PINS_JSON });
+    d.rows.left[2].gap = 0;
+    d.rows.left[0].caption = "  ";
+    expect(draftIssues(d)).toEqual([
+      { code: "captionBlank", side: "left", index: 0 },
+      { code: "gapRange", side: "left", index: 2 },
+    ]);
+    const many = blankDraft();
+    many.rows = { left: Array.from({ length: 21 }, () => ({ no: "", name: "", gap: 20 })), right: [], top: [], bottom: [] };
+    expect(draftIssues(many)).toEqual([{ code: "tooManyRows", count: 420, max: 400 }]);
+  });
+
+  // ja: すき間は箱の大きさに数えるので、手動の外形が小さいと指摘され、プレビューは配置後と同じ形になる
+  it("counts spacer rows in the outline checks and previews the same drawing", () => {
+    const d = draftFromAttrs({ block_pins: '{"left":[{"no":"1"},{"gap":5},{"no":"2"}]}' });
+    expect(draftSize(d)).toEqual({ w: 15, h: 40 });
+    d.size = { w: 15, h: 20 };
+    expect(draftIssues(d)).toEqual([{ code: "sizeTooSmall", w: 5, h: 35 }]);
+    d.size = null;
+    expect(draftSymbol(d)).toEqual(blockSymbol(attrsFromDraft(d)));
+  });
+
+  // ja: ピンの数・次の番号にすき間と見出しの行は数えない
+  it("does not count spacer and caption rows as pins or in the next pin number", () => {
+    const d = draftFromAttrs({ block_pins: '{"left":[{"caption":"A"},{"gap":3},{"no":"4"}]}' });
+    expect(nextPinNo(d)).toBe("5");
+    const only = draftFromAttrs({ block_pins: '{"left":[{"caption":"A"},{"gap":3}]}' });
+    expect(nextPinNo(only)).toBe("1");
+  });
+
+  // ja: 番号なしのピンに配線があれば名前で鍵が決まるので、名前が変わると「接続が外れる」警告になり、残れば出ない
+  it("warns about a wired unnumbered pin only when its name changes", () => {
+    const d = draftFromAttrs({ block_pins: '{"left":[{"name":"EN"},{"gap":1},{"no":"2"}]}' });
+    expect(droppedWiredPins([{ side: "left", no: "EN" }], d)).toEqual([]);
+    d.rows.left[0].name = "ENA";
+    expect(droppedWiredPins([{ side: "left", no: "EN" }], d)).toEqual(["EN"]);
+  });
+
+  // ja: 読めない属性でも block_pin_text は範囲内なら残る。範囲外の値は下書きに持たない
+  it("keeps a valid block_pin_text even when the pin table cannot be read", () => {
+    expect(draftFromAttrs({ block_pins: "not json", block_pin_text: "3" }).pinText).toBe(3);
+    expect(draftFromAttrs({ block_pins: PINS_JSON, block_pin_text: "9" }).pinText).toBeUndefined();
+  });
+});

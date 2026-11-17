@@ -151,6 +151,24 @@ describe("editing a block that is already on the drawing", () => {
     expect(editor.active).toBe(false);
   });
 
+  // ja: すき間・見出しの行・番号なしのピン・文字の高さを持つブロックは、ピンを足して適用しても、それらの行と属性が残る
+  it("keeps spacer rows, caption rows, unnumbered pins and the text size when an edit is applied", async () => {
+    const pins = '{"left":[{"caption":"POWER"},{"name":"VIN"},{"gap":2},{"no":"7"}]}';
+    seed([block({ block_pins: pins, block_pin_text: "3" })]);
+    const sent = spyExecute();
+    const editor = useBlockEditorStore();
+    editor.startEdit(block({ block_pins: pins, block_pin_text: "3" }) as Entity);
+    editor.addRow("right");
+    editor.updateRow("right", 0, { no: "8" });
+    expect(await editor.apply()).toBe(true);
+    const attrs = (sent[0] as { entity: { attrs: Record<string, string> } }).entity.attrs;
+    expect(JSON.parse(attrs.block_pins)).toEqual({
+      left: [{ caption: "POWER" }, { name: "VIN" }, { gap: 2 }, { no: "7" }],
+      right: [{ no: "8" }],
+    });
+    expect(attrs.block_pin_text).toBe("3");
+  });
+
   // ja: ブロック以外の属性(定格など)は編集しても残る
   it("keeps attributes that are not part of the pin table", async () => {
     seed([block({ block_pins: PINS, current_a: "5" })]);

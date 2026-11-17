@@ -689,7 +689,7 @@
     "previewUnavailable": "The preview needs a pin table without problems",
     "issue": {
       "duplicate": "Pin number {no} is used twice",
-      "emptyNo": "Row {row} of the {side} has a name but no pin number",
+      "emptyNo": "Row {row} of the {side} has neither a pin number nor a name",
       "tooMany": "Too many pins: {count} (at most {max})",
       "sizeTooSmall": "The outline is too small for these pins (at least {w}x{h} mm)",
       "contactsTooFew": "{side}第{row}行只有一个触点：端口至少需要两个",
@@ -700,7 +700,10 @@
       "connectorOnFine": "2.5mm间距的方块不能使用连接器图形（引脚 {no}）",
       "connectorOnInside": "引脚编号画在内侧的方块不能使用连接器图形（引脚 {no}）",
       "feedthroughName": "贯通引脚 {no} 的两侧必须使用相同的名称",
-      "feedthroughPicture": "贯通引脚 {no} 不能带触点或连接器图形"
+      "feedthroughPicture": "贯通引脚 {no} 不能带触点或连接器图形",
+      "gapRange": "Row {row} of the {side}: the gap must be 1 to 20 rows",
+      "captionBlank": "Row {row} of the {side} has an empty caption",
+      "tooManyRows": "Too many rows: {count} (at most {max}, counting pins, captions and gaps)"
     },
     "wiredWarning": "Pins {pins} are wired: renumbering or deleting them disconnects those wires",
     "placeHint": "Place puts a ghost on the cursor (R rotates, Esc cancels)",
@@ -715,7 +718,10 @@
     "portCount": "端口 {count}",
     "broken": "Cannot be read",
     "updatedLog": "{reference}: pin table updated ({pins} pins)",
-    "droppedLog": "Pins {pins} are gone: their wires are no longer connected"
+    "droppedLog": "Pins {pins} are gone: their wires are no longer connected",
+    "gapRow": "Empty rows",
+    "gapRowUnit": "row(s)",
+    "captionRow": "Caption"
   },
   "symbolPicker": {
     "title": "插入元件",

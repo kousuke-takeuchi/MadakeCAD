@@ -689,7 +689,7 @@
     "previewUnavailable": "The preview needs a pin table without problems",
     "issue": {
       "duplicate": "Pin number {no} is used twice",
-      "emptyNo": "Row {row} of the {side} has a name but no pin number",
+      "emptyNo": "Row {row} of the {side} has neither a pin number nor a name",
       "tooMany": "Too many pins: {count} (at most {max})",
       "sizeTooSmall": "The outline is too small for these pins (at least {w}x{h} mm)",
       "contactsTooFew": "La ligne {row} du {side} n'a qu'un contact : un port en demande au moins deux",
@@ -700,7 +700,10 @@
       "connectorOnFine": "Un bloc de 2,5 mm ne peut pas utiliser d'image de connecteur (broche {no})",
       "connectorOnInside": "Un bloc avec les numéros à l'intérieur ne peut pas utiliser d'image de connecteur (broche {no})",
       "feedthroughName": "La broche traversante {no} doit avoir le même nom des deux côtés",
-      "feedthroughPicture": "La broche traversante {no} ne peut pas avoir de contacts ni d'image de connecteur"
+      "feedthroughPicture": "La broche traversante {no} ne peut pas avoir de contacts ni d'image de connecteur",
+      "gapRange": "Row {row} of the {side}: the gap must be 1 to 20 rows",
+      "captionBlank": "Row {row} of the {side} has an empty caption",
+      "tooManyRows": "Too many rows: {count} (at most {max}, counting pins, captions and gaps)"
     },
     "wiredWarning": "Pins {pins} are wired: renumbering or deleting them disconnects those wires",
     "placeHint": "Place puts a ghost on the cursor (R rotates, Esc cancels)",
@@ -715,7 +718,10 @@
     "portCount": "{count} port(s)",
     "broken": "Cannot be read",
     "updatedLog": "{reference}: pin table updated ({pins} pins)",
-    "droppedLog": "Pins {pins} are gone: their wires are no longer connected"
+    "droppedLog": "Pins {pins} are gone: their wires are no longer connected",
+    "gapRow": "Empty rows",
+    "gapRowUnit": "row(s)",
+    "captionRow": "Caption"
   },
   "symbolPicker": {
     "title": "Insérer un composant",

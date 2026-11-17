@@ -3,7 +3,7 @@
 // デザイン: MadakeCAD.pen「フェーズ5 - 部品挿入 ブロック(ピン表エディタ)」のBP列。
 import { ChevronDown, ChevronUp, Plus, X } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
-import type { BlockPinRow, BlockSide } from "../canvas/blockEditor";
+import { isSpecialRow, type BlockPinRow, type BlockSide } from "../canvas/blockEditor";
 import { CONNECTOR_KINDS, isGroupedConnector, type ConnectorKind } from "../canvas/connector";
 import { useBlockEditorStore } from "../stores/blockEditor";
 
@@ -34,8 +34,32 @@ function refEnabled(row: BlockPinRow): boolean {
       <span class="lbl">{{ t("blockEditor.colConnector") }}</span>
       <span class="lbl ref">{{ t("blockEditor.colConnectorRef") }}</span>
     </div>
-    <div v-for="(row, i) in editor.draft.rows[side]" :key="`${side}-${i}`" class="row">
+    <div v-for="(row, i) in editor.draft.rows[side]" :key="`${side}-${i}`" class="row" :class="{ special: isSpecialRow(row) }">
       <span class="row-no">{{ i + 1 }}</span>
+      <template v-if="row.gap !== undefined">
+        <span class="special-label">{{ t("blockEditor.gapRow") }}</span>
+        <input
+          class="cell mono"
+          type="number"
+          min="1"
+          max="20"
+          :value="row.gap"
+          :aria-label="t('blockEditor.gapRow')"
+          @input="edit(i, { gap: Number(($event.target as HTMLInputElement).value) })"
+        />
+        <span class="special-unit">{{ t("blockEditor.gapRowUnit") }}</span>
+        <span class="special-fill"></span>
+      </template>
+      <template v-else-if="row.caption !== undefined">
+        <span class="special-label">{{ t("blockEditor.captionRow") }}</span>
+        <input
+          class="cell"
+          :value="row.caption"
+          :aria-label="t('blockEditor.captionRow')"
+          @input="edit(i, { caption: ($event.target as HTMLInputElement).value })"
+        />
+      </template>
+      <template v-else>
       <input
         class="cell mono"
         :value="row.no"
@@ -78,6 +102,7 @@ function refEnabled(row: BlockPinRow): boolean {
         spellcheck="false"
         @input="edit(i, { connectorRef: ($event.target as HTMLInputElement).value })"
       />
+      </template>
       <button class="icon-btn" :title="t('blockEditor.moveUp')" @click="editor.moveRow(side, i, -1)">
         <ChevronUp :size="11" />
       </button>
@@ -125,6 +150,9 @@ function refEnabled(row: BlockPinRow): boolean {
 }
 .cell.mono { flex: none; width: 58px; font-family: var(--mono-font); }
 .cell.ref { width: 52px; }
+.special-label { flex: none; font-size: 10px; color: var(--ui-muted); }
+.special-unit { flex: none; font-size: 10px; color: var(--ui-muted); }
+.special-fill { flex: 1; }
 .cell:disabled { opacity: 0.5; }
 .cell:focus { border-color: var(--acad-blue); }
 .icon-btn {

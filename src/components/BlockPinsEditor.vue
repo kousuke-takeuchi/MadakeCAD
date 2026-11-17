@@ -61,6 +61,13 @@ function issueText(issue: BlockIssue): string {
   if (issue.code === "connectorOnFine") return t("blockEditor.issue.connectorOnFine", { no: issue.no });
   if (issue.code === "connectorOnInside") return t("blockEditor.issue.connectorOnInside", { no: issue.no });
   if (issue.code === "connectorRefSplit") return t("blockEditor.issue.connectorRefSplit", { ref: issue.ref });
+  if (issue.code === "gapRange") {
+    return t("blockEditor.issue.gapRange", { side: t(`blockEditor.side.${issue.side}`), row: issue.index + 1 });
+  }
+  if (issue.code === "captionBlank") {
+    return t("blockEditor.issue.captionBlank", { side: t(`blockEditor.side.${issue.side}`), row: issue.index + 1 });
+  }
+  if (issue.code === "tooManyRows") return t("blockEditor.issue.tooManyRows", { count: issue.count, max: issue.max });
   return t("blockEditor.issue.sizeTooSmall", { w: issue.w, h: issue.h });
 }
 

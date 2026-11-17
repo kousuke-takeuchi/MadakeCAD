@@ -8,7 +8,12 @@
 
 import {
   BLOCK_CONTACT_MAX,
+  BLOCK_GAP_MAX,
+  BLOCK_ROW_MAX,
   BLOCK_PINS_ATTR,
+  BLOCK_PIN_TEXT_ATTR,
+  BLOCK_PIN_TEXT_MAX_MM,
+  BLOCK_PIN_TEXT_MIN_MM,
   BLOCK_PIN_MAX,
   BLOCK_CAPTION_ATTR,
   BLOCK_LEADS_ATTR,
@@ -22,6 +27,7 @@ import {
   blockSymbol,
   parseBlockSpec,
   sideNeed,
+  sideRows,
   type BlockNumbers,
   type BlockPin,
   type BlockPins,
@@ -56,6 +62,20 @@ export interface BlockPinRow {
   contacts?: string;
   connector?: ConnectorKind | "";
   connectorRef?: string;
+  /** すき間の行 (n 行空ける)。この行はピンではない。エディタは表示・並べ替え・行数の変更・削除ができ、書き戻しでも落とさない。 */
+  gap?: number;
+  /** 見出しの行 (箱の中に太字で書く文字)。この行はピンではない。扱いはすき間の行と同じ。 */
+  caption?: string;
+}
+
+/** すき間・見出しの行か (ピンではない行)。 */
+export function isSpecialRow(row: BlockPinRow): boolean {
+  return row.gap !== undefined || row.caption !== undefined;
+}
+
+/** 行のピンの鍵: 番号。番号が空ならピン名 (前後の空白を除く)。 */
+export function rowKey(row: BlockPinRow): string {
+  return row.no.trim() !== "" ? row.no.trim() : row.name.trim();
 }
 
 /** 編集中のピン表。`size`がnullなら外形はピンから自動で決まる。 */
@@ -70,6 +90,8 @@ export interface BlockDraft {
   leads?: BlockLeads;
   /** 参照記号の位置。省略・属性が無いブロックは above。 */
   caption?: BlockCaption;
+  /** ピン名・見出し・番号の文字の高さ (mm)。省略・属性が無いブロックは既定。エディタに操作は無いが、プレビューと書き戻しで保つ。 */
+  pinText?: number;
 }
 
 /** ピン表の指摘 (これがある間は配置・適用できない)。 */
@@ -80,7 +102,7 @@ export type BlockIssue =
   | { code: "feedthroughName"; no: string }
   /** 貫通ピンに接点またはコネクタの絵が付いている。 */
   | { code: "feedthroughPicture"; no: string }
-  /** ピン名だけ書いて番号が空。 */
+  /** 番号もピン名も空 (番号が空でもピン名があれば、名前が鍵の番号なしのピンになる)。 */
   | { code: "emptyNo"; side: BlockSide; index: number }
   /** ピンが多すぎる。 */
   | { code: "tooMany"; count: number; max: number }
@@ -99,7 +121,13 @@ export type BlockIssue =
   /** 2.5mm間隔のブロックではコネクタの絵を使えない。 */
   | { code: "connectorOnFine"; no: string }
   /** 番号を内側に描くブロックではコネクタの絵を使えない。 */
-  | { code: "connectorOnInside"; no: string };
+  | { code: "connectorOnInside"; no: string }
+  /** すき間の行の行数が1〜20の整数でない。 */
+  | { code: "gapRange"; side: BlockSide; index: number }
+  /** 見出しの行の文字が空。 */
+  | { code: "captionBlank"; side: BlockSide; index: number }
+  /** 行の数が多すぎる (ピン・見出し・すき間の合計)。 */
+  | { code: "tooManyRows"; count: number; max: number };
 
 /** 配線が接続点に載っているとみなす距離 (mm)。Rust側 netlist::CONNECT_EPS と同じ。 */
 const CONNECT_EPS = 0.01;
@@ -126,6 +154,7 @@ function allRows(draft: BlockDraft): BlockPinRow[] {
 /** 書き出す価値のある行か (番号もピン名も空の行はピンにしない)。 */
 function isFilled(row: BlockPinRow): boolean {
   return (
+    isSpecialRow(row) ||
     row.no.trim() !== "" ||
     row.name.trim() !== "" ||
     (row.contacts ?? "").trim() !== "" ||
@@ -160,7 +189,7 @@ export function portPinCount(def: SymbolDef): number {
  * (`A0`のような)数字でない番号ばかりならピンの本数+1。
  */
 export function nextPinNo(draft: BlockDraft): string {
-  const rows = allRows(draft).filter(isFilled);
+  const rows = allRows(draft).filter((r) => isFilled(r) && !isSpecialRow(r));
   let max = 0;
   for (const row of rows) {
     const n = Number.parseInt(row.no.trim(), 10);
@@ -195,8 +224,12 @@ function pinsOf(draft: BlockDraft): BlockPins {
     const rows = draft.rows[side]
       .filter(isFilled)
       .map((row): BlockPin => {
+        // すき間・見出しの行はそのまま書き戻す (ピンの欄は持たない)
+        if (row.gap !== undefined) return { gap: row.gap };
+        if (row.caption !== undefined) return { caption: row.caption };
         const name = row.name.trim();
-        const pin: BlockPin = name ? { no: row.no.trim(), name } : { no: row.no.trim() };
+        // 番号が空のピンは番号を書かない (名前が鍵になる)
+        const pin: BlockPin = row.no.trim() ? (name ? { no: row.no.trim(), name } : { no: row.no.trim() }) : { name };
         const contacts = splitContacts(row.contacts ?? "");
         if (contacts.length) pin.contacts = contacts;
         if (row.connector) pin.connector = row.connector;
@@ -224,7 +257,16 @@ export function attrsFromDraft(draft: BlockDraft): Record<string, string> {
   if (draft.numbers === "inside") attrs[BLOCK_NUMBERS_ATTR] = "inside";
   if (draft.leads === "none") attrs[BLOCK_LEADS_ATTR] = "none";
   if (draft.caption === "inside") attrs[BLOCK_CAPTION_ATTR] = "inside";
+  if (draft.pinText !== undefined) attrs[BLOCK_PIN_TEXT_ATTR] = String(draft.pinText);
   return attrs;
+}
+
+/** 生の属性の block_pin_text が範囲内の数ならその値、そうでなければnull (読めないピン表のブロックでも文字の高さを残すため)。 */
+function rawPinText(attrs: Record<string, string>): number | null {
+  const raw = attrs[BLOCK_PIN_TEXT_ATTR]?.trim();
+  if (!raw) return null;
+  const v = Number(raw);
+  return Number.isFinite(v) && v >= BLOCK_PIN_TEXT_MIN_MM && v <= BLOCK_PIN_TEXT_MAX_MM ? v : null;
 }
 
 /** 配置済みブロックの属性を下書きへ読み戻す。読めない属性は空のピン表として開く。 */
@@ -235,6 +277,7 @@ export function draftFromAttrs(attrs: Record<string, string>): BlockDraft {
   let numbers: BlockNumbers = "outside";
   let leads: BlockLeads = "lead";
   let caption: BlockCaption = "above";
+  let pinText: number | null = null;
   try {
     const spec = parseBlockSpec(attrs);
     pins = spec.pins;
@@ -243,6 +286,7 @@ export function draftFromAttrs(attrs: Record<string, string>): BlockDraft {
     numbers = spec.numbers;
     leads = spec.leads;
     caption = spec.caption;
+    pinText = spec.pinText;
   } catch {
     // 読めない属性は空のピン表。間隔と番号の位置は、値が正しければ生の属性から残す
     return {
@@ -252,6 +296,7 @@ export function draftFromAttrs(attrs: Record<string, string>): BlockDraft {
       numbers: attrs[BLOCK_NUMBERS_ATTR] === "inside" ? "inside" : "outside",
       ...(attrs[BLOCK_LEADS_ATTR] === "none" ? { leads: "none" as const } : {}),
       ...(attrs[BLOCK_CAPTION_ATTR] === "inside" ? { caption: "inside" as const } : {}),
+      ...(rawPinText(attrs) !== null ? { pinText: rawPinText(attrs)! } : {}),
     };
   }
   const rows = emptyRows();
@@ -259,6 +304,8 @@ export function draftFromAttrs(attrs: Record<string, string>): BlockDraft {
     rows[side] = (pins[side] ?? []).map((p) => ({
       no: p.no ?? "",
       name: p.name ?? "",
+      ...(p.gap !== undefined ? { gap: p.gap } : {}),
+      ...(p.caption !== undefined ? { caption: p.caption } : {}),
       ...(p.contacts?.length ? { contacts: p.contacts.join(", ") } : {}),
       ...(p.connector ? { connector: p.connector } : {}),
       ...(p.connector_ref ? { connectorRef: p.connector_ref } : {}),
@@ -272,6 +319,7 @@ export function draftFromAttrs(attrs: Record<string, string>): BlockDraft {
     numbers,
     ...(leads === "none" ? { leads } : {}),
     ...(caption === "inside" ? { caption } : {}),
+    ...(pinText !== null ? { pinText } : {}),
   };
 }
 
@@ -285,6 +333,7 @@ export function draftSize(draft: BlockDraft): BlockSize {
     draft.size ? { ...draft.size } : null,
     draft.pitch,
     draft.numbers,
+    draft.pinText ?? null,
   );
   return { w, h };
 }
@@ -313,7 +362,17 @@ export function draftIssues(draft: BlockDraft): BlockIssue[] {
   for (const side of BLOCK_SIDES) {
     draft.rows[side].forEach((row, index) => {
       if (!isFilled(row)) return;
-      const no = row.no.trim();
+      // すき間・見出しの行は、ピンの決まりの外 (行数・文字だけ確かめる)
+      if (row.gap !== undefined) {
+        if (!Number.isInteger(row.gap) || row.gap < 1 || row.gap > BLOCK_GAP_MAX) issues.push({ code: "gapRange", side, index });
+        return;
+      }
+      if (row.caption !== undefined) {
+        if (row.caption.trim() === "") issues.push({ code: "captionBlank", side, index });
+        return;
+      }
+      // 番号が空ならピン名が鍵 (番号なしのピン)。どちらも空なら指摘する
+      const no = rowKey(row);
       if (!no) {
         issues.push({ code: "emptyNo", side, index });
         return;
@@ -322,7 +381,14 @@ export function draftIssues(draft: BlockDraft): BlockIssue[] {
       const first = seen.get(no);
       if (!first) {
         seen.set(no, { side: sideNo, row, paired: false });
-      } else if (first.paired || Math.floor(first.side / 2) !== Math.floor(sideNo / 2) || first.side === sideNo) {
+      } else if (
+        row.no.trim() === "" ||
+        first.row.no.trim() === "" ||
+        first.paired ||
+        Math.floor(first.side / 2) !== Math.floor(sideNo / 2) ||
+        first.side === sideNo
+      ) {
+        // 番号の無いピンは貫通できないので、名前が同じなら重複
         issues.push({ code: "duplicate", no });
       } else {
         first.paired = true;
@@ -355,19 +421,21 @@ export function draftIssues(draft: BlockDraft): BlockIssue[] {
   }
   if (draft.pitch === "fine") {
     for (const row of allRows(draft).filter(isFilled)) {
-      if (row.connector) issues.push({ code: "connectorOnFine", no: row.no.trim() });
+      if (row.connector) issues.push({ code: "connectorOnFine", no: rowKey(row) });
     }
   }
   if (draft.numbers === "inside") {
     for (const row of allRows(draft).filter(isFilled)) {
-      if (row.connector) issues.push({ code: "connectorOnInside", no: row.no.trim() });
+      if (row.connector) issues.push({ code: "connectorOnInside", no: rowKey(row) });
     }
   }
-  const count = allRows(draft).filter(isFilled).length;
+  const count = allRows(draft).filter((r) => isFilled(r) && !isSpecialRow(r)).length;
   if (count > BLOCK_PIN_MAX) issues.push({ code: "tooMany", count, max: BLOCK_PIN_MAX });
+  const rowCount = BLOCK_SIDES.reduce((n, side) => n + sideRows(pins[side] ?? []), 0);
+  if (rowCount > BLOCK_ROW_MAX) issues.push({ code: "tooManyRows", count: rowCount, max: BLOCK_ROW_MAX });
   if (draft.size) {
-    const rows = Math.max(pins.left?.length ?? 0, pins.right?.length ?? 0);
-    const cols = Math.max(pins.top?.length ?? 0, pins.bottom?.length ?? 0);
+    const rows = Math.max(sideRows(pins.left ?? []), sideRows(pins.right ?? []));
+    const cols = Math.max(sideRows(pins.top ?? []), sideRows(pins.bottom ?? []));
     const w = sideNeed(cols, draft.pitch);
     const h = sideNeed(rows, draft.pitch);
     if (draft.size.w < w - 1e-9 || draft.size.h < h - 1e-9) {
@@ -426,7 +494,8 @@ export function wiredPinNumbers(sheet: Sheet, inst: SymbolInstance, def: SymbolD
 export function droppedWiredPins(wired: readonly WiredPin[], draft: BlockDraft): string[] {
   const dropped: string[] = [];
   for (const { side, no } of wired) {
-    const kept = draft.rows[side].some((row) => isFilled(row) && row.no.trim() === no);
+    // 番号の無いピンは名前が鍵 (rowKey)。すき間・見出しの行は鍵を持たない
+    const kept = draft.rows[side].some((row) => isFilled(row) && !isSpecialRow(row) && rowKey(row) === no);
     if (!kept && !dropped.includes(no)) dropped.push(no);
   }
   return dropped;

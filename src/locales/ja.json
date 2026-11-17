@@ -689,7 +689,7 @@
     "previewUnavailable": "プレビューはピン表の指摘を直すと出ます",
     "issue": {
       "duplicate": "ピン番号 {no} が重複しています",
-      "emptyNo": "{side}の{row}行目にピン番号がありません",
+      "emptyNo": "{side}の{row}行目にピン番号もピン名もありません",
       "tooMany": "ピンが多すぎます: {count}本 (最大{max}本)",
       "sizeTooSmall": "外形がピンに対して小さすぎます (最低 {w}×{h}mm)",
       "contactsTooFew": "{side}の{row}行目は接点が1つです。ポートには2つ以上要ります",
@@ -700,7 +700,10 @@
       "connectorOnFine": "2.5mm間隔のブロックではコネクタの絵を使えません (ピン {no})",
       "connectorOnInside": "番号を内側に描くブロックではコネクタの絵を使えません (ピン {no})",
       "feedthroughName": "貫通ピン {no} は左右 (上下) で同じ名前にしてください",
-      "feedthroughPicture": "貫通ピン {no} には接点・コネクタの絵を付けられません"
+      "feedthroughPicture": "貫通ピン {no} には接点・コネクタの絵を付けられません",
+      "gapRange": "{side}の{row}行目の空き行は1〜20行にしてください",
+      "captionBlank": "{side}の{row}行目の見出しが空です",
+      "tooManyRows": "行が多すぎます: {count}行 (最大{max}行。ピン・見出し・空き行の合計)"
     },
     "wiredWarning": "ピン {pins} は配線済みです。番号を変える・削除すると接続が外れます",
     "placeHint": "「配置」でカーソルにゴーストが付きます (Rで回転・Escで解除)",
@@ -715,7 +718,10 @@
     "portCount": "ポート {count}",
     "broken": "読み取れません",
     "updatedLog": "{reference}: ピン表を更新しました (ピン{pins}本)",
-    "droppedLog": "ピン {pins} が無くなりました: その配線の接続は外れています"
+    "droppedLog": "ピン {pins} が無くなりました: その配線の接続は外れています",
+    "gapRow": "空き行",
+    "gapRowUnit": "行",
+    "captionRow": "見出し"
   },
   "symbolPicker": {
     "title": "挿入する部品を選択",
