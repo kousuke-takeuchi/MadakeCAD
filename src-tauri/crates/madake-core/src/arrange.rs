@@ -799,6 +799,12 @@ fn same_shift(a0: &Bounds, a1: &Bounds, b0: &Bounds, b1: &Bounds) -> bool {
     ((a1.0 - a0.0) - (b1.0 - b0.0)).abs() < EPS && ((a1.1 - a0.1) - (b1.1 - b0.1)).abs() < EPS
 }
 
+/// 外接矩形が重なるか、0.5mm 以内に近いか (ピンは外接矩形の辺にあるので、接しただけでもピンどうしが触れる)。
+fn touch(a: &Bounds, b: &Bounds) -> bool {
+    const M: f64 = 0.5;
+    a.0 < b.2 + M && b.0 < a.2 + M && a.1 < b.3 + M && b.1 < a.3 + M
+}
+
 fn creates_overlap(cur: &[Bounds], ids: &[usize], newb: &[Bounds]) -> bool {
     for (p, &i) in ids.iter().enumerate() {
         for j in 0..cur.len() {
@@ -807,19 +813,19 @@ fn creates_overlap(cur: &[Bounds], ids: &[usize], newb: &[Bounds]) -> bool {
             }
             match ids.iter().position(|&x| x == j) {
                 Some(q) => {
-                    if j > i && overlap(&newb[p], &newb[q]) && !overlap(&cur[i], &cur[j]) {
+                    if j > i && touch(&newb[p], &newb[q]) && !touch(&cur[i], &cur[j]) {
                         return true;
                     }
                     // もともと重なっている組は、互いの位置を変えない (ピンどうし・ピンと印が触れてしまうため)
-                    if overlap(&cur[i], &cur[j]) && !same_shift(&cur[i], &newb[p], &cur[j], &newb[q]) {
+                    if touch(&cur[i], &cur[j]) && !same_shift(&cur[i], &newb[p], &cur[j], &newb[q]) {
                         return true;
                     }
                 }
                 None => {
-                    if overlap(&newb[p], &cur[j]) && !overlap(&cur[i], &cur[j]) {
+                    if touch(&newb[p], &cur[j]) && !touch(&cur[i], &cur[j]) {
                         return true;
                     }
-                    if overlap(&cur[i], &cur[j]) {
+                    if touch(&cur[i], &cur[j]) {
                         return true;
                     }
                 }
@@ -974,17 +980,27 @@ struct FallbackName {
     template: Option<NetLabel>,
     /// 新しく作った `ARR_<n>` の名前か。
     fresh: bool,
-    /// 短い線を出さない端子の元の位置 (消すネット名シンボルのピン。新しいラベルが同じ名前を持つ)。
+    /// 短い線を出さない端子の元の位置 (残す配線でつながる、電源マークのピンと相手のピン)。
     skip: Vec<Point>,
+    /// そのまま残す配線 (電源マークのピンと、同じ単位のピンを直接結ぶ線)。単位と一緒に動かす。
+    keep: Vec<EntityId>,
 }
 
-/// ラベルでつなぐときの名前と、消すラベルのid。
-/// かたまりのラベルの名前 (ラベルは消す)、なければネット名シンボルのピンの名前、なければ未使用の `ARR_<n>`。
+/// ラベルでつなぐときの名前と、消すラベル・残す配線。
+///
+/// 名前は、かたまりのラベルの名前 (ラベルは新しいラベルに置き換えるので消す)、なければネット全体のラベル名
+/// (`net_labels`。同じネットの別のかたまりにあるラベル。同じ名前のラベルを足してもつながりは変わらない)、
+/// なければ電源マーク (ネット名シンボル) の名前、なければ未使用の `ARR_<n>`。
+/// 電源マークは消さない: マークのピンと同じ単位のピンを直接結ぶ線はそのまま残し、両方に短い線を出さない。
 /// 他から指されているラベル (`pointed`) と、ピンの端子が無いかたまりのラベル (代わりのラベルが作られない) は消さない。
+#[allow(clippy::too_many_arguments)]
 fn fallback_name(
     sheet: &Sheet,
     idx: &DefIndex,
     pins: &[PinPt],
+    owners: &Owners,
+    net: &str,
+    net_labels: &BTreeMap<String, String>,
     wires: &[EntityId],
     terms: &[(Point, Option<Dir>)],
     pointed: &BTreeSet<EntityId>,
@@ -1001,38 +1017,65 @@ fn fallback_name(
             _ => None,
         })
         .collect();
-    // 印でないピンの端子があれば、同じ名前のラベルと印は新しいラベルに置き換える (消す)
-    let has_pin = terms.iter().any(|t| t.1.is_some() && !marks.iter().any(|m| near(m.0, t.0)));
+    let is_mark = |q: Point| marks.iter().any(|m| near(m.0, q));
+    // 電源マークのピンと同じ単位のピンを直接結ぶ線は残す
+    let mut keep: Vec<EntityId> = Vec::new();
+    let mut skip: Vec<Point> = Vec::new();
+    for id in wires {
+        let Some(Entity::Wire(w)) = sheet.entities.get(id) else { continue };
+        let (Some(a), Some(b)) = (w.points.first().copied(), w.points.last().copied()) else { continue };
+        let pin_at = |q: Point| at.iter().any(|t| near(*t, q));
+        if !(pin_at(a) && pin_at(b)) || is_mark(a) == is_mark(b) {
+            continue;
+        }
+        if owners.of(a).is_some() && owners.of(a) == owners.of(b) {
+            keep.push(*id);
+            skip.push(a);
+            skip.push(b);
+        }
+    }
+    let has_pin = terms.iter().any(|t| t.1.is_some() && !is_mark(t.0));
     let (name, template) = if let Some(first) = labels.first() {
         let template = match sheet.entities.get(&labels[0].0) {
             Some(Entity::NetLabel(l)) => Some(l.clone()),
             _ => None,
         };
         (Some(first.1.clone()), template)
+    } else if let Some(l) = net_labels.get(net) {
+        (Some(l.clone()), None)
     } else {
         (marks.iter().map(|m| m.2.clone()).min(), None)
     };
     if let Some(name) = name {
-        let mut delete: Vec<EntityId> = Vec::new();
-        let mut skip: Vec<Point> = Vec::new();
-        if has_pin {
-            delete.extend(labels.iter().map(|l| l.0).filter(|id| !pointed.contains(id)));
-            for m in marks.iter().filter(|m| m.2 == name && !pointed.contains(&m.1)) {
-                delete.push(m.1);
-                skip.push(m.0);
-            }
-        }
-        return FallbackName { name, delete, template, fresh: false, skip };
+        let delete: Vec<EntityId> =
+            if has_pin { labels.iter().map(|l| l.0).filter(|id| !pointed.contains(id)).collect() } else { Vec::new() };
+        return FallbackName { name, delete, template, fresh: false, skip, keep };
     }
     let mut n = 1;
     loop {
         let name = format!("ARR_{n}");
         if !taken.contains(&name) {
             taken.insert(name.clone());
-            return FallbackName { name, delete: vec![], template: None, fresh: true, skip: vec![] };
+            return FallbackName { name, delete: vec![], template: None, fresh: true, skip, keep };
         }
         n += 1;
     }
+}
+
+/// 残す配線を、端の持ち主の単位の移動量で動かした写し (新しいid)。
+fn kept_links(sheet: &Sheet, owners: &Owners, lay: &Layout, keep: &[EntityId]) -> Vec<Entity> {
+    keep.iter()
+        .filter_map(|id| match sheet.entities.get(id) {
+            Some(Entity::Wire(w)) => {
+                let o = owners.of(w.points[0])?;
+                let mut c = w.clone();
+                c.id = uuid::Uuid::new_v4();
+                c.points.iter_mut().for_each(|p| *p = p.translated(lay.dx[o], lay.dy[o]));
+                Some(Entity::Wire(c))
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 /// 位置に触れる古い配線 (なければかたまりの先頭) の写し。長さは持たせない。
@@ -1070,6 +1113,8 @@ struct Stub {
     wire: EntityId,
     label: EntityId,
     name: String,
+    /// 検算でこの線自身の接触を調べるか (残した電源マークの線は調べず、同じ名前の仲間としてだけ数える)。
+    check: bool,
 }
 
 /// 点と線分の距離。
@@ -1082,16 +1127,30 @@ fn seg_dist(p: Point, a: Point, b: Point) -> f64 {
 
 /// 短い線 (点列) が、他の線・点 (ピン・ラベル・ジャンクション) に触れるか。始点 (自分のピン) は数えない。
 fn stub_hits(pts: &[Point], lines: &[Vec<Point>], spots: &[Point]) -> bool {
-    path_hits(pts, lines, spots, &[pts[0]])
+    path_hits_with(pts, lines, spots, &[pts[0]], 0.3, 1.0)
+}
+
+/// 電気的に触れるか (ネットリストと同じ細かい許容差で)。ゆとりを持って避けられないときの最後の選び方に使う。
+fn stub_touches(pts: &[Point], lines: &[Vec<Point>], spots: &[Point]) -> bool {
+    path_hits_with(pts, lines, spots, &[pts[0]], 0.02, 0.02)
 }
 
 /// 点列が、他の線・点に触れるか。`exempt`の点 (自分のピン・自分の他の線との継ぎ目) で触れるのは数えない。
 fn path_hits(pts: &[Point], lines: &[Vec<Point>], spots: &[Point], exempt: &[Point]) -> bool {
-    const TOUCH: f64 = 0.3;
+    path_hits_with(pts, lines, spots, exempt, 0.3, 1.0)
+}
+
+/// [`path_hits`] の許容差つき: 線との距離 `touch`、点 (ピン・ラベル・ジャンクション) との距離 `spot_clear`。
+fn path_hits_with(pts: &[Point], lines: &[Vec<Point>], spots: &[Point], exempt: &[Point], touch: f64, spot_clear: f64) -> bool {
+    #[allow(non_snake_case)]
+    let TOUCH: f64 = touch;
     let free = |q: Point| !exempt.iter().any(|e| near(*e, q));
     let segs: Vec<(Point, Point)> = pts.windows(2).map(|w| (w[0], w[1])).collect();
     let on_me = |q: Point| segs.iter().any(|&(a, b)| seg_dist(q, a, b) < TOUCH);
-    if spots.iter().any(|&q| free(q) && on_me(q)) {
+    // ピン・ラベル・ジャンクションからは離す (向かい合うピンの短い線どうしが重ならないように)
+    #[allow(non_snake_case)]
+    let SPOT_CLEAR: f64 = spot_clear;
+    if spots.iter().any(|&q| free(q) && segs.iter().any(|&(a, b)| seg_dist(q, a, b) < SPOT_CLEAR)) {
         return true;
     }
     for line in lines {
@@ -1235,7 +1294,25 @@ fn stub_entities(grid: &RouteGrid, fb: &Fallback, lines: &mut Vec<Vec<Point>>, s
                 cands.push(simplify(l.points));
             }
         }
-        let pts = cands.iter().find(|c| !stub_hits(c, lines, spots)).cloned().unwrap_or_else(|| cands[0].clone());
+        // ピンの向きに出せないときは、ピンの向きへ少し出てから横へ曲げる (すぐ前に別の線があるときのため)
+        for k in [1.0, 2.0] {
+            for (px, py) in [(sy, sx), (-sy, -sx)] {
+                let a = pos.translated(sx * STUB_MM * 0.5, sy * STUB_MM * 0.5);
+                cands.push(vec![*pos, a, a.translated(px * STUB_MM * k, py * STUB_MM * k)]);
+            }
+        }
+        // それも触れるなら、ピンからすぐ横へ出す
+        for k in [1.0, 2.0] {
+            for (px, py) in [(sy, sx), (-sy, -sx)] {
+                cands.push(vec![*pos, pos.translated(px * STUB_MM * k, py * STUB_MM * k)]);
+            }
+        }
+        let pts = cands
+            .iter()
+            .find(|c| !stub_hits(c, lines, spots))
+            .or_else(|| cands.iter().find(|c| !stub_touches(c, lines, spots)))
+            .cloned()
+            .unwrap_or_else(|| cands[0].clone());
         let end = *pts.last().expect("2点以上");
         lines.push(pts.clone());
         spots.push(end);
@@ -1243,7 +1320,7 @@ fn stub_entities(grid: &RouteGrid, fb: &Fallback, lines: &mut Vec<Vec<Point>>, s
         let (rotation, label_attrs) = fb.template.as_ref().map_or((0, Default::default()), |t| (t.rotation, t.attrs.clone()));
         out.push(Entity::Wire(Wire { id: wire, points: pts, ..attrs.clone() }));
         out.push(Entity::NetLabel(NetLabel { id: label, at: end, name: fb.name.clone(), rotation, attrs: label_attrs }));
-        stubs.push(Stub { wire, label, name: fb.name.clone() });
+        stubs.push(Stub { wire, label, name: fb.name.clone(), check: true });
     }
     (out, stubs)
 }
@@ -1309,7 +1386,7 @@ fn name_key(sheet: &Sheet, defs: &[SymbolDef], fresh: &BTreeSet<String>) -> Vec<
 /// ラベルでつなぐ短い線が、自分のピンと、同じ名前の短い線・ラベルのほかに何にも触れていないか。
 fn check_stubs(after: &Sheet, defs: &[SymbolDef], stubs: &[Stub]) -> Result<(), String> {
     let pp = pin_points(after, defs);
-    for s in stubs {
+    for s in stubs.iter().filter(|s| s.check) {
         let Some(Entity::Wire(w)) = after.entities.get(&s.wire) else { continue };
         let Some(start) = w.points.first().copied() else { continue };
         let own: BTreeSet<EntityId> = stubs.iter().filter(|o| o.name == s.name).flat_map(|o| [o.wire, o.label]).collect();
@@ -1493,6 +1570,9 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
     let fates = classify_kept(&c.kept, &owners)?;
     let unit_terms: Vec<Vec<usize>> = c.units.iter().map(|u| term_units(&u.net, &u.terms, &owners)).collect::<Result<_, _>>()?;
     let mut taken = taken_set(sheet, defs, ctx);
+    // ネットごとのラベル名 (同じネットの別のかたまりのラベルも含む)
+    let net_labels: BTreeMap<String, String> =
+        extract_netlist(sheet, defs).into_iter().filter_map(|n| n.label.clone().map(|l| (n.name.clone(), l))).collect();
     // 他から指されているid (消さない)
     let pointed: BTreeSet<EntityId> = sheet.entities.values().flat_map(|e| e.refs()).chain(ctx.protected.iter().copied()).collect();
     // この計画で新しく作った `ARR_<n>` の名前 (検算で数えない)
@@ -1516,7 +1596,7 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
             Fate::Rigid(None) => {}
             Fate::Labels => {
                 dropped.extend(k.wires.iter().chain(&k.junctions).copied());
-                let fb = fallback_name(sheet, &idx, &pins, &k.wires, &k.terms, &pointed, &mut taken);
+                let fb = fallback_name(sheet, &idx, &pins, &owners, &k.net, &net_labels, &k.wires, &k.terms, &pointed, &mut taken);
                 deleted.extend(fb.delete.iter().copied());
                 if fb.fresh {
                     fresh.insert(fb.name.clone());
@@ -1614,6 +1694,14 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
             .filter(|(t, _)| !name.skip.iter().any(|q| near(*q, t.0)))
             .map(|(t, &o)| (t.0.translated(lay.dx[o], lay.dy[o]), t.1, old_wire_at(sheet, &k.wires, t.0)))
             .collect();
+        for e in kept_links(sheet, &owners, &lay, &name.keep) {
+            if let Entity::Wire(w) = &e {
+                fixed_lines.push(w.points.clone());
+                stub_lines.push(w.points.clone());
+                stubs.push(Stub { wire: w.id, label: w.id, name: name.name.clone(), check: false });
+            }
+            add.push(e);
+        }
         let fb = Fallback { net: k.net.clone(), name: name.name, terms, template: name.template };
         let (es, ss) = stub_entities(&grid, &fb, &mut stub_lines, &mut stub_spots);
         for e in es {
@@ -1662,13 +1750,26 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
                         continue;
                     }
                     let old_terms: Vec<(Point, Option<Dir>)> = trip.iter().map(|t| (t.0, t.2)).collect();
-                    let name = fallback_name(sheet, &idx, &pins, &u.wires, &old_terms, &pointed, &mut taken);
+                    let name = fallback_name(sheet, &idx, &pins, &owners, &u.net, &net_labels, &u.wires, &old_terms, &pointed, &mut taken);
                     let mut attrs = u.template.clone();
                     attrs.length_m = None;
                     attrs.length_source = Default::default();
                     let terms = trip.iter().filter(|t| !name.skip.iter().any(|q| near(*q, t.0))).map(|t| (t.1, t.2, attrs.clone())).collect();
                     let fb = Fallback { net: u.net.clone(), name: name.name.clone(), terms, template: name.template.clone() };
-                    stub_parts.insert(i, stub_entities(&grid, &fb, &mut stub_lines, &mut stub_spots));
+                    let links = kept_links(sheet, &owners, &lay, &name.keep);
+                    for e in &links {
+                        if let Entity::Wire(w) = e {
+                            stub_lines.push(w.points.clone());
+                        }
+                    }
+                    let (mut es, mut ss) = stub_entities(&grid, &fb, &mut stub_lines, &mut stub_spots);
+                    for e in &links {
+                        if let Entity::Wire(w) = e {
+                            ss.push(Stub { wire: w.id, label: w.id, name: fb.name.clone(), check: false });
+                        }
+                    }
+                    es.extend(links);
+                    stub_parts.insert(i, (es, ss));
                     names.insert(i, name);
                 }
             }
@@ -2566,7 +2667,7 @@ mod tests {
         place(&mut sh, "box2", (50.0, 50.0), "A1");
         let w = old_wire(&mut sh, &[(40.0, 50.0), (35.0, 50.0)]);
         let l = label(&mut sh, (35.0, 50.0), "ARR_1");
-        let stubs = [Stub { wire: w, label: l, name: "ARR_1".into() }];
+        let stubs = [Stub { wire: w, label: l, name: "ARR_1".into(), check: true }];
         assert!(check_stubs(&sh, &defs(), &stubs).is_ok());
         old_wire(&mut sh, &[(35.0, 45.0), (35.0, 55.0)]);
         let err = check_stubs(&sh, &defs(), &stubs).expect_err("must refuse");
@@ -2755,8 +2856,8 @@ mod tests {
         assert_eq!(pin_partition(&sh, &defs()), pin_partition(&after, &defs()));
     }
 
-    /// A cluster that is joined by labels and holds a ground mark takes the mark's net name.
-    /// ラベルでつなぐかたまりに接地の印があれば、その印のネット名を使う。
+    /// A cluster that is joined by labels and holds a ground mark takes the mark's net name, and the mark stays on the drawing.
+    /// ラベルでつなぐかたまりに接地の印があれば、その印のネット名を使い、印は図面に残る。
     #[test]
     fn the_fallback_uses_a_net_name_symbol() {
         let (mut sh, _, _) = walled_sheet();
@@ -2768,7 +2869,8 @@ mod tests {
         assert_eq!(kept_partition(&sh, &after), pin_partition(&after, &defs()));
         let marks = after.entities.values().filter(|e| matches!(e, Entity::Symbol(s) if s.symbol_id == "gnd")).count();
         let labels = after.entities.values().filter(|e| matches!(e, Entity::NetLabel(l) if l.name == "GND")).count();
-        assert_eq!((marks, labels), (0, 2), "the ground mark is replaced by GND labels");
+        assert_eq!(marks, 1, "the ground mark is kept");
+        assert!(labels >= 2, "the pins are joined by GND labels");
     }
 
     /// An alignment move that would make two units overlap where they did not before is skipped.
