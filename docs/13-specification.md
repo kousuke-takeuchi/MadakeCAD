@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3606 specification clauses** across 6 areas.
+**3611 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -99,6 +99,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The stub check names a junction on the stub as "ジャンクション". <sub>`the_stub_check_names_a_touched_junction`</sub>
 - When a label leaves the pin it sat on and lands on another pin, the message names the separated and the new contact. <sub>`the_self_check_names_separated_and_new_pin_contacts`</sub>
 - Nets that can be routed are still routed when another cluster fails: the failed one gets its label stubs and the rest is routed around them. <sub>`routing_goes_on_around_the_stubs_of_failed_clusters`</sub>
+- A stretch that would leave a branch wire hanging off the moved segment (a T-joint coming loose) is refused, so the cluster falls back to labels. <sub>`stretching_is_refused_when_a_t_joint_would_come_loose`</sub>
+- A stretch that would leave a pin in the middle of a segment off the wire is refused. <sub>`stretching_is_refused_when_a_mid_segment_terminal_would_come_off`</sub>
+- A stretch that would leave a junction dot off the moved segment is refused. <sub>`stretching_is_refused_when_a_junction_would_come_off`</sub>
+- A branch that starts at a bend, and the junction there, follow the bend when it moves, so the cluster stays connected. <sub>`a_branch_at_a_bend_follows_the_bend`</sub>
+- An unroutable cluster whose stretched wire would leave a moved mid-wire pin behind is joined by labels, and the arrange is not refused. <sub>`a_stretch_that_would_drop_a_mid_wire_pin_falls_back_to_labels`</sub>
 
 ### block
 

@@ -1202,28 +1202,71 @@ fn stretch_wires(
 ) -> Option<(Vec<Entity>, Vec<Vec<Point>>)> {
     let map = |p: Point| Point::new(rnd(lay.wx.map(p.x)), rnd(lay.wy.map(p.y)));
     let to_term = |old: Point| trip.iter().find(|t| near(t.0, old)).map(|t| t.1);
-    let mut out = Vec::new();
-    let mut paths: Vec<Vec<Point>> = Vec::new();
+    let mut olds: Vec<&Wire> = Vec::new();
     for id in wires {
         let Some(Entity::Wire(w)) = sheet.entities.get(id) else { return None };
         if w.points.len() < 2 {
             return None;
         }
+        olds.push(w);
+    }
+    // 端を新しい位置へ合わせ、隣の点を同じ向きにずらして直角を保つ
+    let set_end = |pts: &mut Vec<Point>, w: &Wire, end: usize, next: usize, target: Point| {
+        let horizontal = (w.points[end].y - w.points[next].y).abs() < 1e-6;
+        let vertical = (w.points[end].x - w.points[next].x).abs() < 1e-6;
+        pts[end] = target;
+        if pts.len() > 2 {
+            if horizontal {
+                pts[next].y = target.y;
+            } else if vertical {
+                pts[next].x = target.x;
+            }
+        }
+    };
+    // 1回目: 写像と、端子にあった端
+    let mut raw: Vec<Vec<Point>> = Vec::new();
+    for w in &olds {
         let mut pts: Vec<Point> = w.points.iter().map(|p| map(*p)).collect();
         let n = pts.len();
         for (end, next) in [(0usize, 1usize), (n - 1, n - 2)] {
-            let Some(target) = to_term(w.points[end]) else { continue };
-            let horizontal = (w.points[end].y - w.points[next].y).abs() < 1e-6;
-            let vertical = (w.points[end].x - w.points[next].x).abs() < 1e-6;
-            pts[end] = target;
-            if n > 2 {
-                if horizontal {
-                    pts[next].y = target.y;
-                } else if vertical {
-                    pts[next].x = target.x;
+            if let Some(target) = to_term(w.points[end]) {
+                set_end(&mut pts, w, end, next, target);
+            }
+        }
+        raw.push(pts);
+    }
+    // 2回目: 端子でない端が他の線の頂点 (曲がり角など) にあったなら、その頂点の新しい位置へ合わせる
+    let first = raw.clone();
+    for (i, w) in olds.iter().enumerate() {
+        let n = w.points.len();
+        for (end, next) in [(0usize, 1usize), (n - 1, n - 2)] {
+            if to_term(w.points[end]).is_some() {
+                continue;
+            }
+            let target = olds.iter().enumerate().filter(|(j, _)| *j != i).find_map(|(j, o)| {
+                o.points.iter().position(|q| near(*q, w.points[end])).map(|k| first[j][k])
+            });
+            if let Some(target) = target {
+                if !near(target, raw[i][end]) {
+                    set_end(&mut raw[i], w, end, next, target);
                 }
             }
         }
+    }
+    // ジャンクションの新しい位置: 端子ならその新しい位置、どれかの線の頂点ならその頂点の新しい位置、それ以外は写像
+    let mut dots: Vec<(Point, Point)> = Vec::new();
+    for id in junctions {
+        let Some(Entity::Junction(j)) = sheet.entities.get(id) else { return None };
+        let at = to_term(j.at)
+            .or_else(|| olds.iter().zip(&raw).find_map(|(o, r)| o.points.iter().position(|q| near(*q, j.at)).map(|k| r[k])))
+            .unwrap_or_else(|| map(j.at));
+        dots.push((j.at, at));
+    }
+    let mut out = Vec::new();
+    let mut paths: Vec<Vec<Point>> = Vec::new();
+    let mut news: Vec<Wire> = Vec::new();
+    for (w, pts) in olds.iter().zip(raw) {
+        let mut pts = pts;
         // 2点の線が斜めになったら、中ほどで折る
         if pts.len() == 2 && (pts[0].x - pts[1].x).abs() > 1e-6 && (pts[0].y - pts[1].y).abs() > 1e-6 {
             let (a, b) = (pts[0], pts[1]);
@@ -1244,8 +1287,24 @@ fn stretch_wires(
         if pts.len() < 2 {
             return None;
         }
-        out.push(Entity::Wire(Wire { id: uuid::Uuid::new_v4(), points: pts.clone(), ..w.clone() }));
+        let nw = Wire { id: uuid::Uuid::new_v4(), points: pts.clone(), ..(*w).clone() };
+        out.push(Entity::Wire(nw.clone()));
+        news.push(nw);
         paths.push(pts);
+    }
+    // かたまり自身のつながりを確かめる: 古い線 j の上にあった点 (端子・他の線の端・ジャンクション) は、
+    // 新しい位置でも新しい線 j の上になければならない (ネットリストと同じ許容差)。外れるなら None (ラベルでつなぐ)
+    let stays_on = |old: Point, new: Point, skip: Option<usize>| -> bool {
+        olds.iter().zip(&news).enumerate().all(|(j, (o, n))| Some(j) == skip || !on_wire(o, &old) || on_wire(n, &new))
+    };
+    if !trip.iter().all(|t| stays_on(t.0, t.1, None)) || !dots.iter().all(|d| stays_on(d.0, d.1, None)) {
+        return None;
+    }
+    for (i, (o, p)) in olds.iter().zip(&paths).enumerate() {
+        let ends = [(o.points[0], p[0]), (*o.points.last().expect("2点以上"), *p.last().expect("2点以上"))];
+        if !ends.iter().all(|e| stays_on(e.0, e.1, Some(i))) {
+            return None;
+        }
     }
     // 自分の線どうしの継ぎ目・端子は触れてよい
     let mut exempt: Vec<Point> = trip.iter().map(|t| t.1).collect();
@@ -1253,11 +1312,9 @@ fn stretch_wires(
         exempt.push(p[0]);
         exempt.push(*p.last().unwrap());
     }
-    for id in junctions {
-        let Some(Entity::Junction(j)) = sheet.entities.get(id) else { return None };
-        let at = map(j.at);
-        exempt.push(at);
-        out.push(Entity::Junction(crate::model::Junction { id: uuid::Uuid::new_v4(), at }));
+    for (_, at) in &dots {
+        exempt.push(*at);
+        out.push(Entity::Junction(crate::model::Junction { id: uuid::Uuid::new_v4(), at: *at }));
     }
     if paths.iter().any(|p| path_hits(p, lines, spots, &exempt)) {
         return None;
@@ -2005,6 +2062,12 @@ mod tests {
             id,
             Entity::NetLabel(NetLabel { id, at: p(at.0, at.1), name: name.into(), rotation: 0, attrs: Default::default() }),
         );
+        id
+    }
+
+    fn junction(sheet: &mut Sheet, at: (f64, f64)) -> EntityId {
+        let id = Uuid::new_v4();
+        sheet.entities.insert(id, Entity::Junction(Junction { id, at: p(at.0, at.1) }));
         id
     }
 
@@ -3528,5 +3591,83 @@ mod tests {
         assert_eq!(plan.routed.len(), 1, "{:?}", plan.routed);
         let after = apply(&sh, &plan);
         assert_eq!(kept_partition(&sh, &after), pin_partition(&after, &defs()));
+    }
+
+    /// The bent wire of `bent_wire_sheet` with a branch wire going up from (x, 50) to (x, 30).
+    fn branched_sheet(x: f64) -> (Sheet, Vec<EntityId>) {
+        let (mut sh, mut ws) = bent_wire_sheet();
+        ws.push(old_wire(&mut sh, &[(x, 50.0), (x, 30.0)]));
+        (sh, ws)
+    }
+
+    /// A stretch that would leave a branch wire hanging off the moved segment (a T-joint coming loose) is refused, so the cluster falls back to labels.
+    /// 伸び縮みで、動いた線分から枝の線が外れる (T字のつなぎ目が離れる) なら断り、かたまりはラベルでつなぐ。
+    #[test]
+    fn stretching_is_refused_when_a_t_joint_would_come_loose() {
+        let (sh, ws) = branched_sheet(67.5);
+        let trip = [
+            (p(60.0, 50.0), p(60.0, 52.5), None),
+            (p(90.0, 80.0), p(90.0, 80.0), None),
+            (p(67.5, 30.0), p(67.5, 30.0), None),
+        ];
+        assert!(stretch_wires(&sh, &ws, &[], &identity_layout(), &trip, &[], &[], &[], &BTreeSet::new()).is_none());
+    }
+
+    /// A stretch that would leave a pin in the middle of a segment off the wire is refused.
+    /// 伸び縮みで、線分の途中にあるピンが線から外れるなら断る。
+    #[test]
+    fn stretching_is_refused_when_a_mid_segment_terminal_would_come_off() {
+        let (sh, ws) = bent_wire_sheet();
+        let trip = [
+            (p(60.0, 50.0), p(60.0, 50.0), None),
+            (p(90.0, 80.0), p(90.0, 80.0), None),
+            (p(82.5, 80.0), p(82.5, 82.5), None),
+        ];
+        assert!(stretch_wires(&sh, &ws, &[], &identity_layout(), &trip, &[], &[], &[], &BTreeSet::new()).is_none());
+    }
+
+    /// A stretch that would leave a junction dot off the moved segment is refused.
+    /// 伸び縮みで、ジャンクションが動いた線分から外れるなら断る。
+    #[test]
+    fn stretching_is_refused_when_a_junction_would_come_off() {
+        let (mut sh, ws) = bent_wire_sheet();
+        let j = junction(&mut sh, (67.5, 50.0));
+        let trip = [(p(60.0, 50.0), p(60.0, 52.5), None), (p(90.0, 80.0), p(90.0, 80.0), None)];
+        assert!(stretch_wires(&sh, &ws, &[j], &identity_layout(), &trip, &[], &[], &[], &BTreeSet::new()).is_none());
+    }
+
+    /// A branch that starts at a bend, and the junction there, follow the bend when it moves, so the cluster stays connected.
+    /// 曲がり角から出る枝の線とそこのジャンクションは、曲がり角が動くと一緒に動き、かたまりはつながったまま。
+    #[test]
+    fn a_branch_at_a_bend_follows_the_bend() {
+        let (mut sh, ws) = branched_sheet(75.0);
+        let j = junction(&mut sh, (75.0, 50.0));
+        let trip = [
+            (p(60.0, 50.0), p(60.0, 52.5), None),
+            (p(90.0, 80.0), p(90.0, 80.0), None),
+            (p(75.0, 30.0), p(75.0, 30.0), None),
+        ];
+        let (es, _) = stretch_wires(&sh, &ws, &[j], &identity_layout(), &trip, &[], &[], &[], &BTreeSet::new()).expect("stretch");
+        assert_eq!(
+            wire_points(&es),
+            vec![vec![(60.0, 52.5), (75.0, 52.5), (75.0, 80.0), (90.0, 80.0)], vec![(75.0, 52.5), (75.0, 30.0)]]
+        );
+        let dots: Vec<(f64, f64)> = es.iter().filter_map(|e| if let Entity::Junction(j) = e { Some((j.at.x, j.at.y)) } else { None }).collect();
+        assert_eq!(dots, vec![(75.0, 52.5)]);
+    }
+
+    /// An unroutable cluster whose stretched wire would leave a moved mid-wire pin behind is joined by labels, and the arrange is not refused.
+    /// 引けないかたまりで、伸び縮みさせると線の途中のピン (整列で動く部品) が外れるなら、ラベルでつなぎ、並べ直し全体は断らない。
+    #[test]
+    fn a_stretch_that_would_drop_a_mid_wire_pin_falls_back_to_labels() {
+        let (mut sh, ds) = slit_sheet();
+        // C1 のピンは線の途中 (120,50) にあり、C2 と行がそろって C1 が下へ動く
+        place(&mut sh, "cap", (120.0, 60.0), "C1");
+        place(&mut sh, "cap", (200.0, 57.5), "C2");
+        let plan = plan_arrange(&sh, &ds, &ArrangeOptions::default(), &ctx()).expect("plan");
+        assert_eq!(plan.labelled.len(), 1, "{:?}", plan.labelled);
+        assert!(plan.kept_shape.is_empty(), "{:?}", plan.kept_shape);
+        let after = apply(&sh, &plan);
+        assert_eq!(pin_partition(&sh, &ds), pin_partition(&after, &ds));
     }
 }

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3606仕様項目**。
+全6領域・**3611仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -99,6 +99,11 @@
 - 短い線の上にジャンクションがあれば、検査は「ジャンクション」と書く。 <sub>`the_stub_check_names_a_touched_junction`</sub>
 - ピンの上のラベルが離れて別のピンの上に乗ると、断り文は離れた組と新しく重なった組を書く。 <sub>`the_self_check_names_separated_and_new_pin_contacts`</sub>
 - 引けないかたまりがあっても、引けるネットは引き直され、引けなかったかたまりは短い線とラベルでつながる。 <sub>`routing_goes_on_around_the_stubs_of_failed_clusters`</sub>
+- 伸び縮みで、動いた線分から枝の線が外れる (T字のつなぎ目が離れる) なら断り、かたまりはラベルでつなぐ。 <sub>`stretching_is_refused_when_a_t_joint_would_come_loose`</sub>
+- 伸び縮みで、線分の途中にあるピンが線から外れるなら断る。 <sub>`stretching_is_refused_when_a_mid_segment_terminal_would_come_off`</sub>
+- 伸び縮みで、ジャンクションが動いた線分から外れるなら断る。 <sub>`stretching_is_refused_when_a_junction_would_come_off`</sub>
+- 曲がり角から出る枝の線とそこのジャンクションは、曲がり角が動くと一緒に動き、かたまりはつながったまま。 <sub>`a_branch_at_a_bend_follows_the_bend`</sub>
+- 引けないかたまりで、伸び縮みさせると線の途中のピン (整列で動く部品) が外れるなら、ラベルでつなぎ、並べ直し全体は断らない。 <sub>`a_stretch_that_would_drop_a_mid_wire_pin_falls_back_to_labels`</sub>
 
 ### block
 
