@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3572仕様項目**。
+全6領域・**3603仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -58,7 +58,7 @@
 - ずれたピン・印・ラベルのある生成した図面では、並べ直しはピンのつながりと全てのネットの名前を保つか、断るかのどちらかになる。 <sub>`generated_sheets_keep_connections_and_names_or_refuse`</sub>
 - 関係のない2つの引けないかたまりは別々の新しい名前になり、ラベルで1つのネットにつながることはない。 <sub>`two_unroutable_clusters_get_different_names`</sub>
 - ラベルでつなぐかたまりは自分のラベルの名前を使い、古いラベルは置き換わる。 <sub>`the_fallback_uses_the_cluster_label_name`</sub>
-- ラベルでつなぐかたまりに接地の印があれば、その印のネット名を使う。 <sub>`the_fallback_uses_a_net_name_symbol`</sub>
+- ラベルでつなぐかたまりに接地の印があれば、その印のネット名を使い、印は図面に残る。 <sub>`the_fallback_uses_a_net_name_symbol`</sub>
 - 整列の移動で、今まで重なっていなかった2つの単位が重なるなら、その移動はしない。 <sub>`an_alignment_that_would_overlap_is_skipped`</sub>
 - 通常の空きの上限では図枠に収まらないときは、空きを通り道の幅まで詰めて並べ直す。 <sub>`a_tight_frame_reduces_the_gaps_and_fits`</sub>
 - 元の図面が表題欄を避けていたのに、並べると表題欄に掛かるときは断る。 <sub>`a_layout_into_the_title_block_is_refused`</sub>
@@ -68,6 +68,37 @@
 - 2.5mmへの丸めで2つの部品の順が入れ替わる整列はしない。 <sub>`alignment_never_swaps_order`</sub>
 - かたまりのために作る新しいラベルは、置き換えるラベルの向きと属性を引き継ぐ。 <sub>`new_labels_copy_the_old_label_style`</sub>
 - 注記が指すラベルは、かたまりをラベルでつなぐときも消さず、ネットの名前も変わらない。 <sub>`a_label_pointed_at_by_a_note_is_kept`</sub>
+- 配線を伸び縮みさせると、全ての点が列の写像で写り、曲がり角も列と一緒に動く。 <sub>`stretching_a_wire_maps_every_point_through_the_warp`</sub>
+- 端子が横へずれると、端は端子の新しい位置へ行き、隣の点も一緒にずれて直角が保たれる。 <sub>`stretching_moves_the_neighbour_point_to_keep_right_angles`</sub>
+- 2点だけの直線の配線は、端が動いて斜めになりそうなとき、中ほどで折れる。 <sub>`a_two_point_wire_that_would_turn_diagonal_gets_a_jog`</sub>
+- 伸び縮みさせた配線が他の配線と交わるなら断る (その場合はラベルでつなぐ)。 <sub>`stretching_is_refused_when_it_would_cross_another_wire`</sub>
+- 伸び縮みさせた配線が他のピンやラベルの上に乗るなら断る。 <sub>`stretching_is_refused_when_it_would_touch_a_pin_or_label`</sub>
+- 伸び縮みさせた配線は、他の部品の外形を横切れないが、自分の端子の部品の中は通ってよい。 <sub>`stretching_does_not_cross_other_symbols_except_its_own`</sub>
+- 引けないかたまりは元の配線の形のまま伸び縮みし、`kept_shape` に載る (ラベルでつながない)。 <sub>`an_unroutable_cluster_keeps_its_wire_shape`</sub>
+- 半径1mm以下の円は接続点として数え、大きな円や他の図形は数えない。 <sub>`only_small_circles_are_dot_shapes`</sub>
+- 点は配線の途中や端にあれば配線の上にあり、わきにあれば上にない。 <sub>`on_any_wire_follows_the_wire`</sub>
+- 配線の上にあった小さな円は、引き直した配線がそこを通らなくなったら消える。 <sub>`a_dot_left_off_the_redrawn_wire_is_removed`</sub>
+- 計画の後もまだ配線の上にある小さな円は残る。 <sub>`a_dot_still_on_the_wire_stays`</sub>
+- もともと配線の上になかった小さな円には手を付けない。 <sub>`a_dot_that_was_not_on_a_wire_is_left_alone`</sub>
+- 自分のラベルが無くても、同じネットの別のかたまりにラベルがあれば、そのラベルの名前でつなぎ、新しいARRの名前は使わない。 <sub>`the_fallback_uses_the_net_wide_label`</sub>
+- ラベルでつなぐかたまりにつながる接地の印は消されず、印の名前 (GND) でほかの端とつながる。 <sub>`a_ground_mark_in_a_label_joined_cluster_is_never_deleted`</sub>
+- 1つの部品にだけ配線された接地の印は、配線ごと図面に残り、部品と一緒に動く。 <sub>`a_ground_mark_wired_to_a_part_stays_with_its_wire`</sub>
+- 印のピンと同じ単位のピンを直接結ぶ配線は残し、両端には短い線を出さない。 <sub>`a_wire_between_a_mark_and_a_pin_of_its_unit_is_kept`</sub>
+- 残した配線は、端を持つ単位の移動量だけ動かした写しになる。 <sub>`a_kept_wire_is_copied_with_its_unit_movement`</sub>
+- もともと重なっている (0.5mm以内に近い) 2つの単位は、互いの位置を変えない。 <sub>`units_that_already_overlap_keep_their_relative_position`</sub>
+- 外接矩形が0.5mm以内に近づく移動は重なりとして断り、0.6mm離れるなら許す。 <sub>`closing_within_half_a_millimetre_counts_as_overlap`</sub>
+- 何も邪魔が無いと、短い線はピンの向きへまっすぐ2.5mm出て、先に選んだ名前のラベルが付く。 <sub>`a_free_pin_gets_a_straight_stub_of_2_5_mm`</sub>
+- 真っすぐな短い線がどれも他の線に当たるときは、曲げて、その線を避ける。 <sub>`a_blocked_pin_gets_a_bent_or_led_stub_that_stays_clear`</sub>
+- どの候補もゆとりの距離以内に何かが来るときは、それでも電気的に触れない最初の候補を使う。 <sub>`a_crowded_pin_takes_the_first_stub_that_does_not_touch`</sub>
+- 先に置いた短い線とその先は、次の短い線が避けるものに加わる。 <sub>`a_placed_stub_is_avoided_by_the_next`</sub>
+- 端子が全て同じ単位にあるかたまりは、単位1つのかたまりと見なす。 <sub>`single_unit_detects_clusters_inside_one_unit`</sub>
+- 部品とその部品の接地の印の間の配線は、元の形のまま部品と一緒に動き、引き直さない。 <sub>`a_wire_inside_one_unit_moves_rigidly_with_it`</sub>
+- 検算の断り文は、つながり方が変わったピンを「参照記号.ピン番号」で、前と後に分けて書く。 <sub>`the_self_check_names_the_pins_whose_net_changed`</sub>
+- 参照記号の無い部品のピンは、idの先頭の文字で書く。 <sub>`a_pin_without_a_reference_is_named_by_its_id`</sub>
+- 短い線の検査は、触れたものを書く: 他の配線・ラベル・ジャンクション・部品のピン。 <sub>`the_stub_check_names_a_touched_label_and_pin`</sub>
+- 短い線の上にジャンクションがあれば、検査は「ジャンクション」と書く。 <sub>`the_stub_check_names_a_touched_junction`</sub>
+- ピンの上のラベルが離れて別のピンの上に乗ると、断り文は離れた組と新しく重なった組を書く。 <sub>`the_self_check_names_separated_and_new_pin_contacts`</sub>
+- 引けないかたまりがあっても、引けるネットは引き直され、引けなかったかたまりは短い線とラベルでつながる。 <sub>`routing_goes_on_around_the_stubs_of_failed_clusters`</sub>
 
 ### block
 

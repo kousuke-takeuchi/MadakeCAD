@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3572 specification clauses** across 6 areas.
+**3603 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -58,7 +58,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - On generated sheets with off-grid pins, marks and labels, every arrange either keeps which pins share a net and the names of every net, or refuses. <sub>`generated_sheets_keep_connections_and_names_or_refuse`</sub>
 - Two unrelated unroutable clusters get two different fresh names, so the labels never join them into one net. <sub>`two_unroutable_clusters_get_different_names`</sub>
 - A cluster that is joined by labels takes the name of its own label, and the old label is replaced. <sub>`the_fallback_uses_the_cluster_label_name`</sub>
-- A cluster that is joined by labels and holds a ground mark takes the mark's net name. <sub>`the_fallback_uses_a_net_name_symbol`</sub>
+- A cluster that is joined by labels and holds a ground mark takes the mark's net name, and the mark stays on the drawing. <sub>`the_fallback_uses_a_net_name_symbol`</sub>
 - An alignment move that would make two units overlap where they did not before is skipped. <sub>`an_alignment_that_would_overlap_is_skipped`</sub>
 - When the layout with the normal maximum gap does not fit, the gaps are reduced towards the channel width and the arrange succeeds. <sub>`a_tight_frame_reduces_the_gaps_and_fits`</sub>
 - A layout that would run into the title block is refused when the drawing kept out of it before. <sub>`a_layout_into_the_title_block_is_refused`</sub>
@@ -68,6 +68,37 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - An alignment whose 2.5 mm rounding would swap the order of two parts is not done. <sub>`alignment_never_swaps_order`</sub>
 - New labels made for a cluster copy the rotation and attributes of the label they replace. <sub>`new_labels_copy_the_old_label_style`</sub>
 - A label that a note points at is not deleted when its cluster is joined by labels, and the net keeps its name. <sub>`a_label_pointed_at_by_a_note_is_kept`</sub>
+- Stretching a wire maps every point through the column warp, so the bends move with their column. <sub>`stretching_a_wire_maps_every_point_through_the_warp`</sub>
+- When a terminal moves sideways, the end goes to the terminal and the next point follows so the wire keeps its right angles. <sub>`stretching_moves_the_neighbour_point_to_keep_right_angles`</sub>
+- A straight two-point wire whose end would turn diagonal gets a jog in the middle. <sub>`a_two_point_wire_that_would_turn_diagonal_gets_a_jog`</sub>
+- A stretched wire that would cross another wire is refused, so the cluster falls back to labels. <sub>`stretching_is_refused_when_it_would_cross_another_wire`</sub>
+- A stretched wire that would run over a pin or label of someone else is refused. <sub>`stretching_is_refused_when_it_would_touch_a_pin_or_label`</sub>
+- A stretched wire may not cross the outline of another part, but may pass its own terminal parts. <sub>`stretching_does_not_cross_other_symbols_except_its_own`</sub>
+- A cluster the router cannot draw keeps its old wire shape (stretched) and is listed in `kept_shape`, not joined by labels. <sub>`an_unroutable_cluster_keeps_its_wire_shape`</sub>
+- A circle of radius 1 mm or less is a connection dot; bigger circles and other shapes are not. <sub>`only_small_circles_are_dot_shapes`</sub>
+- A point counts as being on a wire anywhere along it, including its ends, and not beside it. <sub>`on_any_wire_follows_the_wire`</sub>
+- A small circle that sat on a wire is removed when the redrawn wire no longer passes through it. <sub>`a_dot_left_off_the_redrawn_wire_is_removed`</sub>
+- A small circle that still lies on the wire after the plan stays. <sub>`a_dot_still_on_the_wire_stays`</sub>
+- A small circle that was never on a wire is left alone. <sub>`a_dot_that_was_not_on_a_wire_is_left_alone`</sub>
+- A cluster with no label of its own, on a net that carries a label on another cluster, is joined by that label's name and never by a fresh ARR name. <sub>`the_fallback_uses_the_net_wide_label`</sub>
+- A ground mark that is wired into a cluster joined by labels is never deleted, and it takes part under its own name. <sub>`a_ground_mark_in_a_label_joined_cluster_is_never_deleted`</sub>
+- A ground mark wired only to one part stays on the sheet together with its wire, and both move with the part. <sub>`a_ground_mark_wired_to_a_part_stays_with_its_wire`</sub>
+- A wire that joins a mark pin straight to a pin of the same unit is kept, and neither end gets a stub. <sub>`a_wire_between_a_mark_and_a_pin_of_its_unit_is_kept`</sub>
+- The kept wire is copied with the movement of the unit that owns its ends. <sub>`a_kept_wire_is_copied_with_its_unit_movement`</sub>
+- Two boxes that already overlap (or sit within 0.5 mm) must not move relative to each other. <sub>`units_that_already_overlap_keep_their_relative_position`</sub>
+- Bounds within 0.5 mm count as overlapping: moving to 0.4 mm apart is refused, 0.6 mm apart is allowed. <sub>`closing_within_half_a_millimetre_counts_as_overlap`</sub>
+- With nothing in the way, the short wire goes straight out of the pin 2.5 mm and ends in a label with the chosen name. <sub>`a_free_pin_gets_a_straight_stub_of_2_5_mm`</sub>
+- When a wire stands in the way of every straight stub, the stub bends away and stays clear of it. <sub>`a_blocked_pin_gets_a_bent_or_led_stub_that_stays_clear`</sub>
+- When every candidate comes within the comfortable distance of something, the first one that still does not touch it is used. <sub>`a_crowded_pin_takes_the_first_stub_that_does_not_touch`</sub>
+- A stub placed first is avoided by the next one, because its wire and end are added to the lists the next stub avoids. <sub>`a_placed_stub_is_avoided_by_the_next`</sub>
+- A single-unit cluster (every terminal in one part) is detected as such. <sub>`single_unit_detects_clusters_inside_one_unit`</sub>
+- A wire between a part and its own ground mark moves with the part in its old shape and is not redrawn. <sub>`a_wire_inside_one_unit_moves_rigidly_with_it`</sub>
+- The self-check names the pins whose sharing changed, as reference.pin, for what was before and what is after. <sub>`the_self_check_names_the_pins_whose_net_changed`</sub>
+- A pin of a part without a reference is named by the first characters of its id. <sub>`a_pin_without_a_reference_is_named_by_its_id`</sub>
+- The stub check names what the stub touched: another wire, a label, a junction or a pin of a part. <sub>`the_stub_check_names_a_touched_label_and_pin`</sub>
+- The stub check names a junction on the stub as "ジャンクション". <sub>`the_stub_check_names_a_touched_junction`</sub>
+- When a label leaves the pin it sat on and lands on another pin, the message names the separated and the new contact. <sub>`the_self_check_names_separated_and_new_pin_contacts`</sub>
+- Nets that can be routed are still routed when another cluster fails: the failed one gets its label stubs and the rest is routed around them. <sub>`routing_goes_on_around_the_stubs_of_failed_clusters`</sub>
 
 ### block
 

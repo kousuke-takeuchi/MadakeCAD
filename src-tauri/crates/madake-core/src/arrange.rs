@@ -793,7 +793,6 @@ fn key_groups(keys: &[f64], tol: f64) -> Vec<Vec<usize>> {
     out
 }
 
-/// 組 (ids) を新しい外接矩形 (newb) へ動かすと、今まで重なっていなかった2つの単位が重なるか。
 /// 2つの外接矩形が同じだけ動いたか。
 fn same_shift(a0: &Bounds, a1: &Bounds, b0: &Bounds, b1: &Bounds) -> bool {
     ((a1.0 - a0.0) - (b1.0 - b0.0)).abs() < EPS && ((a1.1 - a0.1) - (b1.1 - b0.1)).abs() < EPS
@@ -805,6 +804,8 @@ fn touch(a: &Bounds, b: &Bounds) -> bool {
     a.0 < b.2 + M && b.0 < a.2 + M && a.1 < b.3 + M && b.1 < a.3 + M
 }
 
+/// 組 (ids) を新しい外接矩形 (newb) へ動かすと、今まで重なっていなかった2つの単位が重なる (0.5mm以内に近づく) か。
+/// もともと重なっていた組が、互いの位置を変えるときも真。
 fn creates_overlap(cur: &[Bounds], ids: &[usize], newb: &[Bounds]) -> bool {
     for (p, &i) in ids.iter().enumerate() {
         for j in 0..cur.len() {
@@ -3000,5 +3001,532 @@ mod tests {
         let after = apply(&sh, &plan);
         assert!(after.entities.contains_key(&old));
         assert_eq!(pin_partition(&sh, &defs()), pin_partition(&after, &defs()));
+    }
+
+    // ------------------------------------------------------------------
+    // 引けない配線の伸び縮み・接続点の円・ラベル名・衛星・重なり・短い線・検算の文言
+    // ------------------------------------------------------------------
+
+    /// 4 点の折れ線の配線 (60,50)-(75,50)-(75,80)-(90,80) が1本ある図面と、その端子の (旧, 新, 向き)。
+    fn bent_wire_sheet() -> (Sheet, Vec<EntityId>) {
+        let mut sh = new_sheet();
+        let w = old_wire(&mut sh, &[(60.0, 50.0), (75.0, 50.0), (75.0, 80.0), (90.0, 80.0)]);
+        (sh, vec![w])
+    }
+
+    /// x だけを写す配置 (70 より右を 10mm 右へずらす)。
+    fn shift_right_layout() -> Layout {
+        let bs = bands(&[(0.0, 70.0), (80.0, 200.0)]);
+        Layout {
+            dx: vec![],
+            dy: vec![],
+            wx: Warp::new(&bs, &[0.0, 10.0]),
+            wy: Warp::new(&[], &[]),
+            columns: 2,
+            rows: 1,
+        }
+    }
+
+    fn identity_layout() -> Layout {
+        Layout { dx: vec![], dy: vec![], wx: Warp::new(&[], &[]), wy: Warp::new(&[], &[]), columns: 1, rows: 1 }
+    }
+
+    fn wire_points(es: &[Entity]) -> Vec<Vec<(f64, f64)>> {
+        es.iter()
+            .filter_map(|e| if let Entity::Wire(w) = e { Some(w.points.iter().map(|q| (q.x, q.y)).collect()) } else { None })
+            .collect()
+    }
+
+    /// Stretching a wire maps every point through the column warp, so the bends move with their column.
+    /// 配線を伸び縮みさせると、全ての点が列の写像で写り、曲がり角も列と一緒に動く。
+    #[test]
+    fn stretching_a_wire_maps_every_point_through_the_warp() {
+        let (sh, ws) = bent_wire_sheet();
+        let trip = [(p(60.0, 50.0), p(60.0, 50.0), None), (p(90.0, 80.0), p(100.0, 80.0), None)];
+        let (es, _) = stretch_wires(&sh, &ws, &[], &shift_right_layout(), &trip, &[], &[], &[], &BTreeSet::new()).expect("stretch");
+        assert_eq!(wire_points(&es), vec![vec![(60.0, 50.0), (80.0, 50.0), (80.0, 80.0), (100.0, 80.0)]]);
+    }
+
+    /// When a terminal moves sideways, the end goes to the terminal and the next point follows so the wire keeps its right angles.
+    /// 端子が横へずれると、端は端子の新しい位置へ行き、隣の点も一緒にずれて直角が保たれる。
+    #[test]
+    fn stretching_moves_the_neighbour_point_to_keep_right_angles() {
+        let (sh, ws) = bent_wire_sheet();
+        let trip = [(p(60.0, 50.0), p(60.0, 50.0), None), (p(90.0, 80.0), p(100.0, 85.0), None)];
+        let (es, _) = stretch_wires(&sh, &ws, &[], &shift_right_layout(), &trip, &[], &[], &[], &BTreeSet::new()).expect("stretch");
+        assert_eq!(wire_points(&es), vec![vec![(60.0, 50.0), (80.0, 50.0), (80.0, 85.0), (100.0, 85.0)]]);
+    }
+
+    /// A straight two-point wire whose end would turn diagonal gets a jog in the middle.
+    /// 2点だけの直線の配線は、端が動いて斜めになりそうなとき、中ほどで折れる。
+    #[test]
+    fn a_two_point_wire_that_would_turn_diagonal_gets_a_jog() {
+        let mut sh = new_sheet();
+        let w = old_wire(&mut sh, &[(60.0, 50.0), (90.0, 50.0)]);
+        let trip = [(p(60.0, 50.0), p(60.0, 50.0), None), (p(90.0, 50.0), p(100.0, 60.0), None)];
+        let (es, _) = stretch_wires(&sh, &[w], &[], &identity_layout(), &trip, &[], &[], &[], &BTreeSet::new()).expect("stretch");
+        assert_eq!(wire_points(&es), vec![vec![(60.0, 50.0), (80.0, 50.0), (80.0, 60.0), (100.0, 60.0)]]);
+    }
+
+    /// A stretched wire that would cross another wire is refused, so the cluster falls back to labels.
+    /// 伸び縮みさせた配線が他の配線と交わるなら断る (その場合はラベルでつなぐ)。
+    #[test]
+    fn stretching_is_refused_when_it_would_cross_another_wire() {
+        let (sh, ws) = bent_wire_sheet();
+        let trip = [(p(60.0, 50.0), p(60.0, 50.0), None), (p(90.0, 80.0), p(100.0, 80.0), None)];
+        let other = vec![vec![p(70.0, 45.0), p(70.0, 55.0)]];
+        assert!(stretch_wires(&sh, &ws, &[], &shift_right_layout(), &trip, &other, &[], &[], &BTreeSet::new()).is_none());
+        let far = vec![vec![p(70.0, 90.0), p(70.0, 95.0)]];
+        assert!(stretch_wires(&sh, &ws, &[], &shift_right_layout(), &trip, &far, &[], &[], &BTreeSet::new()).is_some());
+    }
+
+    /// A stretched wire that would run over a pin or label of someone else is refused.
+    /// 伸び縮みさせた配線が他のピンやラベルの上に乗るなら断る。
+    #[test]
+    fn stretching_is_refused_when_it_would_touch_a_pin_or_label() {
+        let (sh, ws) = bent_wire_sheet();
+        let trip = [(p(60.0, 50.0), p(60.0, 50.0), None), (p(90.0, 80.0), p(100.0, 80.0), None)];
+        let spots = vec![p(80.0, 65.0)];
+        assert!(stretch_wires(&sh, &ws, &[], &shift_right_layout(), &trip, &[], &spots, &[], &BTreeSet::new()).is_none());
+    }
+
+    /// A stretched wire may not cross the outline of another part, but may pass its own terminal parts.
+    /// 伸び縮みさせた配線は、他の部品の外形を横切れないが、自分の端子の部品の中は通ってよい。
+    #[test]
+    fn stretching_does_not_cross_other_symbols_except_its_own() {
+        let mut sh = new_sheet();
+        let w = old_wire(&mut sh, &[(60.0, 50.0), (90.0, 50.0)]);
+        let trip = [(p(60.0, 50.0), p(60.0, 50.0), None), (p(90.0, 50.0), p(90.0, 50.0), None)];
+        let other = Uuid::new_v4();
+        let bodies = vec![(other, (70.0, 40.0, 80.0, 60.0))];
+        assert!(stretch_wires(&sh, &[w], &[], &identity_layout(), &trip, &[], &[], &bodies, &BTreeSet::new()).is_none());
+        let own = BTreeSet::from([other]);
+        assert!(stretch_wires(&sh, &[w], &[], &identity_layout(), &trip, &[], &[], &bodies, &own).is_some());
+    }
+
+    /// Two boxes joined through a one-point-wide gap in a wall: the router cannot pass, but the old straight wire can.
+    fn slit_sheet() -> (Sheet, Vec<SymbolDef>) {
+        let mut ds = defs();
+        ds.push(def("slit_t", vec![rect(-2.5, -20.0, 2.5, 0.0)], vec![]));
+        ds.push(def("slit_b", vec![rect(-2.5, 0.0, 2.5, 20.0)], vec![]));
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (50.0, 50.0), "A1");
+        place(&mut sh, "wall_h", (50.0, 35.0), "");
+        place(&mut sh, "wall_h", (50.0, 65.0), "");
+        place(&mut sh, "wall_v", (17.5, 50.0), "");
+        place(&mut sh, "slit_t", (82.5, 50.0), "");
+        place(&mut sh, "slit_b", (82.5, 50.0), "");
+        place(&mut sh, "box2", (160.0, 50.0), "A2");
+        old_wire(&mut sh, &[(60.0, 50.0), (150.0, 50.0)]);
+        (sh, ds)
+    }
+
+    /// A cluster the router cannot draw keeps its old wire shape (stretched) and is listed in `kept_shape`, not joined by labels.
+    /// 引けないかたまりは元の配線の形のまま伸び縮みし、`kept_shape` に載る (ラベルでつながない)。
+    #[test]
+    fn an_unroutable_cluster_keeps_its_wire_shape() {
+        let (sh, ds) = slit_sheet();
+        let plan = plan_arrange(&sh, &ds, &ArrangeOptions::default(), &ctx()).expect("plan");
+        assert_eq!(plan.kept_shape, vec!["N001".to_string()]);
+        assert!(plan.labelled.is_empty() && plan.routed.is_empty(), "{:?} {:?}", plan.labelled, plan.routed);
+        let after = apply(&sh, &plan);
+        assert_eq!(pin_partition(&sh, &ds), pin_partition(&after, &ds));
+        let ws: Vec<&Wire> = after.entities.values().filter_map(|e| if let Entity::Wire(w) = e { Some(w) } else { None }).collect();
+        assert_eq!(ws.len(), 1);
+        assert!(ws[0].points.iter().all(|q| (q.y - 50.0).abs() < 1e-9), "still straight: {:?}", ws[0].points);
+    }
+
+    /// A circle of radius 1 mm or less is a connection dot; bigger circles and other shapes are not.
+    /// 半径1mm以下の円は接続点として数え、大きな円や他の図形は数えない。
+    #[test]
+    fn only_small_circles_are_dot_shapes() {
+        let mut sh = new_sheet();
+        let small = dot(&mut sh, (10.0, 10.0), 0.5);
+        let edge = dot(&mut sh, (20.0, 10.0), 1.0);
+        dot(&mut sh, (30.0, 10.0), 1.5);
+        let ids: Vec<EntityId> = dot_shapes(&sh).into_iter().map(|d| d.0).collect();
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains(&small) && ids.contains(&edge));
+    }
+
+    /// A point counts as being on a wire anywhere along it, including its ends, and not beside it.
+    /// 点は配線の途中や端にあれば配線の上にあり、わきにあれば上にない。
+    #[test]
+    fn on_any_wire_follows_the_wire() {
+        let mut sh = new_sheet();
+        old_wire(&mut sh, &[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)]);
+        assert!(on_any_wire(&sh, p(5.0, 0.0)));
+        assert!(on_any_wire(&sh, p(10.0, 10.0)));
+        assert!(!on_any_wire(&sh, p(5.0, 2.0)));
+    }
+
+    /// 接続点の円 (半径 r) を置く。
+    fn dot(sheet: &mut Sheet, c: (f64, f64), r: f64) -> EntityId {
+        let id = Uuid::new_v4();
+        sheet.entities.insert(
+            id,
+            Entity::Shape(Shape {
+                id,
+                shape: ShapeKind::Circle,
+                points: vec![p(c.0, c.1), p(c.0 + r, c.1)],
+                stroke: "default".into(),
+                stroke_width_mm: 0.25,
+                fill: None,
+                dashed: false,
+                arrow_end: false,
+            }),
+        );
+        id
+    }
+
+    /// 縦にずれた2つの部品を、細い遠回りの配線で結んだ図面 (並べ直すと配線が引き直される) と、配線上の円の id。
+    fn dotted_sheet(dot_at: (f64, f64)) -> (Sheet, EntityId) {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (50.0, 50.0), "A1");
+        place(&mut sh, "box2", (73.0, 80.0), "A2");
+        old_wire(&mut sh, &[(60.0, 50.0), (61.5, 50.0), (61.5, 80.0), (63.0, 80.0)]);
+        let d = dot(&mut sh, dot_at, 0.5);
+        (sh, d)
+    }
+
+    /// A small circle that sat on a wire is removed when the redrawn wire no longer passes through it.
+    /// 配線の上にあった小さな円は、引き直した配線がそこを通らなくなったら消える。
+    #[test]
+    fn a_dot_left_off_the_redrawn_wire_is_removed() {
+        let (sh, d) = dotted_sheet((61.5, 65.0));
+        let plan = arrange(&sh);
+        assert!(!plan.routed.is_empty(), "{:?}", plan.routed);
+        assert!(plan.remove.contains(&d), "the dot is removed");
+        assert!(!plan.after.expect("after").entities.contains_key(&d));
+    }
+
+    /// A small circle that still lies on the wire after the plan stays.
+    /// 計画の後もまだ配線の上にある小さな円は残る。
+    #[test]
+    fn a_dot_still_on_the_wire_stays() {
+        let (sh, d) = dotted_sheet((60.0, 50.0));
+        let plan = arrange(&sh);
+        assert!(!plan.remove.contains(&d));
+        assert!(plan.after.expect("after").entities.contains_key(&d));
+    }
+
+    /// A small circle that was never on a wire is left alone.
+    /// もともと配線の上になかった小さな円には手を付けない。
+    #[test]
+    fn a_dot_that_was_not_on_a_wire_is_left_alone() {
+        let (sh, d) = dotted_sheet((30.0, 20.0));
+        let plan = arrange(&sh);
+        assert!(!plan.remove.contains(&d));
+        assert!(plan.after.expect("after").entities.contains_key(&d));
+    }
+
+    /// 名前が `name` のラベルの数。
+    fn count_labels(sheet: &Sheet, name: &str) -> usize {
+        sheet.entities.values().filter(|e| matches!(e, Entity::NetLabel(l) if l.name == name)).count()
+    }
+
+    /// A cluster with no label of its own, on a net that carries a label on another cluster, is joined by that label's name and never by a fresh ARR name.
+    /// 自分のラベルが無くても、同じネットの別のかたまりにラベルがあれば、そのラベルの名前でつなぎ、新しいARRの名前は使わない。
+    #[test]
+    fn the_fallback_uses_the_net_wide_label() {
+        let (mut sh, _, _) = walled_sheet();
+        old_wire(&mut sh, &[(150.0, 50.0), (150.0, 30.0)]);
+        label(&mut sh, (150.0, 30.0), "FEED");
+        let plan = arrange(&sh);
+        assert_eq!(plan.labelled.len(), 1, "{:?}", plan.labelled);
+        assert_eq!(plan.labelled[0].1, "FEED");
+        let after = apply(&sh, &plan);
+        let arr = after.entities.values().filter(|e| matches!(e, Entity::NetLabel(l) if l.name.starts_with("ARR_"))).count();
+        assert_eq!(arr, 0, "no ARR label is made");
+        assert!(count_labels(&after, "FEED") >= 2, "both pins are joined by FEED labels");
+        assert_eq!(pin_partition(&sh, &defs()), pin_partition(&after, &defs()));
+    }
+
+    /// A ground mark that is wired into a cluster joined by labels is never deleted, and it takes part under its own name.
+    /// ラベルでつなぐかたまりにつながる接地の印は消されず、印の名前 (GND) でほかの端とつながる。
+    #[test]
+    fn a_ground_mark_in_a_label_joined_cluster_is_never_deleted() {
+        let (mut sh, _, _) = walled_sheet();
+        let m = place(&mut sh, "gnd", (60.0, 45.0), "");
+        old_wire(&mut sh, &[(60.0, 40.0), (60.0, 50.0)]);
+        let plan = arrange(&sh);
+        assert_eq!(plan.labelled.len(), 1, "{:?}", plan.labelled);
+        assert_eq!(plan.labelled[0].1, "GND");
+        assert!(!plan.remove.contains(&m), "the mark is not deleted");
+        let after = apply(&sh, &plan);
+        assert!(after.entities.contains_key(&m));
+        assert_eq!(kept_partition(&sh, &after), pin_partition(&after, &defs()));
+    }
+
+    /// A ground mark wired only to one part stays on the sheet together with its wire, and both move with the part.
+    /// 1つの部品にだけ配線された接地の印は、配線ごと図面に残り、部品と一緒に動く。
+    #[test]
+    fn a_ground_mark_wired_to_a_part_stays_with_its_wire() {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (50.0, 50.0), "A1");
+        let a2 = place(&mut sh, "box2", (73.0, 50.0), "A2");
+        let m = place(&mut sh, "gnd", (95.0, 60.0), "");
+        let w = old_wire(&mut sh, &[(83.0, 50.0), (95.0, 50.0), (95.0, 55.0)]);
+        let plan = arrange(&sh);
+        let after = apply(&sh, &plan);
+        assert!(after.entities.contains_key(&m) && after.entities.contains_key(&w));
+        let dx = at_of(&after, a2).x - 73.0;
+        assert!(dx > 0.0);
+        assert_eq!(at_of(&after, m), p(95.0 + dx, 60.0));
+        assert_eq!(pin_partition(&sh, &defs()), pin_partition(&after, &defs()));
+    }
+
+    /// A wire that joins a mark pin straight to a pin of the same unit is kept, and neither end gets a stub.
+    /// 印のピンと同じ単位のピンを直接結ぶ配線は残し、両端には短い線を出さない。
+    #[test]
+    fn a_wire_between_a_mark_and_a_pin_of_its_unit_is_kept() {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (50.0, 50.0), "A1");
+        place(&mut sh, "gnd", (60.0, 45.0), "");
+        let w = old_wire(&mut sh, &[(60.0, 40.0), (60.0, 50.0)]);
+        let ds = defs();
+        let us = units(&sh, &ds);
+        assert_eq!(us.len(), 1, "the mark is a satellite of A1");
+        let (idx, pins, owners) = (DefIndex::new(&ds), pin_points(&sh, &ds), Owners::new(&sh, &ds, &us));
+        let terms = [(p(60.0, 40.0), Some(Dir::N)), (p(60.0, 50.0), Some(Dir::E))];
+        let mut taken = BTreeSet::new();
+        let fb = fallback_name(&sh, &idx, &pins, &owners, "N", &BTreeMap::new(), &[w], &terms, &BTreeSet::new(), &mut taken);
+        assert_eq!(fb.name, "GND");
+        assert!(!fb.fresh && fb.delete.is_empty());
+        assert_eq!(fb.keep, vec![w]);
+        assert!(fb.skip.contains(&p(60.0, 40.0)) && fb.skip.contains(&p(60.0, 50.0)));
+    }
+
+    /// The kept wire is copied with the movement of the unit that owns its ends.
+    /// 残した配線は、端を持つ単位の移動量だけ動かした写しになる。
+    #[test]
+    fn a_kept_wire_is_copied_with_its_unit_movement() {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (50.0, 50.0), "A1");
+        place(&mut sh, "gnd", (60.0, 45.0), "");
+        let w = old_wire(&mut sh, &[(60.0, 40.0), (60.0, 50.0)]);
+        let ds = defs();
+        let us = units(&sh, &ds);
+        let owners = Owners::new(&sh, &ds, &us);
+        let mut lay = identity_layout();
+        lay.dx = vec![12.5];
+        lay.dy = vec![-5.0];
+        let es = kept_links(&sh, &owners, &lay, &[w]);
+        assert_eq!(wire_points(&es), vec![vec![(72.5, 35.0), (72.5, 45.0)]]);
+        assert_ne!(es[0].id(), w, "the copy has a new id");
+    }
+
+    /// Two boxes that already overlap (or sit within 0.5 mm) must not move relative to each other.
+    /// もともと重なっている (0.5mm以内に近い) 2つの単位は、互いの位置を変えない。
+    #[test]
+    fn units_that_already_overlap_keep_their_relative_position() {
+        let cur = vec![(0.0, 0.0, 10.0, 10.0), (8.0, 0.0, 18.0, 10.0)];
+        // 片方だけ動かすと相対位置が変わる
+        assert!(creates_overlap(&cur, &[0], &[shifted(cur[0], Axis::Y, 2.5)]));
+        // 2つ一緒に同じだけ動かすのは構わない
+        let both = [shifted(cur[0], Axis::Y, 2.5), shifted(cur[1], Axis::Y, 2.5)];
+        assert!(!creates_overlap(&cur, &[0, 1], &both));
+    }
+
+    /// Bounds within 0.5 mm count as overlapping: moving to 0.4 mm apart is refused, 0.6 mm apart is allowed.
+    /// 外接矩形が0.5mm以内に近づく移動は重なりとして断り、0.6mm離れるなら許す。
+    #[test]
+    fn closing_within_half_a_millimetre_counts_as_overlap() {
+        let cur = vec![(0.0, 0.0, 10.0, 10.0), (20.0, 0.0, 30.0, 10.0)];
+        let near_b = [(10.4, 0.0, 20.4, 10.0)];
+        let far_b = [(10.6, 0.0, 20.6, 10.0)];
+        assert!(creates_overlap(&cur, &[1], &near_b));
+        assert!(!creates_overlap(&cur, &[1], &far_b));
+        assert!(touch(&(0.0, 0.0, 10.0, 10.0), &(10.4, 0.0, 20.0, 10.0)));
+        assert!(!touch(&(0.0, 0.0, 10.0, 10.0), &(10.6, 0.0, 20.0, 10.0)));
+    }
+
+    /// 向かい合うピンの手前に短い線を引くための道具: 空の図面の格子と、東向きの端子。
+    fn stub_fixture() -> (RouteGrid, Fallback) {
+        let sh = new_sheet();
+        let grid = RouteGrid::build(&sh, &defs(), &ArrangeOptions::default().route);
+        let w = old_wire_at(&sh, &[], p(0.0, 0.0));
+        let fb = Fallback { net: "N".into(), name: "ARR_1".into(), terms: vec![(p(60.0, 50.0), Some(Dir::E), w)], template: None };
+        (grid, fb)
+    }
+
+    fn stub_points(es: &[Entity]) -> Vec<(f64, f64)> {
+        wire_points(es).remove(0)
+    }
+
+    /// With nothing in the way, the short wire goes straight out of the pin 2.5 mm and ends in a label with the chosen name.
+    /// 何も邪魔が無いと、短い線はピンの向きへまっすぐ2.5mm出て、先に選んだ名前のラベルが付く。
+    #[test]
+    fn a_free_pin_gets_a_straight_stub_of_2_5_mm() {
+        let (grid, fb) = stub_fixture();
+        let (es, stubs) = stub_entities(&grid, &fb, &mut vec![], &mut vec![]);
+        assert_eq!(stub_points(&es), vec![(60.0, 50.0), (62.5, 50.0)]);
+        assert_eq!(count_named(&es, "ARR_1"), 1);
+        assert_eq!(stubs.len(), 1);
+        assert!(stubs[0].check);
+    }
+
+    fn count_named(es: &[Entity], name: &str) -> usize {
+        es.iter().filter(|e| matches!(e, Entity::NetLabel(l) if l.name == name)).count()
+    }
+
+    /// When a wire stands in the way of every straight stub, the stub bends away and stays clear of it.
+    /// 真っすぐな短い線がどれも他の線に当たるときは、曲げて、その線を避ける。
+    #[test]
+    fn a_blocked_pin_gets_a_bent_or_led_stub_that_stays_clear() {
+        let (grid, fb) = stub_fixture();
+        let lines = vec![vec![p(62.5, 40.0), p(62.5, 60.0)]];
+        let (es, _) = stub_entities(&grid, &fb, &mut lines.clone(), &mut vec![]);
+        let pts: Vec<Point> = stub_points(&es).into_iter().map(|(x, y)| p(x, y)).collect();
+        assert_eq!(pts[0], p(60.0, 50.0));
+        assert!(pts.len() >= 3 || pts.last().unwrap().x < 62.5, "not the straight stub: {pts:?}");
+        assert!(!stub_hits(&pts, &lines, &[]), "{pts:?}");
+    }
+
+    /// When every candidate comes within the comfortable distance of something, the first one that still does not touch it is used.
+    /// どの候補もゆとりの距離以内に何かが来るときは、それでも電気的に触れない最初の候補を使う。
+    #[test]
+    fn a_crowded_pin_takes_the_first_stub_that_does_not_touch() {
+        let (grid, fb) = stub_fixture();
+        // ピンのすぐわき (0.5mm) の点: どの候補も1mm以内だが、触れてはいない
+        let mut spots = vec![p(60.0, 50.5)];
+        let (es, _) = stub_entities(&grid, &fb, &mut vec![], &mut spots);
+        assert_eq!(stub_points(&es), vec![(60.0, 50.0), (62.5, 50.0)]);
+    }
+
+    /// A stub placed first is avoided by the next one, because its wire and end are added to the lists the next stub avoids.
+    /// 先に置いた短い線とその先は、次の短い線が避けるものに加わる。
+    #[test]
+    fn a_placed_stub_is_avoided_by_the_next() {
+        let (grid, mut fb) = stub_fixture();
+        let w = fb.terms[0].2.clone();
+        fb.terms.push((p(65.0, 50.0), Some(Dir::W), w));
+        let (mut lines, mut spots) = (vec![], vec![]);
+        let (es, _) = stub_entities(&grid, &fb, &mut lines, &mut spots);
+        assert_eq!(lines.len(), 2);
+        assert_eq!(spots.len(), 2);
+        let ws = wire_points(&es);
+        assert_eq!(ws.len(), 2);
+        let second: Vec<Point> = ws[1].iter().map(|&(x, y)| p(x, y)).collect();
+        // 向かい合う2本は重ならない (先の線の先端からゆとりを取る)
+        assert!(!path_hits(&second, &lines[..1], &spots[..1], &[second[0]]), "{second:?}");
+    }
+
+    /// A single-unit cluster (every terminal in one part) is detected as such.
+    /// 端子が全て同じ単位にあるかたまりは、単位1つのかたまりと見なす。
+    #[test]
+    fn single_unit_detects_clusters_inside_one_unit() {
+        assert!(single_unit(&[3, 3]));
+        assert!(single_unit(&[1]));
+        assert!(!single_unit(&[1, 2]));
+        assert!(!single_unit(&[]));
+    }
+
+    /// A wire between a part and its own ground mark moves with the part in its old shape and is not redrawn.
+    /// 部品とその部品の接地の印の間の配線は、元の形のまま部品と一緒に動き、引き直さない。
+    #[test]
+    fn a_wire_inside_one_unit_moves_rigidly_with_it() {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (50.0, 50.0), "A1");
+        let a2 = place(&mut sh, "box2", (73.0, 50.0), "A2");
+        place(&mut sh, "gnd", (95.0, 60.0), "");
+        let w = old_wire(&mut sh, &[(83.0, 50.0), (95.0, 50.0), (95.0, 55.0)]);
+        let plan = arrange(&sh);
+        let (ids, dx, dy) = plan.moves.iter().find(|m| m.0.contains(&a2)).expect("A2 moves").clone();
+        assert!(dx > 0.0 && dy == 0.0);
+        assert!(ids.contains(&w), "the wire moves with A2");
+        assert!(!plan.remove.contains(&w) && !plan.routed.iter().any(|n| n == "N001"), "{:?}", plan.routed);
+        let after = apply(&sh, &plan);
+        let Entity::Wire(nw) = &after.entities[&w] else { panic!("wire") };
+        let shape: Vec<(f64, f64)> = nw.points.iter().map(|q| (q.x - dx, q.y)).collect();
+        assert_eq!(shape, vec![(83.0, 50.0), (95.0, 50.0), (95.0, 55.0)]);
+    }
+
+    /// The self-check names the pins whose sharing changed, as reference.pin, for what was before and what is after.
+    /// 検算の断り文は、つながり方が変わったピンを「参照記号.ピン番号」で、前と後に分けて書く。
+    #[test]
+    fn the_self_check_names_the_pins_whose_net_changed() {
+        let (before, _, _) = two_wired_parts();
+        let mut after = before.clone();
+        let w = after.entities.values().find_map(|e| if let Entity::Wire(w) = e { Some(w.id) } else { None }).expect("wire");
+        after.entities.remove(&w);
+        let err = verify_after(&before, &after, &defs(), &BTreeSet::new(), &[]).expect_err("must refuse");
+        assert!(err.contains("接続が変わった"), "{err}");
+        assert!(err.contains("前: ") && err.contains("後: "), "{err}");
+        assert!(err.contains("A1.2") && err.contains("A2.1"), "{err}");
+    }
+
+    /// A pin of a part without a reference is named by the first characters of its id.
+    /// 参照記号の無い部品のピンは、idの先頭の文字で書く。
+    #[test]
+    fn a_pin_without_a_reference_is_named_by_its_id() {
+        let mut sh = new_sheet();
+        let a = place(&mut sh, "box2", (50.0, 50.0), "");
+        let one: BTreeSet<BTreeSet<(EntityId, String)>> = BTreeSet::from([BTreeSet::from([(a, "1".to_string())])]);
+        let text = partition_diff(&sh, &one, &BTreeSet::new());
+        assert!(text.contains(&format!("{}.1", &a.to_string()[..8])), "{text}");
+    }
+
+    /// The stub check names what the stub touched: another wire, a label, a junction or a pin of a part.
+    /// 短い線の検査は、触れたものを書く: 他の配線・ラベル・ジャンクション・部品のピン。
+    #[test]
+    fn the_stub_check_names_a_touched_label_and_pin() {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (50.0, 50.0), "A1");
+        let w = old_wire(&mut sh, &[(40.0, 50.0), (35.0, 50.0)]);
+        let l = label(&mut sh, (35.0, 50.0), "ARR_1");
+        let stubs = [Stub { wire: w, label: l, name: "ARR_1".into(), check: true }];
+        let other = label(&mut sh, (37.5, 50.0), "OTHER");
+        let err = check_stubs(&sh, &defs(), &stubs).expect_err("label");
+        assert!(err.contains("ラベル OTHER") && err.contains("(40.0, 50.0)"), "{err}");
+        sh.entities.remove(&other);
+        place(&mut sh, "box2", (25.0, 50.0), "A2");
+        let err = check_stubs(&sh, &defs(), &stubs).expect_err("pin");
+        assert!(err.contains("A2.2"), "{err}");
+    }
+
+    /// The stub check names a junction on the stub as "ジャンクション".
+    /// 短い線の上にジャンクションがあれば、検査は「ジャンクション」と書く。
+    #[test]
+    fn the_stub_check_names_a_touched_junction() {
+        let mut sh = new_sheet();
+        let w = old_wire(&mut sh, &[(40.0, 50.0), (35.0, 50.0)]);
+        let l = label(&mut sh, (35.0, 50.0), "ARR_1");
+        let j = Uuid::new_v4();
+        sh.entities.insert(j, Entity::Junction(Junction { id: j, at: p(37.5, 50.0) }));
+        let stubs = [Stub { wire: w, label: l, name: "ARR_1".into(), check: true }];
+        let err = check_stubs(&sh, &defs(), &stubs).expect_err("junction");
+        assert!(err.contains("ジャンクション"), "{err}");
+    }
+
+    /// When a label leaves the pin it sat on and lands on another pin, the message names the separated and the new contact.
+    /// ピンの上のラベルが離れて別のピンの上に乗ると、断り文は離れた組と新しく重なった組を書く。
+    #[test]
+    fn the_self_check_names_separated_and_new_pin_contacts() {
+        let mut before = new_sheet();
+        place(&mut before, "box2", (50.0, 50.0), "A1");
+        place(&mut before, "box2", (100.0, 50.0), "A2");
+        let l = label(&mut before, (60.0, 50.0), "Y");
+        let mut after = before.clone();
+        after.entities.get_mut(&l).expect("label").translate(30.0, 0.0);
+        let err = verify_after(&before, &after, &defs(), &BTreeSet::new(), &[]).expect_err("must refuse");
+        assert!(err.contains("離れた: ラベル Y と A1.2"), "{err}");
+        assert!(err.contains("新しく重なった: ラベル Y と A2.1"), "{err}");
+    }
+
+    /// Nets that can be routed are still routed when another cluster fails: the failed one gets its label stubs and the rest is routed around them.
+    /// 引けないかたまりがあっても、引けるネットは引き直され、引けなかったかたまりは短い線とラベルでつながる。
+    #[test]
+    fn routing_goes_on_around_the_stubs_of_failed_clusters() {
+        let (mut sh, _, _) = walled_sheet();
+        // 引けなかったかたまりの短い線 (A2 は左へ詰まって (105,50)。そのピンから西へ) の先を、縦の配線がまっすぐ通る
+        place(&mut sh, "cap", (135.0, 95.0), "C1");
+        place(&mut sh, "cap", (135.0, 20.0), "C2");
+        old_wire(&mut sh, &[(135.0, 85.0), (135.0, 30.0)]);
+        let plan = arrange(&sh);
+        assert_eq!(plan.labelled.len(), 1, "{:?}", plan.labelled);
+        assert_eq!(plan.routed.len(), 1, "{:?}", plan.routed);
+        let after = apply(&sh, &plan);
+        assert_eq!(kept_partition(&sh, &after), pin_partition(&after, &defs()));
     }
 }
