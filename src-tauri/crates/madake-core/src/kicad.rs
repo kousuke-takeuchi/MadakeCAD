@@ -453,6 +453,7 @@ pub fn import_kicad_sch(
                 opt("block_numbers").as_deref(),
                 opt("block_caption").as_deref(),
                 opt("block_leads").as_deref(),
+                opt("block_pin_text").as_deref(),
             ) {
                 Some(a) => attrs = a,
                 None => report
@@ -616,7 +617,7 @@ fn write_lib_symbol(out: &mut String, def: &SymbolDef) {
                 stroke(0.254, false),
                 if *filled { "outline" } else { "none" }
             )),
-            Primitive::Text { at, text, height } => out.push_str(&format!(
+            Primitive::Text { at, text, height, .. } => out.push_str(&format!(
                 "        (text {} (at {} 0) (effects (font (size {} {}))))\n",
                 esc(text),
                 lib_pt(*at),

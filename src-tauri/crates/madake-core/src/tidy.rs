@@ -207,7 +207,7 @@ pub fn symbol_bounds(inst: &SymbolInstance, def: &SymbolDef) -> Option<Rect> {
                 visit(*p2);
                 visit(Point::new(p1.x, p2.y));
             }
-            Primitive::Text { at, text, height } => {
+            Primitive::Text { at, text, height, .. } => {
                 let (hw, hh) = (text_width(text, *height) / 2.0, height / 2.0);
                 visit(Point::new(at.x - hw, at.y - hh));
                 visit(Point::new(at.x + hw, at.y + hh));

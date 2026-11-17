@@ -123,6 +123,10 @@ pub struct TextSlot {
     pub height: f64,
 }
 
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Primitive {
@@ -136,7 +140,14 @@ pub enum Primitive {
         end_deg: f64,
     },
     Rect { p1: Point, p2: Point, filled: bool },
-    Text { at: Point, text: String, height: f64 },
+    /// 文字。`bold`は太字 (ブロックの見出しの行だけが使う。無ければ今までどおりの細字で、ファイルや書き出し名にも現れない)。
+    Text {
+        at: Point,
+        text: String,
+        height: f64,
+        #[serde(default, skip_serializing_if = "is_false")]
+        bold: bool,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -202,7 +213,7 @@ fn arc(cx: f64, cy: f64, r: f64, start_deg: f64, end_deg: f64) -> Primitive {
 }
 
 fn text(x: f64, y: f64, t: &str, height: f64) -> Primitive {
-    Primitive::Text { at: p(x, y), text: t.into(), height }
+    Primitive::Text { at: p(x, y), text: t.into(), height, bold: false }
 }
 
 fn pin(number: &str, name: &str, x: f64, y: f64, dir: PinDir) -> PinDef {
@@ -1439,6 +1450,7 @@ fn terminal_block_symbol(id: &str, n: usize, levels: usize) -> SymbolDef {
                 at: p(cx, y),
                 text: no.clone(),
                 height: TERMINAL_NUMBER_HEIGHT,
+                bold: false,
             });
             primitives.push(line(&[(cx - 2.5, y), (cx - TERMINAL_MARK_R, y)]));
             primitives.push(line(&[(cx + TERMINAL_MARK_R, y), (cx + 2.5, y)]));
@@ -1490,6 +1502,7 @@ pub fn dynamic_symbol(id: &str) -> Option<SymbolDef> {
                 at: p(-2.0, y),
                 text: (i + 1).to_string(),
                 height: 2.0,
+                bold: false,
             });
             primitives.push(line(&[(4.0, y), (7.5, y)]));
             pins.push(pin(&(i + 1).to_string(), "", 7.5, y, PinDir::Right));

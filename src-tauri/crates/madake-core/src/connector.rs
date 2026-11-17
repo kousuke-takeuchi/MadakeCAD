@@ -7,7 +7,7 @@
 
 use serde::Deserialize;
 
-use crate::block::{offset, BlockPin, BlockPins};
+use crate::block::{coarse_offsets, BlockPin, BlockPins};
 use crate::geometry::Point;
 use crate::symbol::{PinDir, Primitive};
 
@@ -273,15 +273,10 @@ pub fn connector_primitives(kind: ConnectorKind, dir: PinDir, edges: &[Point]) -
 /// 白い口が辺の線で塗りつぶされずに見えるのはこのすき間のおかげ。長さ0の線分は作らない。
 pub fn outline_segments(pins: &BlockPins, hw: f64, hh: f64) -> Vec<Primitive> {
     let gaps = |side: &[BlockPin]| -> Vec<(f64, f64)> {
-        let n = side.len();
+        let offs = coarse_offsets(side);
         connector_groups(side)
             .iter()
-            .map(|g| {
-                (
-                    offset(g.start, n) - CONNECTOR_HALF_SPAN_MM,
-                    offset(g.end - 1, n) + CONNECTOR_HALF_SPAN_MM,
-                )
-            })
+            .map(|g| (offs[g.start] - CONNECTOR_HALF_SPAN_MM, offs[g.end - 1] + CONNECTOR_HALF_SPAN_MM))
             .collect()
     };
     let mut out = Vec::new();

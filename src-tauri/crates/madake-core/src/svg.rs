@@ -854,7 +854,7 @@ fn top_left_corner_anchor(inst: &crate::model::SymbolInstance, def: &SymbolDef) 
     let mut drawn: Vec<Rect> = Vec::new();
     for prim in &def.primitives {
         match prim {
-            Primitive::Text { at, text, height } => {
+            Primitive::Text { at, text, height, .. } => {
                 let c = transform_local(*at, inst);
                 let half = crate::tidy::text_width(text, *height) / 2.0;
                 drawn.push(Rect::from_corners(
@@ -1021,7 +1021,7 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
                     n(weight)
                 );
             }
-            Primitive::Text { at, text, height } => {
+            Primitive::Text { at, text, height, bold } => {
                 // 文字は常に水平に書くので、ベースラインへのずらし (文字高の半分) は
                 // シンボルと一緒に回さず、用紙の座標系で下へ取る
                 let p = transform_local(*at, inst);
@@ -1029,7 +1029,11 @@ fn render_symbol(out: &mut String, inst: &crate::model::SymbolInstance, def: &Sy
                     .and_then(|m| m.get(text.as_str()))
                     .map(String::as_str)
                     .unwrap_or(text.as_str());
-                text_el(out, p.x, p.y + height / 2.0, *height, "#000", "middle", label);
+                if *bold {
+                    text_weight_el(out, p.x, p.y + height / 2.0, *height, "#000", "middle", Weight::Bold, label);
+                } else {
+                    text_el(out, p.x, p.y + height / 2.0, *height, "#000", "middle", label);
+                }
             }
         }
     }
@@ -6010,5 +6014,42 @@ mod tests {
         assert_ne!(base, out);
         let norm = |s: String| s.lines().filter(|l| !l.contains("PUMP") && !l.contains("/2.B3")).collect::<Vec<_>>().join("\n");
         assert_eq!(norm(strip(&base)), norm(strip(&out)));
+    }
+
+    fn block_svg(pins: &str, extra: &[(&str, &str)]) -> String {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let Entity::Symbol(mut inst) = crate::block::test_block("U1", "", 100.0, 50.0, pins) else { unreachable!() };
+        for (k, v) in extra {
+            inst.attrs.insert((*k).into(), (*v).into());
+        }
+        let block = Entity::Symbol(inst);
+        sheet.entities.insert(block.id(), block);
+        sheet_to_svg(&sheet, &crate::symbol::sheet_symbol_defs(&sheet), &[])
+    }
+
+    /// A block's caption row is drawn in bold inside the box, an unnumbered pin prints its name once and no number, and a spacer row draws nothing.
+    /// ブロックの見出しの行は箱の中に太字で描かれる。番号のないピンは名前を1回だけ書いて番号は書かず、すき間の行は何も描かない。
+    #[test]
+    fn svg_draws_block_captions_in_bold_and_unnumbered_pins_by_name() {
+        let svg = block_svg(r#"{"left":[{"caption":"POWER"},{"name":"VIN"},{"gap":2},{"no":"7","name":"GND"}]}"#, &[]);
+        assert!(svg.contains("font-weight=\"bold\">POWER<"), "{svg}");
+        assert_eq!(svg.matches(">VIN<").count(), 1, "名前だけ: {svg}");
+        assert_eq!(svg.matches(">GND<").count(), 1);
+        assert_eq!(svg.matches(">7<").count(), 1);
+        // 見出し以外の文字は太字にならない
+        assert_eq!(svg.matches("font-weight=\"bold\"").count(), 1);
+    }
+
+    /// block_pin_text sets the font size of the pin names, captions and numbers in the drawing, and writing the default size explicitly changes nothing.
+    /// block_pin_text は図面のピン名・見出し・番号の文字の大きさを決める。既定の大きさを明示しても何も変わらない。
+    #[test]
+    fn svg_draws_block_texts_at_the_block_pin_text_size() {
+        let pins = r#"{"left":[{"caption":"POWER"},{"no":"1","name":"VIN"}]}"#;
+        let big = block_svg(pins, &[("block_pin_text", "3.5")]);
+        for t in ["POWER", "VIN", "1"] {
+            assert!(big.lines().any(|l| l.contains(&format!(">{t}</text>")) && l.contains("font-size=\"3.500\"")), "{t}");
+        }
+        assert_eq!(block_svg(pins, &[]), block_svg(pins, &[("block_pin_text", "2")]));
+        assert_ne!(block_svg(pins, &[]), big);
     }
 }

@@ -241,6 +241,7 @@ mod tests {
                     at: Point::new(30.0, 0.0),
                     text: "XYZ".into(),
                     height: 2.5,
+                    bold: false,
                 },
             ],
             pins: vec![],

@@ -491,7 +491,7 @@ fn write_symbol_block_body(w: &mut Writer, owner: &str, def: &SymbolDef) {
                     w.solid(owner, LAYER_SYMS, pts);
                 }
             }
-            Primitive::Text { at, text, height } => {
+            Primitive::Text { at, text, height, .. } => {
                 w.text(owner, LAYER_SYMS, flip(*at), *height, 0.0, 1, 2, text);
             }
         }
@@ -2018,6 +2018,7 @@ pub fn import_dxf(
                         let numbers = attrs.remove("BLOCK_NUMBERS");
                         let caption = attrs.remove("BLOCK_CAPTION");
                         let leads = attrs.remove("BLOCK_LEADS");
+                        let pin_text = attrs.remove("BLOCK_PIN_TEXT");
                         match crate::block::imported_block_attrs(
                             pins.as_deref(),
                             size.as_deref(),
@@ -2025,6 +2026,7 @@ pub fn import_dxf(
                             numbers.as_deref(),
                             caption.as_deref(),
                             leads.as_deref(),
+                            pin_text.as_deref(),
                         ) {
                             Some(a) => attrs.extend(a),
                             None => report

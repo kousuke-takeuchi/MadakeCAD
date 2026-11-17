@@ -413,15 +413,56 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 28, the version that added the sheet's tag destination style.
-    /// 現行のファイル形式バージョンは28 (シートのタグの行き先の書き方を追加した版) である。
+    /// The current file format version is 29, the version that added unnumbered block pins, spacer and caption rows and the block text size.
+    /// 現行のファイル形式バージョンは29 (ブロックの番号なしのピン・すき間と見出しの行・文字の大きさを追加した版) である。
     #[test]
-    fn the_current_format_version_is_twenty_eight() {
-        assert_eq!(FORMAT_VERSION, 28);
+    fn the_current_format_version_is_twenty_nine() {
+        assert_eq!(FORMAT_VERSION, 29);
         let mut old = Project::new("x");
-        old.format_version = 27;
+        old.format_version = 28;
         migrate(&mut old);
-        assert_eq!(old.format_version, 28);
+        assert_eq!(old.format_version, 29);
+    }
+
+    /// A version 28 file opens as version 29 with its blocks drawn exactly as before, and a block with unnumbered pins, spacer and caption rows and a text size survives save and load with the same drawing.
+    /// 形式28のファイルは形式29として開き、ブロックは前と同じに描かれる。番号なしのピン・すき間と見出しの行・文字の大きさを持つブロックは、保存して開き直しても同じ絵になる。
+    #[test]
+    fn block_rows_and_text_size_survive_save_and_load() {
+        let mut project = Project::new("blocks");
+        let old = crate::block::test_block("U1", "", 50.0, 50.0, r#"{"left":[{"no":"1","name":"A"},{"no":"2"}],"right":[{"no":"3"}]}"#);
+        let new = crate::block::test_block(
+            "U2", "", 120.0, 50.0,
+            r#"{"left":[{"caption":"POWER"},{"name":"VIN"},{"gap":2},{"no":"7","name":"GND"}],"right":[{"name":"OUT"}]}"#,
+        );
+        let (old_id, new_id) = (old.id(), new.id());
+        let Entity::Symbol(mut new_inst) = new else { panic!("ブロックはシンボル") };
+        new_inst.attrs.insert(crate::block::BLOCK_PIN_TEXT_ATTR.into(), "3".into());
+        let new = Entity::Symbol(new_inst);
+        let drawn = |e: &Entity| {
+            let Entity::Symbol(s) = e else { panic!("ブロックはシンボル") };
+            let def = crate::block::block_symbol(&s.attrs).unwrap();
+            (s.attrs.clone(), serde_json::to_value(&def.primitives).unwrap(), serde_json::to_value(&def.pins).unwrap())
+        };
+        let (before_old, before_new) = (drawn(&old), drawn(&new));
+        project.sheets[0].entities.insert(old_id, old);
+        project.sheets[0].entities.insert(new_id, new);
+        project.format_version = 28;
+        let dir = std::env::temp_dir().join(format!("madake-io-v28-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.mdkproj");
+        std::fs::write(&path, serde_json::to_string_pretty(&project).unwrap()).unwrap();
+        let loaded = load_project(&path).unwrap();
+        assert_eq!(loaded.format_version, FORMAT_VERSION);
+        assert_eq!(drawn(&loaded.sheets[0].entities[&old_id]), before_old);
+        assert_eq!(drawn(&loaded.sheets[0].entities[&new_id]), before_new);
+        // 保存し直しても同じ
+        let again = dir.join("q.mdkproj");
+        save_project(&again, &loaded).unwrap();
+        let reloaded = load_project(&again).unwrap();
+        assert_eq!(drawn(&reloaded.sheets[0].entities[&new_id]), before_new);
+        let keys: Vec<&str> = before_new.2.as_array().unwrap().iter().map(|p| p["number"].as_str().unwrap()).collect();
+        assert_eq!(keys, ["VIN", "7", "OUT"]);
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// A version 27 file opens as version 28 with sheets in the zone style, the style survives save and load, and the default style is not written to the file.
@@ -434,7 +475,7 @@ mod tests {
         assert!(value["sheets"][0].get("xref_style").is_none());
         let mut old: Project = serde_json::from_value(value.take()).unwrap();
         migrate(&mut old);
-        assert_eq!(old.format_version, 28);
+        assert_eq!(old.format_version, FORMAT_VERSION);
         assert_eq!(old.sheets[0].xref_style, XrefStyle::Zone);
         let mut p = Project::new("t");
         p.sheets[0].xref_style = XrefStyle::SheetName;
