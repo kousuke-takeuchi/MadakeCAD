@@ -1072,4 +1072,40 @@ mod tests {
         let rows = xref_table_rows(&project);
         assert!(rows.iter().any(|r| r[2].contains("39:U3/VBUS")), "{rows:?}");
     }
+
+    /// Two plain wires labelled J7.2 on two sheets join into one project net, also when a third sheet has a port labelled J7 that has no contact 2.
+    /// 別々のシートの普通の配線に付けた J7.2 は1つのネットにまとまる。J7 というラベルのポートを持つ3枚目のシートがあり、その接点に2が無くても同じ。
+    #[test]
+    fn a_dotted_label_joins_across_sheets_when_the_prefix_port_has_no_such_contact() {
+        use crate::block::port_fixtures::{pin_at, port_block, USB};
+        let mut project = Project::new("t");
+        for name in ["B", "C"] {
+            project.sheets.push(Sheet::new(name, PaperSize::A3, Orientation::Landscape));
+        }
+        let ports = project.sheets[0].id;
+        let hub = port_block("39", 100.0, 100.0, "right", "U3", &USB);
+        let hub_id = hub.id;
+        project.sheet_mut(ports).unwrap().entities.insert(hub_id, Entity::Symbol(hub));
+        let h = pin_at(project.sheet(ports).unwrap(), hub_id, "U3");
+        for e in [wire(&[(h.x, h.y), (h.x + 20.0, h.y)]), label("J7", h.x + 20.0, h.y)] {
+            project.sheet_mut(ports).unwrap().entities.insert(e.id(), e);
+        }
+        for i in [1, 2] {
+            let id = project.sheets[i].id;
+            let r = format!("R{i}");
+            for e in [
+                symbol("resistor", &r, 100.0, 50.0),
+                wire(&[(107.5, 50.0), (130.0, 50.0)]),
+                label("J7.2", 130.0, 50.0),
+                wire(&[(92.5, 50.0), (80.0, 50.0)]),
+                label("X", 80.0, 50.0),
+            ] {
+                project.sheet_mut(id).unwrap().entities.insert(e.id(), e);
+            }
+        }
+        let nets = extract_netlist_project(&project).nets;
+        let joined = nets.iter().find(|n| n.name == "J7.2").expect("J7.2");
+        assert_eq!(joined.members.len(), 2, "{:?}", nets.iter().map(|n| (&n.name, n.members.len())).collect::<Vec<_>>());
+        assert!(crate::verify::verify_project(&project).iter().all(|d| d.code != "erc.dangling_wire" && d.code != "erc.unconnected_pin"));
+    }
 }

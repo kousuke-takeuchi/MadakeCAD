@@ -1897,4 +1897,43 @@ mod tests {
             }
         }
     }
+
+    /// A plain wire labelled J7.2 on a sheet that also has a port labelled J7 stays an ordinary net named J7.2 when the port has no contact 2, and the port's nets do not take its pins.
+    /// J7 というラベルのポートがあるシートでも、ポートに接点2が無ければ、普通の配線の J7.2 ラベルは J7.2 という普通のネットのままで、ポートのネットにその配線のピンは入らない。
+    #[test]
+    fn a_dotted_label_with_no_matching_contact_is_an_ordinary_net_name() {
+        let (mut sheet, hub, ..) = usb_link();
+        let h = pin_at(&sheet, hub, "U3");
+        put(&mut sheet, Entity::NetLabel(NetLabel { id: Uuid::new_v4(), at: Point::new(h.x + 10.0, h.y), name: "J7".into(), rotation: 0, attrs: Default::default() }));
+        let r1 = put(&mut sheet, symbol("resistor", "R1", 150.0, 150.0));
+        let r = pin_at(&sheet, r1, "1");
+        put(&mut sheet, wire(&[(r.x, r.y), (r.x - 20.0, r.y)]));
+        put(&mut sheet, Entity::NetLabel(NetLabel { id: Uuid::new_v4(), at: Point::new(r.x - 20.0, r.y), name: "J7.2".into(), rotation: 0, attrs: Default::default() }));
+        let nets = extract_netlist(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let plain = nets.iter().find(|n| n.name == "J7.2").expect("普通のネット J7.2");
+        assert_eq!(pins_of(plain), vec!["R1:1"]);
+        assert_eq!(plain.contact, None);
+        assert!(plain.contact_labels.is_empty());
+        assert!(nets.iter().filter(|n| n.contact.is_some()).all(|n| !pins_of(n).contains(&"R1:1".to_string())));
+    }
+
+    /// When the port labelled J7 does have a contact named 2, a plain wire labelled J7.2 taps that contact and joins its net.
+    /// J7 というラベルのポートに接点「2」があれば、普通の配線の J7.2 ラベルはその接点に繋がり、接点のネットに入る。
+    #[test]
+    fn a_dotted_label_on_a_real_port_net_still_taps_the_contact() {
+        let mut sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+        let hub = put(&mut sheet, Entity::Symbol(port_block("39", 100.0, 100.0, "right", "U3", &["1", "2"])));
+        let h = pin_at(&sheet, hub, "U3");
+        put(&mut sheet, wire(&[(h.x, h.y), (h.x + 20.0, h.y)]));
+        put(&mut sheet, Entity::NetLabel(NetLabel { id: Uuid::new_v4(), at: Point::new(h.x + 20.0, h.y), name: "J7".into(), rotation: 0, attrs: Default::default() }));
+        let r1 = put(&mut sheet, symbol("resistor", "R1", 150.0, 150.0));
+        let r = pin_at(&sheet, r1, "1");
+        put(&mut sheet, wire(&[(r.x, r.y), (r.x - 20.0, r.y)]));
+        put(&mut sheet, Entity::NetLabel(NetLabel { id: Uuid::new_v4(), at: Point::new(r.x - 20.0, r.y), name: "J7.2".into(), rotation: 0, attrs: Default::default() }));
+        let nets = extract_netlist(&sheet, &crate::symbol::sheet_symbol_defs(&sheet));
+        let tapped = nets.iter().find(|n| n.name == "J7.2").expect("接点2のネット");
+        assert_eq!(pins_of(tapped), vec!["39:U3/2", "R1:1"]);
+        let other = nets.iter().find(|n| n.name == "J7.1").expect("接点1のネット");
+        assert_eq!(pins_of(other), vec!["39:U3/1"]);
+    }
 }
