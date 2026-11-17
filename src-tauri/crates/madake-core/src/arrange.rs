@@ -1382,6 +1382,8 @@ impl StubArea {
 
 impl TextRoom {
     /// 図面の全ての部品の外形と文字から作る。`gone`の持ち主のものは入れない (計画が消す・置き換えるもの)。
+    /// 旗の中の自動の行き先を渡さない版で、テストだけが使う (計画は [`Self::build_with`])。
+    #[cfg(test)]
     fn build(sheet: &Sheet, defs: &[SymbolDef], gone: &BTreeSet<EntityId>) -> Self {
         Self::build_with(sheet, defs, gone, BTreeMap::new())
     }

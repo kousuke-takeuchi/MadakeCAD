@@ -238,7 +238,8 @@ pub fn symbol_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<(EntityId, Rect
 
 /// ネットラベルの文字の外接矩形。タグ付きなら旗の本体の中、タグなしなら基準点から右へ伸びる (向きによらない)。
 /// `annotation_scale`はシートの注記文字高の倍率。[`text_boxes`]と、並べ直しの短い線の置き場所選びが共に使う。
-/// 旗の中に行き先を書く書き方 ([`net_label_text_rect_in`]) は考えない (行き先を書かない旗の形)。
+/// 旗の中に行き先を書く書き方 ([`net_label_text_rect_in`]) は考えない (行き先を書かない旗の形)。テストだけが使う。
+#[cfg(test)]
 pub(crate) fn net_label_text_rect(l: &NetLabel, annotation_scale: f64) -> Rect {
     net_label_text_rect_in(l, annotation_scale, crate::model::XrefStyle::Zone, None).0
 }

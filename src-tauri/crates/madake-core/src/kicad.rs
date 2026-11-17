@@ -1240,7 +1240,7 @@ mod tests {
         let mut sheet = Sheet::new("Sheet1", PaperSize::A4, Orientation::Landscape);
         let e = placed("connector_contact", "J7", "3", 50.0, 40.0);
         sheet.entities.insert(e.id(), e);
-        let (text, report) = export_kicad_sch(&sheet, &defs(&sheet));
+        let (text, _) = export_kicad_sch(&sheet, &defs(&sheet));
         assert!(text.contains("MadakeCAD:connector_contact"), "{text}");
         assert_eq!(text.matches("(pin passive").count(), 2, "{text}");
         assert_eq!(text.matches("(number \"1\"").count(), 2, "{text}");
