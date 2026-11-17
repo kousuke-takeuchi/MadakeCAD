@@ -233,7 +233,7 @@ impl SharedDoc {
     /// 変わっていなければ **1回の編集** (undo一発) として実行する。変わっていれば計画を作り直し、3回続けて
     /// 変わったらエラー。コマンドの順は 消す配線 → 移動 → 形の置き換え → 足す配線。
     /// 変えるものが無いときは空のバッチを実行しない。
-    /// 返すJSONは `{ moved, columns, rows, routed, labelled: [{net, label}], before, after,
+    /// 返すJSONは `{ moved, columns, rows, routed, labelled: [{net, label}], kept_shape: [ネット名], before, after,
     /// wire_length_mm: {before, after}, size_mm: {before: [w, h], after: [w, h]} }`。
     /// `before`は元のシート、`after`は計画を当てた写しのシートで測る。
     pub fn arrange_sheet(
@@ -308,6 +308,7 @@ impl SharedDoc {
                 "rows": plan.rows,
                 "routed": plan.routed,
                 "labelled": labelled,
+                "kept_shape": plan.kept_shape,
                 "before": before,
                 "after": after,
                 "wire_length_mm": { "before": length_before, "after": length_after },
@@ -1922,7 +1923,7 @@ impl MadakeMcp {
     }
 
     #[tool(
-        description = "シートの部品を列と行にそろえて並べ直し、全ての配線を引き直す。部品の並び順は保ったまま、列と列・行と行の間に幅 channel_mm(既定8mm、2.5〜50)の配線の通り道をあけ、max_gap_mm(既定20mm)より広い空きはその幅まで詰める。align_mm(既定4mm)未満のずれはそろえる。部品と一緒に動くもの(部品の近くの文字・部品に付いた図形や注記・部品につながった配線の端・その部品だけにつながる接地や電源の印とラベル・部品のピンの上に直接置いたラベルや印)は一緒に動かす。端が動いたかたまりの配線は新しく引き直し、経路が見つからないかたまりはネットラベルでつなぐ。端が動かないかたまりの配線は元のまま残す。ラベルの名前は、そのかたまりが元から持つラベル名・ネット名シンボルの名前・どちらも無ければ ARR_<n> とし、labelledに{net,label}で返す。断るもの(エラーで何も変えない): ケーブルの芯が使う配線・盤面配置(パネルレイアウト)・ポートの接点・他のエンティティやFreeCADとの対応付けが指している配線・長さの出所(length_source)がまちまちな配線・同じかたまりに名前の違うラベル(ネット名シンボルを含む)がある配線・寸法・図枠や表題欄(改訂欄を含む)に収まらない並べ直し(図枠の外にすでにある内容を含む)。sheet_id省略で先頭シート。options=設定(任意。範囲外はエラーで何も変えない)。全ての変更は1回の編集で適用し、undo一発で元の図面に戻る。返り値は moved(動かした単位の数)・columns・rows・routed(引き直したネット名)・labelled([{net,label}])・before/after(get_tidy_metricsと同じ数値)・wire_length_mm(前後の配線長の合計)・size_mm(前後の内容の大きさ [幅,高さ])。変えるものが無いときは何も変更しない"
+        description = "シートの部品を列と行にそろえて並べ直し、全ての配線を引き直す。部品の並び順は保ったまま、列と列・行と行の間に幅 channel_mm(既定8mm、2.5〜50)の配線の通り道をあけ、max_gap_mm(既定20mm)より広い空きはその幅まで詰める。align_mm(既定4mm)未満のずれはそろえる。部品と一緒に動くもの(部品の近くの文字・部品に付いた図形や注記・部品につながった配線の端・その部品だけにつながる接地や電源の印とラベル・部品のピンの上に直接置いたラベルや印)は一緒に動かす。端が動いたかたまりの配線は新しく引き直し、経路が見つからないかたまりはネットラベルでつなぐ。端が動かないかたまりの配線は元のまま残す。経路が見つからないかたまりは、まず元の配線の形のまま列・行の移動に合わせて伸び縮みさせ(他の線・ピン・ラベルや他の部品の外形に触れないときだけ。kept_shapeにネット名で返す)、触れるときにネットラベルでつなぐ。ラベルの名前は、そのかたまりが元から持つラベル名・同じネットの別のかたまりのラベル名・ネット名シンボルの名前・どれも無ければ ARR_<n> とし、labelledに{net,label}で返す(電源の印は消さない)。断るもの(エラーで何も変えない): ケーブルの芯が使う配線・盤面配置(パネルレイアウト)・ポートの接点・他のエンティティやFreeCADとの対応付けが指している配線・長さの出所(length_source)がまちまちな配線・同じかたまりに名前の違うラベル(ネット名シンボルを含む)がある配線・寸法・図枠や表題欄(改訂欄を含む)に収まらない並べ直し(図枠の外にすでにある内容を含む)。sheet_id省略で先頭シート。options=設定(任意。範囲外はエラーで何も変えない)。全ての変更は1回の編集で適用し、undo一発で元の図面に戻る。返り値は moved(動かした単位の数)・columns・rows・routed(引き直したネット名)・labelled([{net,label}])・kept_shape(元の形のまま伸び縮みさせたネット名)・before/after(get_tidy_metricsと同じ数値)・wire_length_mm(前後の配線長の合計)・size_mm(前後の内容の大きさ [幅,高さ])。変えるものが無いときは何も変更しない"
     )]
     fn arrange_sheet(&self, Parameters(p): Parameters<ArrangeSheetParams>) -> Result<String, ErrorData> {
         // 設定はロックを取る前に確かめる (使えない値でエンジンを待たせない)

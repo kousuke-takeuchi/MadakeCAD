@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3603 specification clauses** across 6 areas.
+**3606 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1778,6 +1778,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The arrange tool is advertised and its description says that one undo restores the drawing. <sub>`the_arrange_tool_is_advertised`</sub>
 - Arranging two squeezed parts over MCP moves them apart, reroutes the wire and one undo restores every entity. <sub>`arranging_over_mcp_moves_reroutes_and_undoes_in_one_step`</sub>
 - The Link API arrange endpoint gives the same reply shape and refuses bad options with 400 and no change. <sub>`the_link_api_arranges_and_refuses_bad_options`</sub>
+- The reply lists the nets that kept their wire shape under `kept_shape`; it is an empty list when every cluster could be routed. <sub>`the_reply_has_an_empty_kept_shape_when_everything_is_routed`</sub>
+- The tool description tells that unroutable clusters keep their shape and come back as `kept_shape`. <sub>`the_arrange_tool_description_mentions_kept_shape`</sub>
 - A sheet with a cable is refused over MCP and over the Link API, and the drawing and its revision stay as they were. <sub>`a_refused_arrange_changes_nothing`</sub>
 - Arranging a sheet that is already arranged applies no edit at all: no new undo step and no change of revision. <sub>`arranging_an_arranged_sheet_applies_no_edit`</sub>
 - When the drawing changes once between planning and applying, the arrange plans again and applies on the new drawing as one edit. <sub>`arrange_plans_again_after_one_concurrent_edit`</sub>
@@ -2408,6 +2410,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### Human-readable output
 
 - The arrange summary lists labelled clusters and the size before and after. <sub>`arrange_summary_lists_labels_and_size`</sub>
+- The arrange summary lists the nets that kept their wire shape in one line, and omits the line when there are none. <sub>`arrange_summary_lists_nets_kept_in_shape`</sub>
 - Display width counts full-width (Japanese) characters as two columns for correct table alignment. <sub>`disp_width_counts_fullwidth_as_two`</sub>
 - Padding is based on display width, so Japanese and ASCII cells align. <sub>`pad_uses_display_width`</sub>
 - Tables align columns to the widest cell. <sub>`table_aligns_columns`</sub>

@@ -445,6 +445,11 @@ pub fn arrange(result: &Value) -> String {
             out.push_str(&format!("  {} -> {}\n", text(l, "net"), text(l, "label")));
         }
     }
+    let kept: Vec<String> =
+        result["kept_shape"].as_array().cloned().unwrap_or_default().iter().filter_map(|n| n.as_str().map(String::from)).collect();
+    if !kept.is_empty() {
+        out.push_str(&format!("元の形のまま伸び縮みさせたネット: {}\n", kept.join(", ")));
+    }
     let metric = |side: &str, key: &str| result[side][key].as_u64().unwrap_or(0);
     if result["before"].is_object() && result["after"].is_object() {
         out.push_str(&format!(
@@ -648,6 +653,16 @@ mod tests {
         assert!(out.contains("N2 -> ARR_1"), "{out}");
         assert!(out.contains("100 x 50 mm → 120 x 60 mm"), "{out}");
         assert!(out.contains("3 単位") && out.contains("2 列 x 2 行"), "{out}");
+    }
+
+    /// The arrange summary lists the nets that kept their wire shape in one line, and omits the line when there are none.
+    /// 並べ直しの要約は、元の形のまま伸び縮みさせたネットを1行で書き、無ければその行は出さない。
+    #[test]
+    fn arrange_summary_lists_nets_kept_in_shape() {
+        let out = arrange(&json!({"moved": 1, "columns": 1, "rows": 1, "routed": [], "kept_shape": ["N1", "N3"]}));
+        assert!(out.contains("元の形のまま伸び縮みさせたネット: N1, N3"), "{out}");
+        let none = arrange(&json!({"moved": 1, "columns": 1, "rows": 1, "routed": [], "kept_shape": []}));
+        assert!(!none.contains("伸び縮み"), "{none}");
     }
 
     fn sample_snapshot() -> Value {

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3603仕様項目**。
+全6領域・**3606仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1778,6 +1778,8 @@
 - 並べ直しのツールが公開され、説明にundo一発で戻ることが書いてある。 <sub>`the_arrange_tool_is_advertised`</sub>
 - MCPで詰まった2つの部品を並べ直すと離れて配線が引き直され、undo一発で全てのエンティティが元に戻る。 <sub>`arranging_over_mcp_moves_reroutes_and_undoes_in_one_step`</sub>
 - Link APIの並べ直しは同じ形の返り値を返し、使えない設定は400で断って何も変えない。 <sub>`the_link_api_arranges_and_refuses_bad_options`</sub>
+- 返り値は元の形のまま伸び縮みさせたネットを `kept_shape` に並べ、全て引き直せたときは空の配列になる。 <sub>`the_reply_has_an_empty_kept_shape_when_everything_is_routed`</sub>
+- ツールの説明は、引けないかたまりが元の形のまま伸び縮みして `kept_shape` で返ることを書く。 <sub>`the_arrange_tool_description_mentions_kept_shape`</sub>
 - ケーブルのあるシートはMCPでもLink APIでも断られ、図面も版番号も変わらない。 <sub>`a_refused_arrange_changes_nothing`</sub>
 - 並べ直し済みのシートをもう一度並べ直しても編集は1つも当てず、undoの履歴も版番号も増えない。 <sub>`arranging_an_arranged_sheet_applies_no_edit`</sub>
 - 計画と適用の間に図面が1度変わると、並べ直しは計画を作り直し、新しい図面に1回の編集として当てる。 <sub>`arrange_plans_again_after_one_concurrent_edit`</sub>
@@ -2408,6 +2410,7 @@
 ### 人間向け整形出力
 
 - 並べ直しの要約は、ラベルでつないだかたまりと前後の大きさを書く。 <sub>`arrange_summary_lists_labels_and_size`</sub>
+- 並べ直しの要約は、元の形のまま伸び縮みさせたネットを1行で書き、無ければその行は出さない。 <sub>`arrange_summary_lists_nets_kept_in_shape`</sub>
 - 表示幅は全角文字を2桁として数え、表の桁揃えを正しくする。 <sub>`disp_width_counts_fullwidth_as_two`</sub>
 - パディングは表示幅基準で、日本語とASCIIのセルが揃う。 <sub>`pad_uses_display_width`</sub>
 - 表は最も広いセルに合わせて列を揃える。 <sub>`table_aligns_columns`</sub>

@@ -122,9 +122,31 @@ async fn the_link_api_arranges_and_refuses_bad_options() {
     assert_eq!(doc.engine.lock().unwrap().revision(), revision);
     let (status, reply) = post(&router, "/api/v1/route/arrange", json!({})).await;
     assert_eq!(status, StatusCode::OK, "{reply}");
-    for key in ["moved", "columns", "rows", "routed", "labelled", "before", "after", "wire_length_mm", "size_mm"] {
+    for key in ["moved", "columns", "rows", "routed", "labelled", "kept_shape", "before", "after", "wire_length_mm", "size_mm"] {
         assert!(reply.get(key).is_some(), "返り値に「{key}」が無い: {reply}");
     }
+}
+
+/// The reply lists the nets that kept their wire shape under `kept_shape`; it is an empty list when every cluster could be routed.
+/// 返り値は元の形のまま伸び縮みさせたネットを `kept_shape` に並べ、全て引き直せたときは空の配列になる。
+#[tokio::test]
+async fn the_reply_has_an_empty_kept_shape_when_everything_is_routed() {
+    let (doc, bridge, _) = fixture();
+    let sheet = two_squeezed_parts(&doc, &bridge).await;
+    let reply = call(&bridge, "arrange_sheet", json!({"sheet_id": sheet})).await;
+    assert_eq!(reply["kept_shape"], json!([]), "{reply}");
+}
+
+/// The tool description tells that unroutable clusters keep their shape and come back as `kept_shape`.
+/// ツールの説明は、引けないかたまりが元の形のまま伸び縮みして `kept_shape` で返ることを書く。
+#[test]
+fn the_arrange_tool_description_mentions_kept_shape() {
+    let description = tool_descriptions()
+        .into_iter()
+        .find(|(tool, _)| tool == "arrange_sheet")
+        .expect("MCPツール「arrange_sheet」が公開されていない")
+        .1;
+    assert!(description.contains("kept_shape"), "説明に「kept_shape」が無い: {description}");
 }
 
 /// Adds a cable entity to the first sheet, which the arrange refuses.
