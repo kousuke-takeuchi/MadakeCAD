@@ -1332,12 +1332,74 @@ fn stretch_wires(
     Some((out, paths))
 }
 
+/// 短い線の先のラベルの文字が読める場所を調べる道具: 動かした後の図面の部品の外形・文字と、置いたラベルの文字の矩形。
+struct TextRoom {
+    /// (持ち主のid・置いたラベルはNone, 矩形)。
+    rects: Vec<(Option<EntityId>, crate::tidy::Rect)>,
+    /// シートの注記文字高の倍率。
+    scale: f64,
+}
+
+impl TextRoom {
+    /// 図面の全ての部品の外形と文字から作る。`gone`の持ち主のものは入れない (計画が消す・置き換えるもの)。
+    fn build(sheet: &Sheet, defs: &[SymbolDef], gone: &BTreeSet<EntityId>) -> Self {
+        let mut rects: Vec<(Option<EntityId>, crate::tidy::Rect)> = crate::tidy::symbol_boxes(sheet, defs)
+            .into_iter()
+            .filter(|(id, _)| !gone.contains(id))
+            .map(|(id, r)| (Some(id), r))
+            .collect();
+        rects.extend(
+            crate::tidy::text_boxes(sheet, defs).into_iter().filter(|t| t.owner.is_none_or(|o| !gone.contains(&o))).map(|t| (t.owner, t.rect)),
+        );
+        Self { rects, scale: sheet.annotation_scale() }
+    }
+
+    /// 後から消すと分かったエンティティの矩形を外す。
+    fn forget(&mut self, ids: &[EntityId]) {
+        self.rects.retain(|(o, _)| o.is_none_or(|o| !ids.contains(&o)));
+    }
+
+    /// 文字の矩形が、部品・文字・線 (`lines`) のどれかと面で重なるか。
+    fn blocked(&self, text: &crate::tidy::Rect, lines: &[Vec<Point>]) -> bool {
+        self.rects.iter().any(|(_, r)| r.overlaps(text)) || lines.iter().any(|l| l.windows(2).any(|w| seg_in_rect(w[0], w[1], text)))
+    }
+}
+
+/// 線分が矩形の内側を通るか (辺をなぞるだけ・端が触れるだけは通らない扱い。矩形どうしの重なりと同じ規則)。
+fn seg_in_rect(a: Point, b: Point, r: &crate::tidy::Rect) -> bool {
+    let span = |lo: f64, hi: f64, rlo: f64, rhi: f64| -> bool {
+        if hi - lo < EPS {
+            lo > rlo + CONNECT_EPS && lo < rhi - CONNECT_EPS
+        } else {
+            lo < rhi - CONNECT_EPS && hi > rlo + CONNECT_EPS
+        }
+    };
+    span(a.x.min(b.x), a.x.max(b.x), r.min.x, r.max.x) && span(a.y.min(b.y), a.y.max(b.y), r.min.y, r.max.y)
+}
+
+/// [`stub_entities_in`]を、ラベルの文字の置き場を調べずに呼ぶ (線と点だけで選ぶ)。
+#[cfg(test)]
+fn stub_entities(grid: &RouteGrid, fb: &Fallback, lines: &mut Vec<Vec<Point>>, spots: &mut Vec<Point>) -> (Vec<Entity>, Vec<Stub>) {
+    stub_entities_in(grid, fb, lines, spots, None)
+}
+
 /// ラベルでつなぐ短い線とラベル。ピンの向きへまっすぐ 2.5・5・7.5 mm の線を順に試し、他の線・ピン・ラベルに
 /// 触れない最初のものを使う (どれも触れるなら引き出し線、それもなければ 2.5 mm。検算が断る)。
+/// `room`があれば、ラベルの文字が部品の外形・他の文字・他の線に重ならない候補を先に選ぶ。文字の長さぶんの
+/// まっすぐな線も候補に足し、タグ付きのラベルは旗の本体がピンと反対を向くように向きを決める。
+/// そういう候補が無ければ上の選び方のまま。選んだラベルの文字の矩形は `room` に足し、次のラベルが避ける。
 /// 置いた線と端は `lines`・`spots` に足し、次の短い線が避ける。ラベルの向きと属性は、消したラベルがあればその先頭に倣う。
-fn stub_entities(grid: &RouteGrid, fb: &Fallback, lines: &mut Vec<Vec<Point>>, spots: &mut Vec<Point>) -> (Vec<Entity>, Vec<Stub>) {
+fn stub_entities_in(
+    grid: &RouteGrid,
+    fb: &Fallback,
+    lines: &mut Vec<Vec<Point>>,
+    spots: &mut Vec<Point>,
+    mut room: Option<&mut TextRoom>,
+) -> (Vec<Entity>, Vec<Stub>) {
     let mut out = Vec::new();
     let mut stubs = Vec::new();
+    let (rotation, template_attrs) = fb.template.as_ref().map_or((0, Default::default()), |t| (t.rotation, t.attrs.clone()));
+    let template_tag = fb.template.as_ref().and_then(crate::net_tag::tag_dir);
     for (pos, dir, attrs) in &fb.terms {
         let Some(dir) = dir else { continue };
         let (sx, sy) = dir_step(*dir);
@@ -1361,19 +1423,81 @@ fn stub_entities(grid: &RouteGrid, fb: &Fallback, lines: &mut Vec<Vec<Point>>, s
                 cands.push(vec![*pos, pos.translated(px * STUB_MM * k, py * STUB_MM * k)]);
             }
         }
-        let pts = cands
-            .iter()
-            .find(|c| !stub_hits(c, lines, spots))
-            .or_else(|| cands.iter().find(|c| !stub_touches(c, lines, spots)))
-            .cloned()
-            .unwrap_or_else(|| cands[0].clone());
+        let label_at = |end: Point, tag: Option<&str>| {
+            let mut attrs = template_attrs.clone();
+            if let Some(t) = tag {
+                attrs.insert(crate::net_tag::TAG_ATTR.to_string(), t.to_string());
+            }
+            NetLabel { id: uuid::Uuid::nil(), at: end, name: fb.name.clone(), rotation, attrs }
+        };
+        let mut tag_of: Option<&'static str> = None;
+        let mut chosen: Option<Vec<Point>> = None;
+        if let Some(room) = room.as_deref() {
+            // 文字が横に収まる長さのまっすぐな線を、3本の短い線のあとへ足す
+            let width = crate::tidy::net_label_text_rect(&label_at(*pos, None), room.scale);
+            let width = width.max.x - width.min.x;
+            let long = (width / STUB_MM).ceil() * STUB_MM + STUB_MM;
+            let mut ordered = cands.clone();
+            if long > STUB_MM * 3.0 + EPS {
+                for (n, extra) in [0.0, 1.0, 2.0].iter().enumerate() {
+                    let l = long + STUB_MM * extra;
+                    ordered.insert(3 + n, vec![*pos, pos.translated(sx * l, sy * l)]);
+                }
+            }
+            'search: for pts in &ordered {
+                if stub_hits(pts, lines, spots) {
+                    continue;
+                }
+                let (a, b) = (pts[pts.len() - 2], pts[pts.len() - 1]);
+                let end = b;
+                // タグ付きの手本: 西向きなら本体は左 (右向きの旗)、東向きなら本体は右。縦なら手本の側と逆の側の両方を試す
+                let tags: Vec<Option<&'static str>> = match template_tag {
+                    None => vec![None],
+                    Some(side) => {
+                        let (own, other) = match side {
+                            crate::net_tag::TagDir::Left => ("left", "right"),
+                            crate::net_tag::TagDir::Right => ("right", "left"),
+                        };
+                        if (a.y - b.y).abs() < EPS && b.x < a.x - EPS {
+                            vec![Some("right")]
+                        } else if (a.y - b.y).abs() < EPS && b.x > a.x + EPS {
+                            vec![Some("left")]
+                        } else {
+                            vec![Some(own), Some(other)]
+                        }
+                    }
+                };
+                for tag in tags {
+                    let text = crate::tidy::net_label_text_rect(&label_at(end, tag), room.scale);
+                    // 自分の短い線は避ける対象に入れない (まだ `lines` に入っていない)
+                    if !room.blocked(&text, lines) {
+                        chosen = Some(pts.clone());
+                        tag_of = tag;
+                        break 'search;
+                    }
+                }
+            }
+        }
+        let pts = chosen.unwrap_or_else(|| {
+            tag_of = None;
+            cands
+                .iter()
+                .find(|c| !stub_hits(c, lines, spots))
+                .or_else(|| cands.iter().find(|c| !stub_touches(c, lines, spots)))
+                .cloned()
+                .unwrap_or_else(|| cands[0].clone())
+        });
         let end = *pts.last().expect("2点以上");
+        let placed = label_at(end, tag_of);
+        if let Some(room) = room.as_deref_mut() {
+            let r = crate::tidy::net_label_text_rect(&placed, room.scale);
+            room.rects.push((None, r));
+        }
         lines.push(pts.clone());
         spots.push(end);
         let (wire, label) = (uuid::Uuid::new_v4(), uuid::Uuid::new_v4());
-        let (rotation, label_attrs) = fb.template.as_ref().map_or((0, Default::default()), |t| (t.rotation, t.attrs.clone()));
         out.push(Entity::Wire(Wire { id: wire, points: pts, ..attrs.clone() }));
-        out.push(Entity::NetLabel(NetLabel { id: label, at: end, name: fb.name.clone(), rotation, attrs: label_attrs }));
+        out.push(Entity::NetLabel(NetLabel { id: label, ..placed }));
         stubs.push(Stub { wire, label, name: fb.name.clone(), check: true });
     }
     (out, stubs)
@@ -1831,6 +1955,8 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
             _ => None,
         }))
         .collect();
+    // ラベルの文字が読める場所を探すための、動かした後の部品の外形と文字 (置いたラベルの文字も足していく)
+    let mut room = TextRoom::build(&moved, defs, &dropped);
     let mut remove: BTreeSet<EntityId> = deleted.clone();
     let mut labelled: Vec<(String, String)> = Vec::new();
     for (ci, name) in kept_fallbacks {
@@ -1852,7 +1978,7 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
             add.push(e);
         }
         let fb = Fallback { net: k.net.clone(), name: name.name, terms, template: name.template };
-        let (es, ss) = stub_entities(&grid, &fb, &mut stub_lines, &mut stub_spots);
+        let (es, ss) = stub_entities_in(&grid, &fb, &mut stub_lines, &mut stub_spots, Some(&mut room));
         for e in es {
             if let Entity::Wire(w) = &e {
                 fixed_lines.push(w.points.clone());
@@ -1886,13 +2012,15 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
             attrs.length_source = Default::default();
             let terms = trip.iter().filter(|t| !name.skip.iter().any(|q| near(*q, t.0))).map(|t| (t.1, t.2, attrs.clone())).collect();
             let fb = Fallback { net: u.net.clone(), name: name.name.clone(), terms, template: name.template.clone() };
+            // 置き換える古いラベルの文字は避ける対象から外す
+            room.forget(&name.delete);
             let links = kept_links(sheet, &owners, &lay, &name.keep);
             for e in &links {
                 if let Entity::Wire(w) = e {
                     stub_lines.push(w.points.clone());
                 }
             }
-            let (mut es, mut ss) = stub_entities(&grid, &fb, &mut stub_lines, &mut stub_spots);
+            let (mut es, mut ss) = stub_entities_in(&grid, &fb, &mut stub_lines, &mut stub_spots, Some(&mut room));
             for e in &links {
                 if let Entity::Wire(w) = e {
                     ss.push(Stub { wire: w.id, label: w.id, name: fb.name.clone(), check: false });
@@ -3523,6 +3651,92 @@ mod tests {
         let mut spots = vec![p(60.0, 50.5)];
         let (es, _) = stub_entities(&grid, &fb, &mut vec![], &mut spots);
         assert_eq!(stub_points(&es), vec![(60.0, 50.0), (62.5, 50.0)]);
+    }
+
+    /// A plain label on a west-facing pin keeps its text off its own part: the stub grows until the text sits beside it.
+    /// 西向きのピンの、タグなしのラベルは、文字が自分の部品に重ならない。文字が収まる長さまで短い線を伸ばす。
+    #[test]
+    fn a_plain_label_on_a_west_pin_keeps_its_text_off_its_own_part() {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (60.0, 50.0), "R1");
+        let grid = RouteGrid::build(&sh, &defs(), &ArrangeOptions::default().route);
+        let w = old_wire_at(&sh, &[], p(0.0, 0.0));
+        let fb = Fallback { net: "N".into(), name: "NET_A".into(), terms: vec![(p(50.0, 50.0), Some(Dir::W), w)], template: None };
+        let part = crate::tidy::symbol_boxes(&sh, &defs()).remove(0).1;
+        let text_of = |es: &[Entity]| -> crate::tidy::Rect {
+            let l = es.iter().find_map(|e| if let Entity::NetLabel(l) = e { Some(l) } else { None }).expect("label");
+            crate::tidy::net_label_text_rect(l, sh.annotation_scale())
+        };
+        // 文字を調べない選び方では、2.5 mm の線の先から右へ伸びる文字が部品に重なる
+        let (plain, _) = stub_entities(&grid, &fb, &mut vec![], &mut vec![]);
+        assert!(text_of(&plain).overlaps(&part), "before the fix the text sits on the part");
+        let mut room = TextRoom::build(&sh, &defs(), &BTreeSet::new());
+        let (es, _) = stub_entities_in(&grid, &fb, &mut vec![], &mut vec![], Some(&mut room));
+        assert!(!text_of(&es).overlaps(&part), "{:?} vs {:?}", text_of(&es), part);
+        assert_eq!(stub_points(&es)[0], (50.0, 50.0));
+    }
+
+    /// Fallback labels on two pins 2.5 mm apart do not print their texts on top of each other.
+    /// 2.5 mm 離れた2つのピンのラベルは、文字が互いに重ならない。
+    #[test]
+    fn labels_on_neighbouring_pins_do_not_overlap_their_texts() {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (60.0, 50.0), "R1");
+        place(&mut sh, "box2", (60.0, 52.5), "R2");
+        let grid = RouteGrid::build(&sh, &defs(), &ArrangeOptions::default().route);
+        let w = old_wire_at(&sh, &[], p(0.0, 0.0));
+        let fb = Fallback {
+            net: "N".into(),
+            name: "NET_A".into(),
+            terms: vec![(p(50.0, 50.0), Some(Dir::W), w.clone()), (p(50.0, 52.5), Some(Dir::W), w)],
+            template: None,
+        };
+        let mut room = TextRoom::build(&sh, &defs(), &BTreeSet::new());
+        let (es, _) = stub_entities_in(&grid, &fb, &mut vec![], &mut vec![], Some(&mut room));
+        let texts: Vec<crate::tidy::Rect> = es
+            .iter()
+            .filter_map(|e| if let Entity::NetLabel(l) = e { Some(crate::tidy::net_label_text_rect(l, sh.annotation_scale())) } else { None })
+            .collect();
+        assert_eq!(texts.len(), 2);
+        assert!(!texts[0].overlaps(&texts[1]), "{texts:?}");
+        // どちらも部品の外形に重ならない
+        for part in crate::tidy::symbol_boxes(&sh, &defs()) {
+            assert!(texts.iter().all(|t| !t.overlaps(&part.1)), "{texts:?} vs {:?}", part.1);
+        }
+    }
+
+    /// A tagged template on a west-going stub gets the tag whose body points away from the pin.
+    /// タグ付きの手本のラベルが西へ出る短い線に付くときは、旗の本体がピンと反対を向く側のタグになる。
+    #[test]
+    fn a_tagged_label_on_a_west_stub_gets_its_body_away_from_the_pin() {
+        let mut sh = new_sheet();
+        place(&mut sh, "box2", (60.0, 50.0), "R1");
+        let grid = RouteGrid::build(&sh, &defs(), &ArrangeOptions::default().route);
+        let w = old_wire_at(&sh, &[], p(0.0, 0.0));
+        // 手本は本体が右側 ("left")。西向きでは本体を左 ("right") にしないと部品に被さる
+        let mut attrs = std::collections::BTreeMap::new();
+        attrs.insert(crate::net_tag::TAG_ATTR.to_string(), "left".to_string());
+        let template = NetLabel { id: Uuid::new_v4(), at: p(0.0, 0.0), name: "NET_A".into(), rotation: 0, attrs };
+        let fb = Fallback { net: "N".into(), name: "NET_A".into(), terms: vec![(p(50.0, 50.0), Some(Dir::W), w)], template: Some(template) };
+        let mut room = TextRoom::build(&sh, &defs(), &BTreeSet::new());
+        let (es, _) = stub_entities_in(&grid, &fb, &mut vec![], &mut vec![], Some(&mut room));
+        let l = es.iter().find_map(|e| if let Entity::NetLabel(l) = e { Some(l) } else { None }).expect("label");
+        assert_eq!(l.attrs.get(crate::net_tag::TAG_ATTR).map(String::as_str), Some("right"));
+    }
+
+    /// When no stub leaves room for the text, the stub is the one chosen without the text check, and it still starts at the pin.
+    /// どの短い線にも文字の置き場が無いときは、文字を調べずに選ぶ短い線と同じものになり、ピンからつながる。
+    #[test]
+    fn a_boxed_in_pin_keeps_the_stub_chosen_without_the_text_check() {
+        let (grid, fb) = stub_fixture();
+        let lines = vec![vec![p(62.5, 40.0), p(62.5, 60.0)]];
+        let (without, _) = stub_entities(&grid, &fb, &mut lines.clone(), &mut vec![]);
+        let mut room = TextRoom { rects: vec![(None, crate::tidy::Rect::from_corners(p(-500.0, -500.0), p(500.0, 500.0)))], scale: 1.0 };
+        let (es, stubs) = stub_entities_in(&grid, &fb, &mut lines.clone(), &mut vec![], Some(&mut room));
+        assert_eq!(stub_points(&es), stub_points(&without));
+        assert_eq!(stub_points(&es)[0], (60.0, 50.0));
+        assert_eq!(stubs.len(), 1);
+        assert_eq!(room.rects.len(), 2, "the placed label text is added to the room");
     }
 
     /// A stub placed first is avoided by the next one, because its wire and end are added to the lists the next stub avoids.

@@ -21,7 +21,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::geometry::Point;
-use crate::model::{Entity, EntityId, Sheet, SymbolInstance};
+use crate::model::{Entity, EntityId, NetLabel, Sheet, SymbolInstance};
 use crate::netlist::{transform_local, CONNECT_EPS};
 use crate::symbol::{Primitive, SymbolDef};
 
@@ -236,12 +236,24 @@ pub fn symbol_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<(EntityId, Rect
         .collect()
 }
 
+/// ネットラベルの文字の外接矩形。タグ付きなら旗の本体の中、タグなしなら基準点から右へ伸びる (向きによらない)。
+/// `annotation_scale`はシートの注記文字高の倍率。[`text_boxes`]と、並べ直しの短い線の置き場所選びが共に使う。
+pub(crate) fn net_label_text_rect(l: &NetLabel, annotation_scale: f64) -> Rect {
+    use crate::svg::{LABEL_FONT, NET_LABEL_DY};
+    let font = LABEL_FONT * annotation_scale;
+    let (x, baseline) = match crate::net_tag::net_tag(l, font) {
+        Some(tag) => (tag.text_at.x, tag.text_at.y),
+        None => (l.at.x, l.at.y - NET_LABEL_DY * annotation_scale),
+    };
+    text_box(x, baseline, font, Anchor::Start, &l.name)
+}
+
 /// 図面に印字される全ての文字の外接矩形。位置と大きさはSVG/PDF出力と同じ規則で求める
 /// (参照記号・型番はシンボル外形の上、ネットラベルは基準点の上、線番はネットの
 /// 代表線分の脇)。
 pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
     use crate::svg::{
-        LABEL_FONT, NET_LABEL_DY, REF_LABEL_DY, VALUE_LABEL_DY, WIRE_NO_FONT, WIRE_NO_GAP,
+        LABEL_FONT, REF_LABEL_DY, VALUE_LABEL_DY, WIRE_NO_FONT, WIRE_NO_GAP,
     };
     let defs = crate::symbol::DefIndex::new(symbols);
     // 注記の層 (ネットラベル・タグ・線番) はシートの注記文字高で伸縮する (G20)
@@ -309,13 +321,8 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
             }
             // タグ付きラベルの文字は旗の本体の中 (基準点の左右どちらに来るかは向き次第)
             Entity::NetLabel(l) if !l.name.is_empty() => {
-                let font = LABEL_FONT * annotation_scale;
-                let (x, baseline) = match crate::net_tag::net_tag(l, font) {
-                    Some(tag) => (tag.text_at.x, tag.text_at.y),
-                    None => (l.at.x, l.at.y - NET_LABEL_DY * annotation_scale),
-                };
                 boxes.push(TextBox {
-                    rect: text_box(x, baseline, font, Anchor::Start, &l.name),
+                    rect: net_label_text_rect(l, annotation_scale),
                     text: l.name.clone(),
                     kind: TextKind::NetLabel,
                     owner: Some(l.id),
