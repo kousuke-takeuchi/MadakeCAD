@@ -66,6 +66,12 @@ pub enum Command {
         #[serde(default)]
         hide_numbers: bool,
     },
+    /// シートのタグの行き先の書き方 ([`crate::model::XrefStyle`])。`zone` はゾーン住所を旗の外へ、
+    /// `sheet_name` は行き先のシート名を旗の中へ書く。
+    SetSheetXrefStyle {
+        sheet_id: SheetId,
+        style: crate::model::XrefStyle,
+    },
     /// シートの用紙サイズ・向きの変更 (G15)。既存エンティティの座標はそのまま
     /// (動かない・消えない)。ゾーン分割 (`zone_cols`/`zone_rows`) も**変えない**
     /// (シートが正。図枠テンプレートの差し替えと同じで、クロスリファレンスの
@@ -809,6 +815,18 @@ impl Engine {
                         vivid_colors: old_vivid,
                         hide_numbers: old_numbers,
                     }],
+                ))
+            }
+            Command::SetSheetXrefStyle { sheet_id, style } => {
+                let sheet = self
+                    .project
+                    .sheet_mut(*sheet_id)
+                    .ok_or(CoreError::SheetNotFound(*sheet_id))?;
+                let old = std::mem::replace(&mut sheet.xref_style, *style);
+                let meta = sheet_meta(sheet);
+                Ok((
+                    vec![PatchOp::SheetMetaUpdated { sheet: meta }],
+                    vec![Command::SetSheetXrefStyle { sheet_id: *sheet_id, style: old }],
                 ))
             }
             Command::SetSheetPaper {
@@ -5732,5 +5750,43 @@ mod tests {
         assert_eq!(engine.project().sim_cases, vec![a, b, c]);
         let err = engine.execute(Command::RemoveSimCase { id: Uuid::new_v4() }).unwrap_err();
         assert!(matches!(err, CoreError::InvalidCommand(_)));
+    }
+
+    /// Setting a sheet's tag destination style stores it, reports the sheet meta, and undo restores the previous style.
+    /// シートのタグの行き先の書き方を設定すると保存され、シートの情報が配信され、元に戻すと前の書き方に戻る。
+    #[test]
+    fn set_sheet_xref_style_stores_the_style_and_undoes() {
+        let (mut engine, sheet_id) = test_engine();
+        let patch = engine
+            .execute(Command::SetSheetXrefStyle { sheet_id, style: crate::model::XrefStyle::SheetName })
+            .unwrap();
+        assert!(matches!(patch.ops.as_slice(), [PatchOp::SheetMetaUpdated { sheet }] if sheet.xref_style == crate::model::XrefStyle::SheetName));
+        assert_eq!(engine.project().sheet(sheet_id).unwrap().xref_style, crate::model::XrefStyle::SheetName);
+        engine.undo().unwrap();
+        assert_eq!(engine.project().sheet(sheet_id).unwrap().xref_style, crate::model::XrefStyle::Zone);
+        engine.redo().unwrap();
+        assert_eq!(engine.project().sheet(sheet_id).unwrap().xref_style, crate::model::XrefStyle::SheetName);
+    }
+
+    /// Setting the style on a sheet that does not exist is refused.
+    /// 存在しないシートにタグの行き先の書き方を設定すると断られる。
+    #[test]
+    fn set_sheet_xref_style_refuses_an_unknown_sheet() {
+        let (mut engine, _) = test_engine();
+        let err = engine
+            .execute(Command::SetSheetXrefStyle { sheet_id: Uuid::new_v4(), style: crate::model::XrefStyle::SheetName })
+            .unwrap_err();
+        assert!(matches!(err, CoreError::SheetNotFound(_)), "{err:?}");
+    }
+
+    /// The command takes the snake_case style names from JSON and refuses an unknown one.
+    /// コマンドはJSONの snake_case の書き方名を受け取り、知らない名前は断る。
+    #[test]
+    fn set_sheet_xref_style_reads_json_style_names() {
+        let id = Uuid::new_v4();
+        let ok: Command = serde_json::from_value(serde_json::json!({"type": "set_sheet_xref_style", "sheet_id": id, "style": "sheet_name"})).unwrap();
+        assert!(matches!(ok, Command::SetSheetXrefStyle { style: crate::model::XrefStyle::SheetName, .. }));
+        let bad = serde_json::from_value::<Command>(serde_json::json!({"type": "set_sheet_xref_style", "sheet_id": id, "style": "arrow"}));
+        assert!(bad.is_err());
     }
 }

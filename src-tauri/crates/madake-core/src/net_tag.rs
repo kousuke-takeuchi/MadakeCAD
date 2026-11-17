@@ -15,7 +15,7 @@
 //! キャンバスで同一の数式を使う。
 
 use crate::geometry::Point;
-use crate::model::{NetLabel, TextAnchor};
+use crate::model::{NetLabel, TextAnchor, XrefStyle};
 use crate::svg::{LABEL_FONT, NET_LABEL_DY};
 use crate::xref::XREF_GAP;
 
@@ -30,6 +30,12 @@ pub const TAG_TIP: f64 = 2.0;
 pub const TAG_STROKE: f64 = 0.25;
 /// `attrs` でタグの向きを指定するキー。
 pub const TAG_ATTR: &str = "tag";
+/// `attrs` で行き先の文字を指定するキー (空なら自動)。
+pub const DEST_ATTR: &str = "tag_dest";
+/// `attrs` で旗の先端の置き方を指定するキー (`out` なら先端が本体の遠い端)。
+pub const FLOW_ATTR: &str = "tag_flow";
+/// 旗の中に書く行き先の文字高さの、ネット名に対する倍率。
+pub const DEST_SCALE: f64 = 0.8;
 
 /// タグの向き。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,6 +62,12 @@ pub struct NetTag {
     pub xref_at: Point,
     /// クロスリファレンスの寄せ方。左へ逃がすときは右揃え。
     pub xref_anchor: TextAnchor,
+    /// ネット名を太字で描くか (行き先を旗の中に書く書き方のとき)。
+    pub bold: bool,
+    /// 旗の中に書く行き先の左端のベースライン (書かないなら `None`)。
+    pub dest_at: Option<Point>,
+    /// 行き先の文字高さ (mm)。
+    pub dest_font: f64,
 }
 
 /// ラベルのタグ向き。`attrs["tag"]`が無い・空・知らない値なら`None` (従来どおり文字だけ)。
@@ -67,52 +79,83 @@ pub fn tag_dir(label: &NetLabel) -> Option<TagDir> {
     }
 }
 
-/// ラベルのタグ形状。タグ指定の無いラベルは`None`。
+/// ラベルの行き先の自由な文字。`attrs["tag_dest"]` が空・空白だけなら `None` (自動の行き先を使う)。
+pub fn tag_dest(label: &NetLabel) -> Option<&str> {
+    label.attrs.get(DEST_ATTR).map(|s| s.trim()).filter(|s| !s.is_empty())
+}
+
+/// 旗の先端を本体の遠い端へ置くか (`attrs["tag_flow"] == "out"`)。
+pub fn tag_flows_out(label: &NetLabel) -> bool {
+    label.attrs.get(FLOW_ATTR).map(|s| s.trim()) == Some("out")
+}
+
+/// ラベルのタグ形状。タグ指定の無いラベルは`None`。行き先を旗の中に書かない ([`XrefStyle::Zone`]) 形。
 ///
 /// `font` はネットラベル本文の文字高さ (mm)。シートの注記文字高で決まり、
 /// 余白・先端・ベースラインの持ち上げも同じ比率で伸縮する。
 pub fn net_tag(label: &NetLabel, font: f64) -> Option<NetTag> {
+    net_tag_with(label, font, XrefStyle::Zone, None)
+}
+
+/// [`net_tag`] の本体。`style` が [`XrefStyle::SheetName`] なら、ネット名を太字にし、`dest` (行き先の文字) が
+/// あれば名前のあとに文字高 [`DEST_SCALE`] 倍で書き、旗をその分だけ広げる。そのとき旗の外へクロスリファレンスは書かない
+/// (`xref_at` はゾーン書式の時のためだけの値)。
+pub fn net_tag_with(label: &NetLabel, font: f64, style: XrefStyle, dest: Option<&str>) -> Option<NetTag> {
     let dir = tag_dir(label)?;
+    let out = tag_flows_out(label);
     let scale = font / LABEL_FONT;
     let (pad, tip, gap) = (TAG_PAD * scale, TAG_TIP * scale, XREF_GAP * scale);
-    let text_w = crate::tidy::text_width(&label.name, font) * TAG_WIDTH_SLACK;
+    let inside = style == XrefStyle::SheetName;
+    let dest = if inside { dest.map(str::trim).filter(|d| !d.is_empty()) } else { None };
+    let name_w = crate::tidy::text_width(&label.name, font) * TAG_WIDTH_SLACK;
+    let dest_font = font * DEST_SCALE;
+    let dest_gap = font;
+    let dest_w = dest.map_or(0.0, |d| crate::tidy::text_width(d, dest_font) * TAG_WIDTH_SLACK);
+    let text_w = name_w + dest.map_or(0.0, |_| dest_gap + dest_w);
     let body_w = text_w + pad * 2.0;
     let baseline = label.at.y - NET_LABEL_DY * scale;
     let top = baseline - font - pad;
     let bottom = baseline + pad;
     let cy = (top + bottom) / 2.0;
     let x0 = label.at.x;
-    let (points, text_x, left, right, xref_x, xref_anchor) = match dir {
-        // 先端が右 = 本体は基準点の左側。逃がしも左 (右揃え)
-        TagDir::Right => (
-            vec![
-                Point::new(x0 - body_w, top),
-                Point::new(x0, top),
-                Point::new(x0 + tip, cy),
-                Point::new(x0, bottom),
-                Point::new(x0 - body_w, bottom),
-            ],
-            x0 - body_w + pad,
-            x0 - body_w,
+    // 本体の左右の端 (先端は含まない) と先端の頂点
+    let (bx0, bx1) = match dir {
+        TagDir::Right => (x0 - body_w, x0),
+        TagDir::Left => (x0, x0 + body_w),
+    };
+    let (points, left, right) = match (dir, out) {
+        // 先端が右 = 本体は基準点の左側
+        (TagDir::Right, false) => (
+            vec![Point::new(bx0, top), Point::new(x0, top), Point::new(x0 + tip, cy), Point::new(x0, bottom), Point::new(bx0, bottom)],
+            bx0,
             x0 + tip,
-            x0 - body_w - gap,
-            TextAnchor::End,
         ),
-        // 先端が左 = 本体は基準点の右側。逃がしも右 (左揃え)
-        TagDir::Left => (
-            vec![
-                Point::new(x0 - tip, cy),
-                Point::new(x0, top),
-                Point::new(x0 + body_w, top),
-                Point::new(x0 + body_w, bottom),
-                Point::new(x0, bottom),
-            ],
-            x0 + pad,
+        // 先端が左 = 本体は基準点の右側
+        (TagDir::Left, false) => (
+            vec![Point::new(x0 - tip, cy), Point::new(x0, top), Point::new(bx1, top), Point::new(bx1, bottom), Point::new(x0, bottom)],
             x0 - tip,
-            x0 + body_w,
-            x0 + body_w + gap,
-            TextAnchor::Start,
+            bx1,
         ),
+        // 外向き: 基準点を平らな辺にし、先端は本体の遠い端 (配線から離れる向き) へ
+        (TagDir::Right, true) => (
+            vec![Point::new(x0, top), Point::new(bx0, top), Point::new(bx0 - tip, cy), Point::new(bx0, bottom), Point::new(x0, bottom)],
+            bx0 - tip,
+            x0,
+        ),
+        (TagDir::Left, true) => (
+            vec![Point::new(x0, top), Point::new(bx1, top), Point::new(bx1 + tip, cy), Point::new(bx1, bottom), Point::new(x0, bottom)],
+            x0,
+            bx1 + tip,
+        ),
+    };
+    let text_x = match dir {
+        TagDir::Right => bx0 + pad,
+        TagDir::Left => x0 + pad,
+    };
+    let (xref_x, xref_anchor) = match dir {
+        // 逃がしは本体側 (右向きは左へ右揃え、左向きは右へ左揃え)
+        TagDir::Right => (left - gap, TextAnchor::End),
+        TagDir::Left => (right + gap, TextAnchor::Start),
     };
     Some(NetTag {
         dir,
@@ -122,6 +165,9 @@ pub fn net_tag(label: &NetLabel, font: f64) -> Option<NetTag> {
         right,
         xref_at: Point::new(xref_x, baseline),
         xref_anchor,
+        bold: inside,
+        dest_at: dest.map(|_| Point::new(text_x + name_w + dest_gap, baseline)),
+        dest_font,
     })
 }
 
@@ -280,6 +326,83 @@ mod tests {
     fn unknown_tag_value_is_ignored() {
         for value in ["up", "", "LEFT", "右"] {
             assert!(net_tag(&label("24V", Some(value)), LABEL_FONT).is_none(), "{value}");
+        }
+    }
+
+    fn label_with(name: &str, extra: &[(&str, &str)]) -> NetLabel {
+        let mut l = label(name, Some("right"));
+        for (k, v) in extra {
+            l.attrs.insert((*k).to_string(), (*v).to_string());
+        }
+        l
+    }
+
+    /// In the zone style a destination changes nothing: the flag and the text are exactly the same as without it.
+    /// ゾーン住所の書き方では、行き先を渡しても旗も文字も変わらない (行き先なしと全く同じ)。
+    #[test]
+    fn the_zone_style_ignores_a_destination() {
+        let plain = net_tag(&label("24V", Some("right")), LABEL_FONT).unwrap();
+        let with = net_tag_with(&label("24V", Some("right")), LABEL_FONT, XrefStyle::Zone, Some("Power")).unwrap();
+        assert_eq!(plain, with);
+        assert!(!plain.bold && plain.dest_at.is_none());
+    }
+
+    /// In the sheet-name style the flag grows to hold the destination after the bold name, at 0.8 of the label size and one label height apart.
+    /// シート名の書き方では、旗が広がって、太字のネット名のあとに行き先が文字高0.8倍で、ラベルの高さ1つぶんあけて入る。
+    #[test]
+    fn the_sheet_name_style_widens_the_flag_for_the_destination() {
+        let l = label("24V", Some("right"));
+        let name_only = net_tag_with(&l, LABEL_FONT, XrefStyle::SheetName, None).unwrap();
+        let both = net_tag_with(&l, LABEL_FONT, XrefStyle::SheetName, Some("Power")).unwrap();
+        assert!(name_only.bold && both.bold);
+        assert!(name_only.dest_at.is_none());
+        let at = both.dest_at.expect("行き先の位置");
+        assert!((both.dest_font - LABEL_FONT * DEST_SCALE).abs() < 1e-9);
+        let name_w = crate::tidy::text_width("24V", LABEL_FONT) * TAG_WIDTH_SLACK;
+        assert!((at.x - (both.text_at.x + name_w + LABEL_FONT)).abs() < 1e-9, "名前の幅+文字高のあき");
+        assert!((at.y - both.text_at.y).abs() < 1e-9);
+        assert!(both.right - both.left > name_only.right - name_only.left);
+        let dest_w = crate::tidy::text_width("Power", both.dest_font) * TAG_WIDTH_SLACK;
+        assert!(at.x + dest_w < both.points[1].x, "行き先は枠の内側に収まる");
+    }
+
+    /// A blank destination counts as none, and the flag with only a name is the same size as the plain tag.
+    /// 空白だけの行き先は無いものとして扱われ、名前だけの旗は普通のタグと同じ大きさになる。
+    #[test]
+    fn a_blank_destination_is_no_destination() {
+        let l = label("24V", Some("right"));
+        let a = net_tag_with(&l, LABEL_FONT, XrefStyle::SheetName, Some("  ")).unwrap();
+        let plain = net_tag(&l, LABEL_FONT).unwrap();
+        assert!(a.dest_at.is_none());
+        assert_eq!(a.points, plain.points);
+        assert_eq!(tag_dest(&label_with("X", &[(DEST_ATTR, "  ")])), None);
+        assert_eq!(tag_dest(&label_with("X", &[(DEST_ATTR, " Pump ")])), Some("Pump"));
+    }
+
+    /// With tag_flow out the flat side stays on the label point and the pointed end is at the far end of the body, so the flag points away from the wire.
+    /// tag_flow が out のときは、平らな辺がラベルの点にあり、先端は本体の遠い端にあって、旗は配線から離れる向きを指す。
+    #[test]
+    fn flow_out_moves_the_point_to_the_far_end() {
+        let out_right = net_tag(&label_with("24V", &[(FLOW_ATTR, "out")]), LABEL_FONT).unwrap();
+        assert!((out_right.right - 100.0).abs() < 1e-9, "基準点が右の端");
+        assert!(out_right.points[2].x < out_right.points[1].x, "先端は左の端");
+        assert!((out_right.points[2].x - out_right.left).abs() < 1e-9);
+        assert!(out_right.text_at.x < 100.0, "本体の側は変わらない");
+        let mut l = label_with("24V", &[(FLOW_ATTR, "out")]);
+        l.attrs.insert(TAG_ATTR.into(), "left".into());
+        let out_left = net_tag(&l, LABEL_FONT).unwrap();
+        assert!((out_left.left - 100.0).abs() < 1e-9);
+        assert!((out_left.points[2].x - out_left.right).abs() < 1e-9, "先端は右の端");
+        assert!(out_left.xref_at.x > out_left.right, "逃がしは先端の外");
+    }
+
+    /// Any tag_flow value other than out leaves today's shape.
+    /// tag_flow が out 以外なら、今までの形のまま。
+    #[test]
+    fn other_flow_values_keep_the_old_shape() {
+        let plain = net_tag(&label("24V", Some("right")), LABEL_FONT).unwrap();
+        for v in ["", "in", "OUT"] {
+            assert_eq!(net_tag(&label_with("24V", &[(FLOW_ATTR, v)]), LABEL_FONT).unwrap(), plain, "{v}");
         }
     }
 }

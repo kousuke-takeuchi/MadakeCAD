@@ -76,10 +76,30 @@ pub type SheetId = Uuid;
 ///   `caption_layout`。形式24のビルドは版番号で断る。使っていないファイルは版番号以外これまでと同じ
 /// - v26: シートの線番を描かない設定 ([`Sheet::hide_wire_numbers`])。形式25のビルドは版番号で断る。使っていないファイルは版番号以外これまでと同じ
 /// - v27: シミュレーションの計算ケース ([`Project::sim_cases`])。形式26のビルドは版番号で断る。使っていないファイルは版番号以外これまでと同じ
-pub const FORMAT_VERSION: u32 = 27;
+/// - v28: タグの行き先の書き方 ([`Sheet::xref_style`])。ネットラベルの属性 `tag_dest` / `tag_flow` は
+///   属性なので形式は変わらない。形式27のビルドは版番号で断る。使っていないファイルは版番号以外これまでと同じ
+pub const FORMAT_VERSION: u32 = 28;
 
 fn is_false(b: &bool) -> bool {
     !*b
+}
+
+/// タグ付きネットラベルの行き先 (別シートの同名ラベルの場所) の書き方 ([`Sheet::xref_style`])。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum XrefStyle {
+    /// ゾーン住所 (`/シート.ゾーン`) を旗の外へ小さく書く (従来の見た目)。
+    #[default]
+    Zone,
+    /// 行き先のシート名を旗の中、ネット名のあとに書く。旗の外には何も書かない。
+    SheetName,
+}
+
+impl XrefStyle {
+    /// 既定 (ゾーン住所) か。ファイルには既定でない値だけを書く。
+    pub fn is_default(&self) -> bool {
+        *self == XrefStyle::Zone
+    }
 }
 
 /// 配線の線の太さの既定値 (mm)。この設定が無かった頃の太さ。
@@ -374,6 +394,9 @@ pub struct Sheet {
     /// 線番 (配線に付けたネット名・番号の文字) を描かない。ネット名はデータに残る。信号名を注記で書く図面で使う。
     #[serde(default, skip_serializing_if = "is_false")]
     pub hide_wire_numbers: bool,
+    /// タグ付きネットラベルの行き先の書き方。既定はゾーン住所を旗の外へ小さく書く (従来どおり)。
+    #[serde(default, skip_serializing_if = "XrefStyle::is_default")]
+    pub xref_style: XrefStyle,
     /// 整えバリアントの複製なら、その元シートのid ([`crate::variants`])。
     ///
     /// 比較のために一時的に増えるシートで、比較が終われば消える。**図面全体を見渡す
@@ -417,6 +440,7 @@ impl Sheet {
             symbol_weight_mm: None,
             vivid_wire_colors: false,
             hide_wire_numbers: false,
+            xref_style: XrefStyle::Zone,
             variant_of: None,
             entities: BTreeMap::new(),
         }
@@ -1328,8 +1352,9 @@ pub struct NetLabel {
     pub name: String,
     #[serde(default)]
     pub rotation: u16,
-    /// 表示の追加指定。現状のキーは`tag` (`left`/`right`) で、方向付きタグ形状で描く
-    /// ([`crate::net_tag`])。省略・未知の値なら従来どおり文字だけを描く。
+    /// 表示の追加指定。キーは`tag` (`left`/`right`、方向付きタグ形状で描く、[`crate::net_tag`])、
+    /// `tag_dest` (行き先の自由な文字。空なら自動)、`tag_flow` (`out` なら先端を本体の遠い端へ置く)。
+    /// 省略・未知の値なら従来どおり文字だけを描く。
     #[serde(default)]
     pub attrs: BTreeMap<String, String>,
 }

@@ -287,7 +287,8 @@ impl SharedDoc {
                 }
                 taken_names.sort();
                 taken_names.dedup();
-                let ctx = madake_core::arrange::ArrangeContext { protected, frame, title_block, taken_names };
+                let tag_dests = madake_core::xref::sheet_tag_dests(engine.project(), sheet_id);
+                let ctx = madake_core::arrange::ArrangeContext { protected, frame, title_block, taken_names, tag_dests };
                 (engine.revision(), sheet, ctx)
             };
             let defs = sheet_symbol_defs(&sheet);

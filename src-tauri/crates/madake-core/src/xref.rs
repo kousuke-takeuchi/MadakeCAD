@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use crate::geometry::Point;
-use crate::model::{Entity, EntityId, NetLabel, Project, Sheet, SheetId};
+use crate::model::{Entity, EntityId, NetLabel, Project, Sheet, SheetId, XrefStyle};
 use crate::netlist::{extract_netlist, on_wire, Net};
 use crate::symbol::SymbolDef;
 
@@ -163,6 +163,11 @@ pub fn xref_text(project: &Project, sheet_id: SheetId, label_name: &str) -> Opti
 
 /// シート1枚分のXRefテキスト表 (ネットラベルのentity id → 表示テキスト)。
 /// 相手のいないラベルは含まれない。SVG・キャンバスの描画はこれを引く。
+///
+/// タグ付きラベル ([`crate::net_tag`]) は、`attrs["tag_dest"]` に文字があればそれ (自動より優先)、
+/// 無くてシートの書き方が [`XrefStyle::SheetName`] なら行き先のシート名 ([`tag_dest_names`])、
+/// それ以外はゾーン住所。タグ無しのラベルは書き方によらずゾーン住所。
+/// シートの書き方がシート名のとき、タグ付きの文字は旗の中に、それ以外は旗やラベルの脇に描かれる。
 pub fn sheet_xrefs(project: &Project, sheet_id: SheetId) -> BTreeMap<EntityId, String> {
     let Some(sheet) = project.sheet(sheet_id) else {
         return BTreeMap::new();
@@ -174,6 +179,19 @@ pub fn sheet_xrefs(project: &Project, sheet_id: SheetId) -> BTreeMap<EntityId, S
         let name = l.name.trim();
         if name.is_empty() {
             continue;
+        }
+        let tagged = crate::net_tag::tag_dir(l).is_some();
+        if tagged {
+            if let Some(own) = crate::net_tag::tag_dest(l) {
+                out.insert(l.id, own.to_string());
+                continue;
+            }
+            if sheet.xref_style == XrefStyle::SheetName {
+                if let Some(names) = dest_names_from(&sites, sheet_id, name) {
+                    out.insert(l.id, names);
+                }
+                continue;
+            }
         }
         let mut seen = BTreeSet::new();
         let addresses: Vec<String> = sites
@@ -187,6 +205,57 @@ pub fn sheet_xrefs(project: &Project, sheet_id: SheetId) -> BTreeMap<EntityId, S
             .collect();
         if !addresses.is_empty() {
             out.insert(l.id, addresses.join(XREF_SEPARATOR));
+        }
+    }
+    out
+}
+
+/// 行き先のシート名を並べる区切り。
+pub const DEST_SEPARATOR: &str = "・";
+/// 行き先のシートが3枚以上のとき、先頭2枚のあとに付ける文字。
+pub const DEST_MORE: &str = "他";
+
+/// ラベル名 `label_name` と同名のラベルを持つ**他のシート**の名前を、シート順に並べた行き先の文字。
+/// 同じシートは1回だけ数える。3枚以上なら先頭2枚のあとに「他」。シート名が空ならシート番号を使う。
+/// 相手が無ければ `None` (旗の中には名前だけを書く)。
+pub fn tag_dest_names(project: &Project, sheet_id: SheetId, label_name: &str) -> Option<String> {
+    let name = label_name.trim();
+    if name.is_empty() {
+        return None;
+    }
+    dest_names_from(&label_sites(project), sheet_id, name)
+}
+
+fn dest_names_from(sites: &BTreeMap<String, Vec<NetSite>>, sheet_id: SheetId, name: &str) -> Option<String> {
+    let mut seen = BTreeSet::new();
+    let names: Vec<String> = sites
+        .get(name)?
+        .iter()
+        .filter(|s| s.sheet_id != sheet_id && seen.insert(s.sheet_id))
+        .map(|s| if s.sheet_name.trim().is_empty() { s.sheet_no.to_string() } else { s.sheet_name.trim().to_string() })
+        .collect();
+    match names.as_slice() {
+        [] => None,
+        [a] => Some(a.clone()),
+        [a, b] => Some(format!("{a}{DEST_SEPARATOR}{b}")),
+        [a, b, ..] => Some(format!("{a}{DEST_SEPARATOR}{b}{DEST_MORE}")),
+    }
+}
+
+/// シート1枚の、ラベル名 → 旗の中に書く自動の行き先 ([`tag_dest_names`])。シートの書き方がシート名のときだけ中身がある。
+/// シート単体では他シートが分からない寸法の計算 (文字の重なり・並べ直しの置き場) へ渡す。
+pub fn sheet_tag_dests(project: &Project, sheet_id: SheetId) -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    let Some(sheet) = project.sheet(sheet_id) else { return out };
+    if sheet.xref_style != XrefStyle::SheetName {
+        return out;
+    }
+    let sites = label_sites(project);
+    for entity in sheet.entities.values() {
+        let Entity::NetLabel(l) = entity else { continue };
+        let name = l.name.trim();
+        if let Some(text) = dest_names_from(&sites, sheet_id, name) {
+            out.insert(name.to_string(), text);
         }
     }
     out
@@ -1107,5 +1176,114 @@ mod tests {
         let joined = nets.iter().find(|n| n.name == "J7.2").expect("J7.2");
         assert_eq!(joined.members.len(), 2, "{:?}", nets.iter().map(|n| (&n.name, n.members.len())).collect::<Vec<_>>());
         assert!(crate::verify::verify_project(&project).iter().all(|d| d.code != "erc.dangling_wire" && d.code != "erc.unconnected_pin"));
+    }
+
+    /// A project with the label PUMP on sheets named Power (the label's own), Motor, Panel, Aux; returns it with the label ids per sheet.
+    fn dest_project(others: &[&str], style: XrefStyle) -> (Project, EntityId) {
+        let mut project = Project::new("t");
+        project.sheets[0].name = "Power".into();
+        project.sheets[0].xref_style = style;
+        let own = label("PUMP", 20.0, 20.0);
+        let own_id = own.id();
+        project.sheets[0].entities.insert(own_id, own);
+        for name in others {
+            let mut s = Sheet::new(name, PaperSize::A3, Orientation::Landscape);
+            let l = label("PUMP", 250.0, 70.0);
+            s.entities.insert(l.id(), l);
+            project.sheets.push(s);
+        }
+        (project, own_id)
+    }
+
+    fn tag_it(project: &mut Project, id: EntityId, extra: &[(&str, &str)]) {
+        let sid = project.sheets[0].id;
+        let Some(Entity::NetLabel(l)) = project.sheet_mut(sid).unwrap().entities.get_mut(&id) else { panic!() };
+        l.attrs.insert("tag".into(), "right".into());
+        for (k, v) in extra {
+            l.attrs.insert((*k).to_string(), (*v).to_string());
+        }
+    }
+
+    /// In the sheet-name style a tagged label's text is the names of the other sheets with the same label: one name, two joined by a middle dot, three or more as the first two plus the "other" mark.
+    /// シート名の書き方では、タグ付きラベルの文字は同名ラベルを持つ他のシートの名前になる。1枚ならその名前、2枚なら「・」でつなぎ、3枚以上は先頭2枚のあとに「他」。
+    #[test]
+    fn sheet_name_destinations_list_up_to_two_then_other() {
+        for (others, want) in [
+            (vec!["Motor"], "Motor"),
+            (vec!["Motor", "Panel"], "Motor・Panel"),
+            (vec!["Motor", "Panel", "Aux"], "Motor・Panel他"),
+            (vec!["Motor", "Panel", "Aux", "Extra"], "Motor・Panel他"),
+        ] {
+            let (mut p, id) = dest_project(&others, XrefStyle::SheetName);
+            tag_it(&mut p, id, &[]);
+            let sid = p.sheets[0].id;
+            assert_eq!(sheet_xrefs(&p, sid).get(&id).map(String::as_str), Some(want));
+        }
+    }
+
+    /// A tagged label whose name is on no other sheet has no destination at all, so the flag shows the name only.
+    /// 他のシートに同名ラベルが無いタグ付きラベルには行き先が無く、旗には名前だけが出る。
+    #[test]
+    fn a_tag_with_no_other_sheet_has_no_destination() {
+        let (mut p, id) = dest_project(&[], XrefStyle::SheetName);
+        tag_it(&mut p, id, &[]);
+        let sid = p.sheets[0].id;
+        assert!(sheet_xrefs(&p, sid).is_empty());
+        assert_eq!(tag_dest_names(&p, sid, "PUMP"), None);
+    }
+
+    /// A sheet carrying the label twice is named once, and a blank sheet name falls back to its number.
+    /// 同名ラベルを2つ持つシートの名前は1回だけ並び、シート名が空ならシート番号を使う。
+    #[test]
+    fn a_sheet_is_named_once_and_a_blank_name_uses_its_number() {
+        let (mut p, _) = dest_project(&["Motor", ""], XrefStyle::SheetName);
+        let extra = label("PUMP", 300.0, 100.0);
+        p.sheets[1].entities.insert(extra.id(), extra);
+        let sid = p.sheets[0].id;
+        assert_eq!(tag_dest_names(&p, sid, "PUMP").as_deref(), Some("Motor・3"));
+    }
+
+    /// The label's own tag_dest replaces the automatic destination in both styles, even when no other sheet has the name; a blank one means automatic.
+    /// ラベル自身の tag_dest は、どちらの書き方でも自動の行き先に代わって使われ (他のシートに同名が無くても)、空白なら自動になる。
+    #[test]
+    fn tag_dest_replaces_the_automatic_destination() {
+        for style in [XrefStyle::Zone, XrefStyle::SheetName] {
+            let (mut p, id) = dest_project(&["Motor"], style);
+            tag_it(&mut p, id, &[("tag_dest", "External panel")]);
+            let sid = p.sheets[0].id;
+            assert_eq!(sheet_xrefs(&p, sid).get(&id).map(String::as_str), Some("External panel"));
+            let (mut alone, id) = dest_project(&[], style);
+            tag_it(&mut alone, id, &[("tag_dest", "Field")]);
+            let sid = alone.sheets[0].id;
+            assert_eq!(sheet_xrefs(&alone, sid).get(&id).map(String::as_str), Some("Field"));
+            let (mut blank, id) = dest_project(&["Motor"], style);
+            tag_it(&mut blank, id, &[("tag_dest", "  ")]);
+            let sid = blank.sheets[0].id;
+            let auto = if style == XrefStyle::Zone { "/2.B3" } else { "Motor" };
+            assert_eq!(sheet_xrefs(&blank, sid).get(&id).map(String::as_str), Some(auto));
+        }
+    }
+
+    /// Untagged labels keep the zone address in both styles, and a tag_dest on an untagged label is ignored.
+    /// タグの無いラベルは、どちらの書き方でもゾーン住所のままで、タグの無いラベルの tag_dest は無視される。
+    #[test]
+    fn untagged_labels_keep_the_zone_address() {
+        for style in [XrefStyle::Zone, XrefStyle::SheetName] {
+            let (mut p, id) = dest_project(&["Motor"], style);
+            let sid = p.sheets[0].id;
+            let Some(Entity::NetLabel(l)) = p.sheet_mut(sid).unwrap().entities.get_mut(&id) else { panic!() };
+            l.attrs.insert("tag_dest".into(), "Ignored".into());
+            assert_eq!(sheet_xrefs(&p, sid).get(&id).map(String::as_str), Some("/2.B3"));
+        }
+    }
+
+    /// The zone style never lists sheet names and gives measuring code no automatic destinations; the sheet-name style gives them by label name.
+    /// ゾーン住所の書き方は寸法計算へ自動の行き先を渡さず、シート名の書き方はラベル名ごとに渡す。
+    #[test]
+    fn automatic_destinations_for_measuring_follow_the_style() {
+        let (p, _) = dest_project(&["Motor"], XrefStyle::Zone);
+        assert!(sheet_tag_dests(&p, p.sheets[0].id).is_empty());
+        let (p, _) = dest_project(&["Motor"], XrefStyle::SheetName);
+        assert_eq!(sheet_tag_dests(&p, p.sheets[0].id).get("PUMP").map(String::as_str), Some("Motor"));
     }
 }

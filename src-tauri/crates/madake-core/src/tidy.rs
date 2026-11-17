@@ -238,20 +238,59 @@ pub fn symbol_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<(EntityId, Rect
 
 /// ネットラベルの文字の外接矩形。タグ付きなら旗の本体の中、タグなしなら基準点から右へ伸びる (向きによらない)。
 /// `annotation_scale`はシートの注記文字高の倍率。[`text_boxes`]と、並べ直しの短い線の置き場所選びが共に使う。
+/// 旗の中に行き先を書く書き方 ([`net_label_text_rect_in`]) は考えない (行き先を書かない旗の形)。
 pub(crate) fn net_label_text_rect(l: &NetLabel, annotation_scale: f64) -> Rect {
+    net_label_text_rect_in(l, annotation_scale, crate::model::XrefStyle::Zone, None).0
+}
+
+/// [`net_label_text_rect`] の本体。`style`がシート名の書き方で`dest`があれば、旗が広がり行き先も別の矩形で返す。
+pub(crate) fn net_label_text_rect_in(
+    l: &NetLabel,
+    annotation_scale: f64,
+    style: crate::model::XrefStyle,
+    dest: Option<&str>,
+) -> (Rect, Option<Rect>) {
     use crate::svg::{LABEL_FONT, NET_LABEL_DY};
     let font = LABEL_FONT * annotation_scale;
-    let (x, baseline) = match crate::net_tag::net_tag(l, font) {
-        Some(tag) => (tag.text_at.x, tag.text_at.y),
-        None => (l.at.x, l.at.y - NET_LABEL_DY * annotation_scale),
-    };
-    text_box(x, baseline, font, Anchor::Start, &l.name)
+    match crate::net_tag::net_tag_with(l, font, style, dest) {
+        Some(tag) => {
+            let name = text_box(tag.text_at.x, tag.text_at.y, font, Anchor::Start, &l.name);
+            let dest_rect = match (tag.dest_at, dest) {
+                (Some(at), Some(d)) => Some(text_box(at.x, at.y, tag.dest_font, Anchor::Start, d.trim())),
+                _ => None,
+            };
+            (name, dest_rect)
+        }
+        None => (text_box(l.at.x, l.at.y - NET_LABEL_DY * annotation_scale, font, Anchor::Start, &l.name), None),
+    }
+}
+
+/// タグ付きラベルの旗の中に書く行き先: 自分の`tag_dest`、無ければ`auto` (ラベル名 → 自動の行き先)。
+pub(crate) fn inside_dest<'a>(
+    l: &'a NetLabel,
+    style: crate::model::XrefStyle,
+    auto: &'a std::collections::BTreeMap<String, String>,
+) -> Option<&'a str> {
+    if style != crate::model::XrefStyle::SheetName {
+        return None;
+    }
+    crate::net_tag::tag_dest(l).or_else(|| auto.get(l.name.trim()).map(String::as_str))
 }
 
 /// 図面に印字される全ての文字の外接矩形。位置と大きさはSVG/PDF出力と同じ規則で求める
 /// (参照記号・型番はシンボル外形の上、ネットラベルは基準点の上、線番はネットの
-/// 代表線分の脇)。
+/// 代表線分の脇)。シート単体では他シートの行き先が分からないので、旗の中の行き先は自分の`tag_dest`だけ
+/// ([`text_boxes_with_dests`]で自動の行き先を渡せる)。
 pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
+    text_boxes_with_dests(sheet, symbols, &Default::default())
+}
+
+/// [`text_boxes`]に、ラベル名 → 旗の中の自動の行き先 ([`crate::xref::sheet_tag_dests`]) を渡す版。
+pub fn text_boxes_with_dests(
+    sheet: &Sheet,
+    symbols: &[SymbolDef],
+    dests: &std::collections::BTreeMap<String, String>,
+) -> Vec<TextBox> {
     use crate::svg::{
         LABEL_FONT, REF_LABEL_DY, VALUE_LABEL_DY, WIRE_NO_FONT, WIRE_NO_GAP,
     };
@@ -321,12 +360,17 @@ pub fn text_boxes(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<TextBox> {
             }
             // タグ付きラベルの文字は旗の本体の中 (基準点の左右どちらに来るかは向き次第)
             Entity::NetLabel(l) if !l.name.is_empty() => {
+                let dest = inside_dest(l, sheet.xref_style, dests);
+                let (name_rect, dest_rect) = net_label_text_rect_in(l, annotation_scale, sheet.xref_style, dest);
                 boxes.push(TextBox {
-                    rect: net_label_text_rect(l, annotation_scale),
+                    rect: name_rect,
                     text: l.name.clone(),
                     kind: TextKind::NetLabel,
                     owner: Some(l.id),
                 });
+                if let (Some(rect), Some(d)) = (dest_rect, dest) {
+                    boxes.push(TextBox { rect, text: d.trim().to_string(), kind: TextKind::NetLabel, owner: Some(l.id) });
+                }
             }
             // 区間ケーブルの文字は SVG 出力 (render_run_cable) と同じ位置・大きさ
             Entity::Cable(c) if c.is_run() => {
@@ -1192,5 +1236,47 @@ mod tests {
         assert_eq!(count(&sheet), 1);
         sheet.hide_wire_numbers = true;
         assert_eq!(count(&sheet), 0);
+    }
+
+    /// In the sheet-name style a tagged label's destination is measured as its own text box and the name box moves with the wider flag; automatic destinations come in by label name.
+    /// シート名の書き方では、タグ付きラベルの行き先も別の文字の矩形として測られ、広がった旗に合わせて名前の矩形も動く。自動の行き先はラベル名で渡せる。
+    #[test]
+    fn the_destination_inside_a_flag_is_measured() {
+        let mut label = NetLabel {
+            id: Uuid::new_v4(),
+            at: Point::new(100.0, 50.0),
+            name: "PUMP".into(),
+            rotation: 0,
+            attrs: Default::default(),
+        };
+        label.attrs.insert("tag".into(), "left".into());
+        let mut sheet = sheet_with(vec![Entity::NetLabel(label)]);
+        assert_eq!(text_boxes(&sheet, &builtin_symbols()).len(), 1);
+        sheet.xref_style = crate::model::XrefStyle::SheetName;
+        assert_eq!(text_boxes(&sheet, &builtin_symbols()).len(), 1, "自動の行き先は渡されていない");
+        let dests = std::collections::BTreeMap::from([("PUMP".to_string(), "Motor".to_string())]);
+        let boxes = text_boxes_with_dests(&sheet, &builtin_symbols(), &dests);
+        assert_eq!(boxes.len(), 2);
+        assert_eq!(boxes[1].text, "Motor");
+        assert!(boxes[1].rect.min.x >= boxes[0].rect.max.x, "行き先は名前の右: {:?}", boxes);
+    }
+
+    /// An own tag_dest is measured too, without any automatic destination.
+    /// 自分の tag_dest は、自動の行き先が無くても測られる。
+    #[test]
+    fn an_own_tag_dest_is_measured_without_automatic_ones() {
+        let mut label = NetLabel {
+            id: Uuid::new_v4(),
+            at: Point::new(100.0, 50.0),
+            name: "PUMP".into(),
+            rotation: 0,
+            attrs: Default::default(),
+        };
+        label.attrs.insert("tag".into(), "left".into());
+        label.attrs.insert("tag_dest".into(), "Field".into());
+        let mut sheet = sheet_with(vec![Entity::NetLabel(label)]);
+        sheet.xref_style = crate::model::XrefStyle::SheetName;
+        let boxes = text_boxes(&sheet, &builtin_symbols());
+        assert_eq!(boxes.iter().map(|b| b.text.as_str()).collect::<Vec<_>>(), vec!["PUMP", "Field"]);
     }
 }

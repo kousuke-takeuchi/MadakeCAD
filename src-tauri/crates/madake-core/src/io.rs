@@ -413,15 +413,35 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// The current file format version is 27, the version that added simulation study cases.
-    /// 現行のファイル形式バージョンは27 (シミュレーションの計算ケースを追加した版) である。
+    /// The current file format version is 28, the version that added the sheet's tag destination style.
+    /// 現行のファイル形式バージョンは28 (シートのタグの行き先の書き方を追加した版) である。
     #[test]
-    fn the_current_format_version_is_twenty_seven() {
-        assert_eq!(FORMAT_VERSION, 27);
+    fn the_current_format_version_is_twenty_eight() {
+        assert_eq!(FORMAT_VERSION, 28);
         let mut old = Project::new("x");
-        old.format_version = 26;
+        old.format_version = 27;
         migrate(&mut old);
-        assert_eq!(old.format_version, 27);
+        assert_eq!(old.format_version, 28);
+    }
+
+    /// A version 27 file opens as version 28 with sheets in the zone style, the style survives save and load, and the default style is not written to the file.
+    /// 版 27 のファイルは版 28 として開き、シートはゾーン住所の書き方になる。書き方は保存して開き直しても残り、既定の書き方はファイルに書かれない。
+    #[test]
+    fn xref_style_loads_from_old_files_and_round_trips() {
+        let mut p = Project::new("t");
+        p.format_version = 27;
+        let mut value = serde_json::to_value(&p).unwrap();
+        assert!(value["sheets"][0].get("xref_style").is_none());
+        let mut old: Project = serde_json::from_value(value.take()).unwrap();
+        migrate(&mut old);
+        assert_eq!(old.format_version, 28);
+        assert_eq!(old.sheets[0].xref_style, XrefStyle::Zone);
+        let mut p = Project::new("t");
+        p.sheets[0].xref_style = XrefStyle::SheetName;
+        let text = serde_json::to_string(&p).unwrap();
+        assert!(text.contains("\"xref_style\":\"sheet_name\""), "{text}");
+        let back: Project = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.sheets[0].xref_style, XrefStyle::SheetName);
     }
 
     /// A version 23 project file opens in this build and becomes the current version; its sheets get the default wire weight and still show their wire notes.
@@ -1058,7 +1078,7 @@ mod tests {
         text.as_object_mut().unwrap().remove("sim_cases");
         let mut old: Project = serde_json::from_value(text).unwrap();
         migrate(&mut old);
-        assert_eq!(old.format_version, 27);
+        assert_eq!(old.format_version, FORMAT_VERSION);
         assert!(old.sim_cases.is_empty());
         let mut p = Project::new("t");
         p.sim_cases.push(SimCase {

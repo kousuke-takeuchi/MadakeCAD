@@ -481,6 +481,8 @@ pub struct ArrangeContext {
     pub title_block: (f64, f64, f64, f64),
     /// プロジェクトで使われているラベル名とネット名シンボルの名前。
     pub taken_names: Vec<String>,
+    /// シートの書き方がシート名のとき、ラベル名 → 旗の中の自動の行き先 ([`crate::xref::sheet_tag_dests`])。
+    pub tag_dests: BTreeMap<String, String>,
 }
 
 /// 図枠の内側と、表題欄 (上に積む改訂欄の行を含む) の矩形 (x0, y0, x1, y1) を、図枠テンプレートとシートから求める。
@@ -1346,6 +1348,9 @@ struct TextRoom {
     scale: f64,
     /// 図枠への収まり (無ければ調べない)。
     area: Option<StubArea>,
+    /// シートのタグの行き先の書き方と、ラベル名 → 旗の中の自動の行き先 (置くラベルの旗の広がりを測る)。
+    style: crate::model::XrefStyle,
+    dests: BTreeMap<String, String>,
 }
 
 /// 文字の置き場で選ぶ短い線が、並べ直しの最後の「図枠に収まるか」の検算を新しく破らないための情報。
@@ -1378,13 +1383,18 @@ impl StubArea {
 impl TextRoom {
     /// 図面の全ての部品の外形と文字から作る。`gone`の持ち主のものは入れない (計画が消す・置き換えるもの)。
     fn build(sheet: &Sheet, defs: &[SymbolDef], gone: &BTreeSet<EntityId>) -> Self {
+        Self::build_with(sheet, defs, gone, BTreeMap::new())
+    }
+
+    /// [`Self::build`]に、旗の中の自動の行き先 (ラベル名 → 行き先) を渡す版。
+    fn build_with(sheet: &Sheet, defs: &[SymbolDef], gone: &BTreeSet<EntityId>, dests: BTreeMap<String, String>) -> Self {
         let bodies: Vec<(EntityId, crate::tidy::Rect)> =
             crate::tidy::symbol_boxes(sheet, defs).into_iter().filter(|(id, _)| !gone.contains(id)).collect();
         let mut rects: Vec<(Option<EntityId>, crate::tidy::Rect)> = bodies.iter().map(|(id, r)| (Some(*id), *r)).collect();
         rects.extend(
-            crate::tidy::text_boxes(sheet, defs).into_iter().filter(|t| t.owner.is_none_or(|o| !gone.contains(&o))).map(|t| (t.owner, t.rect)),
+            crate::tidy::text_boxes_with_dests(sheet, defs, &dests).into_iter().filter(|t| t.owner.is_none_or(|o| !gone.contains(&o))).map(|t| (t.owner, t.rect)),
         );
-        Self { rects, bodies: bodies.into_iter().map(|b| b.1).collect(), scale: sheet.annotation_scale(), area: None }
+        Self { rects, bodies: bodies.into_iter().map(|b| b.1).collect(), scale: sheet.annotation_scale(), area: None, style: sheet.xref_style, dests }
     }
 
     /// 短い線が、自分のピンのある外形のほかの部品の外形を突き抜けないか。
@@ -1474,7 +1484,7 @@ fn stub_entities_in(
         let mut chosen: Option<Vec<Point>> = None;
         if let Some(room) = room.as_deref() {
             // 文字が横に収まる長さのまっすぐな線を、3本の短い線のあとへ足す
-            let width = crate::tidy::net_label_text_rect(&label_at(*pos, None), room.scale);
+            let width = crate::tidy::net_label_text_rect_in(&label_at(*pos, None), room.scale, room.style, None).0;
             let width = width.max.x - width.min.x;
             let long = (width / STUB_MM).ceil() * STUB_MM + STUB_MM;
             let mut ordered = cands.clone();
@@ -1509,7 +1519,16 @@ fn stub_entities_in(
                     }
                 };
                 for tag in tags {
-                    let text = crate::tidy::net_label_text_rect(&label_at(end, tag), room.scale);
+                    let probe = label_at(end, tag);
+                    let dest = crate::tidy::inside_dest(&probe, room.style, &room.dests);
+                    let (text, dest_rect) = crate::tidy::net_label_text_rect_in(&probe, room.scale, room.style, dest);
+                    let text = match dest_rect {
+                        Some(d) => crate::tidy::Rect::from_corners(
+                            Point::new(text.min.x.min(d.min.x), text.min.y.min(d.min.y)),
+                            Point::new(text.max.x.max(d.max.x), text.max.y.max(d.max.y)),
+                        ),
+                        None => text,
+                    };
                     // 自分の短い線は避ける対象に入れない (まだ `lines` に入っていない)
                     // 図枠からはみ出す・表題欄に掛かる候補も使わない (最後の収まりの検算を新しく破らない)
                     if !room.blocked(&text, lines) && room.area.as_ref().is_none_or(|a| a.allows(pts, &text)) {
@@ -1531,8 +1550,10 @@ fn stub_entities_in(
         let end = *pts.last().expect("2点以上");
         let placed = label_at(end, tag_of);
         if let Some(room) = room.as_deref_mut() {
-            let r = crate::tidy::net_label_text_rect(&placed, room.scale);
+            let dest = crate::tidy::inside_dest(&placed, room.style, &room.dests);
+            let (r, dest_rect) = crate::tidy::net_label_text_rect_in(&placed, room.scale, room.style, dest);
             room.rects.push((None, r));
+            room.rects.extend(dest_rect.map(|d| (None, d)));
             if let Some(a) = room.area.as_mut() {
                 a.content = a.grown(&pts);
             }
@@ -2000,7 +2021,7 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
         }))
         .collect();
     // ラベルの文字が読める場所を探すための、動かした後の部品の外形と文字 (置いたラベルの文字も足していく)
-    let mut room = TextRoom::build(&moved, defs, &dropped);
+    let mut room = TextRoom::build_with(&moved, defs, &dropped, ctx.tag_dests.clone());
     room.area = Some(StubArea::new(ctx, hit_title, content_bounds(&moved, &idx)));
     let mut remove: BTreeSet<EntityId> = deleted.clone();
     let mut labelled: Vec<(String, String)> = Vec::new();
@@ -3781,6 +3802,8 @@ mod tests {
             bodies: vec![],
             scale: 1.0,
             area: None,
+            style: crate::model::XrefStyle::Zone,
+            dests: BTreeMap::new(),
         };
         let (es, stubs) = stub_entities_in(&grid, &fb, &mut lines.clone(), &mut vec![], Some(&mut room));
         assert_eq!(stub_points(&es), stub_points(&without));

@@ -2000,8 +2000,14 @@ fn sheet_to_svg_with_xrefs(
             Entity::NetLabel(l) => {
                 // ネットラベルの文字はシートの注記文字高 (G20) に従って伸縮する
                 let label_font = LABEL_FONT * annotation_scale;
-                // 方向付きタグ (G3)。attrs["tag"]がある時だけ旗の枠で囲む
-                let tag = crate::net_tag::net_tag(l, label_font);
+                // 方向付きタグ (G3)。attrs["tag"]がある時だけ旗の枠で囲む。
+                // 脇に添える文字: 相手のいるラベルのXRefテキスト (自分の`tag_dest`はそれより優先され、シート単体の出力でも出る)
+                let tagged = crate::net_tag::tag_dir(l).is_some();
+                let note: Option<&str> = xrefs
+                    .get(&l.id)
+                    .map(String::as_str)
+                    .or_else(|| if tagged { crate::net_tag::tag_dest(l) } else { None });
+                let tag = crate::net_tag::net_tag_with(l, label_font, sheet.xref_style, note);
                 match &tag {
                     Some(t) => {
                         let _ = write!(
@@ -2010,15 +2016,23 @@ fn sheet_to_svg_with_xrefs(
                             polyline_points(&t.points),
                             n(crate::net_tag::TAG_STROKE)
                         );
-                        text_el(&mut out, t.text_at.x, t.text_at.y, label_font, "#000", "start", &l.name);
+                        if t.bold {
+                            text_weight_el(&mut out, t.text_at.x, t.text_at.y, label_font, "#000", "start", Weight::Bold, &l.name);
+                        } else {
+                            text_el(&mut out, t.text_at.x, t.text_at.y, label_font, "#000", "start", &l.name);
+                        }
+                        if let (Some(at), Some(text)) = (t.dest_at, note) {
+                            text_el(&mut out, at.x, at.y, t.dest_font, "#000", "start", text);
+                        }
                     }
                     None => {
                         let dy = NET_LABEL_DY * annotation_scale;
                         text_el(&mut out, l.at.x, l.at.y - dy, label_font, "#000", "start", &l.name);
                     }
                 }
-                // シート間クロスリファレンス (IEC 61082-1)。相手がいるラベルだけ脇に添える
-                if let Some(text) = xrefs.get(&l.id) {
+                // シート間クロスリファレンス (IEC 61082-1)。相手がいるラベルだけ脇に添える。
+                // 行き先を旗の中に書いたタグには、旗の外へは何も書かない
+                if let Some(text) = note.filter(|_| tag.as_ref().is_none_or(|t| t.dest_at.is_none() && !t.bold)) {
                     // タグ付きは旗の本体側の外へ逃がす (枠にも自分の配線にも重ねない)
                     let (at, anchor) = match &tag {
                         Some(t) => (t.xref_at, crate::text_style::svg_anchor(t.xref_anchor)),
@@ -5905,5 +5919,96 @@ mod tests {
             assert!((text_advance("ABC", 5.0, 1.0) - plain).abs() < 1e-9);
         }
         assert!((text_advance("ABC", 5.0, 1.0) - plain / 2.0).abs() < 1e-9);
+    }
+
+    /// Builds a two-sheet project whose sheets both carry the label PUMP; the first label is tagged.
+    fn tag_project(style: crate::model::XrefStyle, extra: &[(&str, &str)]) -> (crate::model::Project, crate::model::SheetId) {
+        use crate::model::*;
+        let mut p = Project::new("t");
+        p.sheets[0].name = "Power".into();
+        p.sheets[0].xref_style = style;
+        let mut second = Sheet::new("Motor", PaperSize::A3, Orientation::Landscape);
+        let far = Entity::NetLabel(NetLabel { id: uuid::Uuid::new_v4(), at: Point::new(250.0, 70.0), name: "PUMP".into(), rotation: 0, attrs: Default::default() });
+        second.entities.insert(far.id(), far);
+        p.sheets.push(second);
+        let mut attrs = std::collections::BTreeMap::new();
+        attrs.insert("tag".to_string(), "left".to_string());
+        for (k, v) in extra {
+            attrs.insert((*k).to_string(), (*v).to_string());
+        }
+        let near = Entity::NetLabel(NetLabel { id: uuid::Uuid::new_v4(), at: Point::new(100.0, 50.0), name: "PUMP".into(), rotation: 0, attrs });
+        let sid = p.sheets[0].id;
+        p.sheets[0].entities.insert(near.id(), near);
+        (p, sid)
+    }
+
+    /// In the sheet-name style a tagged label draws the name in bold and the destination sheet name inside the flag at 0.8 of the size, and nothing monospace outside the flag.
+    /// シート名の書き方では、タグ付きラベルは太字のネット名と、行き先のシート名 (文字高0.8倍) を旗の中に描き、旗の外には何も描かない。
+    #[test]
+    fn the_sheet_name_style_draws_the_destination_inside_the_flag() {
+        let (p, sid) = tag_project(crate::model::XrefStyle::SheetName, &[]);
+        let svg = project_sheet_to_svg(&p, sid, &crate::symbol::builtin_symbols()).unwrap();
+        assert!(svg.contains(">Motor</text>"), "{svg}");
+        assert!(svg.contains("font-weight=\"bold\"") && svg.contains(">PUMP</text>"));
+        assert!(!svg.contains("/2."), "ゾーン住所は描かない");
+        assert!(!svg.contains("font-family=\"monospace\""), "旗の外の文字は無い");
+    }
+
+    /// In the zone style the same tagged label draws its zone address outside the flag, as it always has.
+    /// ゾーン住所の書き方では、同じタグ付きラベルが今までどおりゾーン住所を旗の外に描く。
+    #[test]
+    fn the_zone_style_keeps_the_address_outside_the_flag() {
+        let (p, sid) = tag_project(crate::model::XrefStyle::Zone, &[]);
+        let svg = project_sheet_to_svg(&p, sid, &crate::symbol::builtin_symbols()).unwrap();
+        assert!(svg.contains(">/2.B3</text>"), "{svg}");
+        assert!(!svg.contains(">Motor</text>"));
+    }
+
+    /// A tag_dest replaces the outside text in the zone style and the inside text in the sheet-name style, also when drawing the sheet alone.
+    /// tag_dest は、ゾーン住所の書き方では旗の外の文字を、シート名の書き方では旗の中の文字を置き換える。シート単体の出力でも同じ。
+    #[test]
+    fn tag_dest_replaces_the_text_in_both_styles() {
+        for style in [crate::model::XrefStyle::Zone, crate::model::XrefStyle::SheetName] {
+            let (p, sid) = tag_project(style, &[("tag_dest", "Field box")]);
+            let svg = project_sheet_to_svg(&p, sid, &crate::symbol::builtin_symbols()).unwrap();
+            assert!(svg.contains(">Field box</text>"), "{style:?}");
+            assert!(!svg.contains(">Motor</text>") && !svg.contains(">/2.B3</text>"), "{style:?}");
+        }
+        let (p, sid) = tag_project(crate::model::XrefStyle::Zone, &[("tag_dest", "Field box")]);
+        let svg = sheet_to_svg(p.sheet(sid).unwrap(), &crate::symbol::builtin_symbols(), &[]);
+        assert!(svg.contains(">Field box</text>"));
+    }
+
+    /// With no other sheet carrying the name, the sheet-name flag shows only the name, and an untagged label keeps its outside zone address in that style.
+    /// 他のシートに同名が無いと、シート名の旗には名前だけが出る。タグの無いラベルは、この書き方でも旗の外でなくラベルの脇にゾーン住所を描く。
+    #[test]
+    fn a_flag_without_a_destination_shows_only_the_name() {
+        let (mut p, sid) = tag_project(crate::model::XrefStyle::SheetName, &[]);
+        p.sheets.pop();
+        let svg = project_sheet_to_svg(&p, sid, &crate::symbol::builtin_symbols()).unwrap();
+        assert!(svg.contains(">PUMP</text>") && !svg.contains("Motor"));
+        let (mut p, sid) = tag_project(crate::model::XrefStyle::SheetName, &[]);
+        for e in p.sheets[0].entities.values_mut() {
+            if let crate::model::Entity::NetLabel(l) = e {
+                l.attrs.clear();
+            }
+        }
+        let svg = project_sheet_to_svg(&p, sid, &crate::symbol::builtin_symbols()).unwrap();
+        assert!(svg.contains(">/2.B3</text>"), "{svg}");
+    }
+
+    /// A sheet with no tags and the default style renders byte-identical SVG to the sheet rendered with the zone style set explicitly, and the flow-out flag moves only the polygon.
+    /// 既定の書き方のシートは、ゾーン住所の書き方を明示した場合とバイトまで同じSVGになる。tag_flow out は旗の多角形だけを変える。
+    #[test]
+    fn the_default_style_renders_as_before_and_flow_out_only_moves_the_polygon() {
+        let (p, sid) = tag_project(crate::model::XrefStyle::Zone, &[]);
+        let base = project_sheet_to_svg(&p, sid, &crate::symbol::builtin_symbols()).unwrap();
+        assert_eq!(p.sheets[0].xref_style, crate::model::XrefStyle::default());
+        let (q, qid) = tag_project(crate::model::XrefStyle::Zone, &[("tag_flow", "out")]);
+        let out = project_sheet_to_svg(&q, qid, &crate::symbol::builtin_symbols()).unwrap();
+        let strip = |s: &str| s.lines().filter(|l| !l.starts_with("<polygon")).collect::<Vec<_>>().join("\n");
+        assert_ne!(base, out);
+        let norm = |s: String| s.lines().filter(|l| !l.contains("PUMP") && !l.contains("/2.B3")).collect::<Vec<_>>().join("\n");
+        assert_eq!(norm(strip(&base)), norm(strip(&out)));
     }
 }
