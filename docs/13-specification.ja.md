@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3611仕様項目**。
+全6領域・**3612仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -104,6 +104,7 @@
 - 伸び縮みで、ジャンクションが動いた線分から外れるなら断る。 <sub>`stretching_is_refused_when_a_junction_would_come_off`</sub>
 - 曲がり角から出る枝の線とそこのジャンクションは、曲がり角が動くと一緒に動き、かたまりはつながったまま。 <sub>`a_branch_at_a_bend_follows_the_bend`</sub>
 - 引けないかたまりで、伸び縮みさせると線の途中のピン (整列で動く部品) が外れるなら、ラベルでつなぎ、並べ直し全体は断らない。 <sub>`a_stretch_that_would_drop_a_mid_wire_pin_falls_back_to_labels`</sub>
+- 同じ回に置いたラベルの短い線と交わる経路は、次の回にその線を避けて引き直し、触れない経路はそのまま使う。 <sub>`a_route_crossed_by_a_new_stub_is_routed_again_next_round`</sub>
 
 ### block
 

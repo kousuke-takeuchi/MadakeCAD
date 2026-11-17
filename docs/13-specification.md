@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3611 specification clauses** across 6 areas.
+**3612 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -104,6 +104,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A stretch that would leave a junction dot off the moved segment is refused. <sub>`stretching_is_refused_when_a_junction_would_come_off`</sub>
 - A branch that starts at a bend, and the junction there, follow the bend when it moves, so the cluster stays connected. <sub>`a_branch_at_a_bend_follows_the_bend`</sub>
 - An unroutable cluster whose stretched wire would leave a moved mid-wire pin behind is joined by labels, and the arrange is not refused. <sub>`a_stretch_that_would_drop_a_mid_wire_pin_falls_back_to_labels`</sub>
+- A route drawn in the same round as a new label stub, and crossed by it, is drawn again in the next round around the stub; routes the stub does not touch are kept as they are. <sub>`a_route_crossed_by_a_new_stub_is_routed_again_next_round`</sub>
 
 ### block
 

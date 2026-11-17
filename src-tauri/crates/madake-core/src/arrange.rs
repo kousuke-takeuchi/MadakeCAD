@@ -1606,6 +1606,96 @@ fn apply_plan(sheet: &Sheet, plan: &ArrangePlan) -> Sheet {
     s
 }
 
+/// 引けた経路の形: 配線の点列とジャンクションの位置。
+fn route_shape(u: &RouteUnit, r: &crate::route::UnitRoute) -> (Vec<Vec<Point>>, Vec<Point>) {
+    let mut lines = Vec::new();
+    let mut dots = Vec::new();
+    for e in emit(u, r) {
+        match e {
+            Entity::Wire(w) => lines.push(w.points),
+            Entity::Junction(j) => dots.push(j.at),
+            _ => {}
+        }
+    }
+    (lines, dots)
+}
+
+/// 引けた経路 (線 `lines`・ジャンクション `dots`) が、置いた線・点に触れるか。線どうしがただ交わるだけ
+/// (端も頂点も相手に乗らない) ならつながらないので数えない。許容差は [`path_hits`] と同じ (線 0.3 mm・点 1 mm)。
+fn route_touches(lines: &[Vec<Point>], dots: &[Point], new_lines: &[Vec<Point>], new_spots: &[Point]) -> bool {
+    let near_line = |q: Point, line: &[Point], d: f64| line.windows(2).any(|w| seg_dist(q, w[0], w[1]) < d);
+    lines.iter().any(|l| {
+        new_spots.iter().any(|&q| near_line(q, l, 1.0))
+            || new_lines.iter().any(|n| n.iter().any(|&q| near_line(q, l, 0.3)) || l.iter().any(|&q| near_line(q, n, 0.3)))
+    }) || dots.iter().any(|&q| new_lines.iter().any(|n| near_line(q, n, 0.3)))
+}
+
+/// 配線の引き直しを回に分けて行う。引けなかった単位ごとに `on_fail(i)` を呼び (ラベルの短い線・伸び縮みさせた
+/// 配線を置く)、置いた線と点を返してもらう。次の回は、その回に置いた線・点に触れる経路の単位だけを、置いたもの全てと
+/// 残した経路を避けて引き直す。新しく引けない単位が出なくなったら終わる。引けない単位は回ごとに1つ以上減るので、
+/// 回数は単位の数 + 1 以下。返り値は単位ごとの経路 (引けなければ None) と、回ごとに引いた単位の番号。
+fn route_rounds(
+    grid: &RouteGrid,
+    route: &[RouteUnit],
+    fixed_lines: &[Vec<Point>],
+    fixed_spots: &[Point],
+    mut on_fail: impl FnMut(usize) -> (Vec<Vec<Point>>, Vec<Point>),
+) -> (Vec<Option<crate::route::UnitRoute>>, Vec<Vec<usize>>) {
+    let mut outcome: Vec<Option<crate::route::UnitRoute>> = (0..route.len()).map(|_| None).collect();
+    let mut extra_lines: Vec<Vec<Point>> = Vec::new();
+    let mut extra_spots: Vec<Point> = Vec::new();
+    let mut todo: Vec<usize> = (0..route.len()).collect();
+    let mut rounds: Vec<Vec<usize>> = Vec::new();
+    for _ in 0..=route.len() {
+        if todo.is_empty() {
+            break;
+        }
+        // 動かない配線・置いたもの全て・この回に引き直さない経路を避ける
+        let mut lines: Vec<Vec<Point>> = fixed_lines.iter().chain(&extra_lines).cloned().collect();
+        let mut spots: Vec<Point> = fixed_spots.iter().chain(&extra_spots).copied().collect();
+        for (i, r) in outcome.iter().enumerate() {
+            if let Some(r) = r.as_ref().filter(|_| !todo.contains(&i)) {
+                let (l, d) = route_shape(&route[i], r);
+                lines.extend(l);
+                spots.extend(d);
+            }
+        }
+        let mut batch: Vec<RouteUnit> = todo.iter().map(|&i| route[i].clone()).collect();
+        let results = route_units(grid, &mut batch, lines, spots);
+        rounds.push(todo.clone());
+        let mut new_lines: Vec<Vec<Point>> = Vec::new();
+        let mut new_spots: Vec<Point> = Vec::new();
+        let mut new_failed = false;
+        for (&i, r) in todo.iter().zip(results) {
+            match r {
+                Ok(r) => outcome[i] = Some(r),
+                Err(_) => {
+                    new_failed = true;
+                    outcome[i] = None;
+                    let (l, s) = on_fail(i);
+                    new_lines.extend(l);
+                    new_spots.extend(s);
+                }
+            }
+        }
+        if !new_failed {
+            break;
+        }
+        // 次の回は、この回に置いた線・点に触れる経路だけを引き直す
+        todo = (0..route.len())
+            .filter(|&i| {
+                outcome[i].as_ref().is_some_and(|r| {
+                    let (l, d) = route_shape(&route[i], r);
+                    route_touches(&l, &d, &new_lines, &new_spots)
+                })
+            })
+            .collect();
+        extra_lines.extend(new_lines);
+        extra_spots.extend(new_spots);
+    }
+    (outcome, rounds)
+}
+
 /// 部品を並べ直し、配線を引き直す計画を作る。図面は書き換えない。
 ///
 /// 整列と通り道の確保で部品を動かし、動かした後の形で全ての配線を引き直す。引けないかたまりはラベルでつなぐ。
@@ -1777,65 +1867,42 @@ pub fn plan_arrange(sheet: &Sheet, defs: &[SymbolDef], opts: &ArrangeOptions, ct
     // 動かない配線として置いてから、残りの単位を引き直す (新しく引けない単位が出なくなるまで)
     let mut names: BTreeMap<usize, FallbackName> = BTreeMap::new();
     let mut stub_parts: BTreeMap<usize, (Vec<Entity>, Vec<Stub>)> = BTreeMap::new();
-    let mut outcome: Vec<Option<crate::route::UnitRoute>> = Vec::new();
-    for _round in 0..8 {
-        let mut lines = fixed_lines.clone();
-        for (es, _) in stub_parts.values() {
-            for e in es {
+    let (outcome, _rounds) = route_rounds(&grid, &route, &fixed_lines, &fixed_spots, |i| {
+        let (l0, s0) = (stub_lines.len(), stub_spots.len());
+        let u = &route[i];
+        let trip = &trips[i];
+        // まず元の形のまま伸び縮みさせる。触れるならラベルでつなぐ
+        let own: BTreeSet<EntityId> = trip.iter().flat_map(|t| pins.iter().filter(move |q| near(q.pos, t.0)).map(|q| q.entity)).collect();
+        if let Some((es, paths)) = stretch_wires(sheet, &u.wires, &u.junctions, &lay, trip, &stub_lines, &stub_spots, &bodies, &own) {
+            stub_lines.extend(paths);
+            stub_spots.extend(es.iter().filter_map(|e| if let Entity::Junction(j) = e { Some(j.at) } else { None }));
+            stub_parts.insert(i, (es, Vec::new()));
+        } else {
+            let old_terms: Vec<(Point, Option<Dir>)> = trip.iter().map(|t| (t.0, t.2)).collect();
+            let name = fallback_name(sheet, &idx, &pins, &owners, &u.net, &net_labels, &u.wires, &old_terms, &pointed, &mut taken);
+            let mut attrs = u.template.clone();
+            attrs.length_m = None;
+            attrs.length_source = Default::default();
+            let terms = trip.iter().filter(|t| !name.skip.iter().any(|q| near(*q, t.0))).map(|t| (t.1, t.2, attrs.clone())).collect();
+            let fb = Fallback { net: u.net.clone(), name: name.name.clone(), terms, template: name.template.clone() };
+            let links = kept_links(sheet, &owners, &lay, &name.keep);
+            for e in &links {
                 if let Entity::Wire(w) = e {
-                    lines.push(w.points.clone());
+                    stub_lines.push(w.points.clone());
                 }
             }
-        }
-        let live: Vec<usize> = (0..route.len()).filter(|i| !stub_parts.contains_key(i)).collect();
-        let mut batch: Vec<RouteUnit> = live.iter().map(|&i| route[i].clone()).collect();
-        let results = route_units(&grid, &mut batch, lines, fixed_spots.clone());
-        outcome = (0..route.len()).map(|_| None).collect();
-        let mut new_failed = false;
-        for (&i, r) in live.iter().zip(results) {
-            match r {
-                Ok(r) => outcome[i] = Some(r),
-                Err(why) => {
-                    new_failed = true;
-                    let u = &route[i];
-                    let trip = &trips[i];
-                    // まず元の形のまま伸び縮みさせる。触れるならラベルでつなぐ
-                    let own: BTreeSet<EntityId> =
-                        trip.iter().flat_map(|t| pins.iter().filter(move |q| near(q.pos, t.0)).map(|q| q.entity)).collect();
-                    if let Some((es, paths)) = stretch_wires(sheet, &u.wires, &u.junctions, &lay, trip, &stub_lines, &stub_spots, &bodies, &own) {
-                        stub_lines.extend(paths);
-                        stub_parts.insert(i, (es, Vec::new()));
-                        continue;
-                    }
-                    let old_terms: Vec<(Point, Option<Dir>)> = trip.iter().map(|t| (t.0, t.2)).collect();
-                    let name = fallback_name(sheet, &idx, &pins, &owners, &u.net, &net_labels, &u.wires, &old_terms, &pointed, &mut taken);
-                    let mut attrs = u.template.clone();
-                    attrs.length_m = None;
-                    attrs.length_source = Default::default();
-                    let terms = trip.iter().filter(|t| !name.skip.iter().any(|q| near(*q, t.0))).map(|t| (t.1, t.2, attrs.clone())).collect();
-                    let fb = Fallback { net: u.net.clone(), name: name.name.clone(), terms, template: name.template.clone() };
-                    let links = kept_links(sheet, &owners, &lay, &name.keep);
-                    for e in &links {
-                        if let Entity::Wire(w) = e {
-                            stub_lines.push(w.points.clone());
-                        }
-                    }
-                    let (mut es, mut ss) = stub_entities(&grid, &fb, &mut stub_lines, &mut stub_spots);
-                    for e in &links {
-                        if let Entity::Wire(w) = e {
-                            ss.push(Stub { wire: w.id, label: w.id, name: fb.name.clone(), check: false });
-                        }
-                    }
-                    es.extend(links);
-                    stub_parts.insert(i, (es, ss));
-                    names.insert(i, name);
+            let (mut es, mut ss) = stub_entities(&grid, &fb, &mut stub_lines, &mut stub_spots);
+            for e in &links {
+                if let Entity::Wire(w) = e {
+                    ss.push(Stub { wire: w.id, label: w.id, name: fb.name.clone(), check: false });
                 }
             }
+            es.extend(links);
+            stub_parts.insert(i, (es, ss));
+            names.insert(i, name);
         }
-        if !new_failed {
-            break;
-        }
-    }
+        (stub_lines[l0..].to_vec(), stub_spots[s0..].to_vec())
+    });
     let mut routed: BTreeSet<String> = BTreeSet::new();
     let mut kept_shape: BTreeSet<String> = BTreeSet::new();
     for (i, u) in route.iter().enumerate() {
@@ -3669,5 +3736,38 @@ mod tests {
         assert!(plan.kept_shape.is_empty(), "{:?}", plan.kept_shape);
         let after = apply(&sh, &plan);
         assert_eq!(pin_partition(&sh, &ds), pin_partition(&after, &ds));
+    }
+
+    /// A route drawn in the same round as a new label stub, and crossed by it, is drawn again in the next round around the stub; routes the stub does not touch are kept as they are.
+    /// 同じ回に置いたラベルの短い線と交わる経路は、次の回にその線を避けて引き直し、触れない経路はそのまま使う。
+    #[test]
+    fn a_route_crossed_by_a_new_stub_is_routed_again_next_round() {
+        let (mut sh, _, _) = walled_sheet();
+        place(&mut sh, "cap", (135.0, 95.0), "C1");
+        place(&mut sh, "cap", (135.0, 20.0), "C2");
+        old_wire(&mut sh, &[(135.0, 85.0), (135.0, 30.0)]);
+        place(&mut sh, "cap", (220.0, 95.0), "C3");
+        place(&mut sh, "cap", (220.0, 20.0), "C4");
+        old_wire(&mut sh, &[(220.0, 85.0), (220.0, 30.0)]);
+        let c = collect_route_units(&sh, &defs(), &RerouteOptions::default(), &[]);
+        let at_x = |x: f64| c.units.iter().position(|u| u.terms.iter().all(|t| (t.0.x - x).abs() < 1e-6)).expect("unit");
+        let (mid, far) = (at_x(135.0), at_x(220.0));
+        let grid = RouteGrid::build(&sh, &defs(), &RouteOptions::default());
+        // 引けなかったかたまりの短い線の先 (ラベル) が、1回目の経路の最も長い線分の中ほどに来る
+        let first = route_units(&grid, &mut c.units.clone(), vec![], vec![]);
+        let (lines, _) = route_shape(&c.units[mid], first[mid].as_ref().expect("first route"));
+        let seg = lines.iter().flat_map(|l| l.windows(2)).max_by(|a, b| a[0].distance_to(&a[1]).total_cmp(&b[0].distance_to(&b[1]))).expect("seg");
+        let end = Point::new(rnd((seg[0].x + seg[1].x) / 2.0), rnd((seg[0].y + seg[1].y) / 2.0));
+        let mut failed = Vec::new();
+        let (outcome, rounds) = route_rounds(&grid, &c.units, &[], &[], |i| {
+            failed.push(i);
+            (vec![vec![end.translated(-15.0, 0.0), end]], vec![end])
+        });
+        assert_eq!(failed.len(), 1);
+        assert_eq!(rounds, vec![(0..c.units.len()).collect::<Vec<_>>(), vec![mid]]);
+        let r = outcome[mid].as_ref().expect("routed again");
+        let (lines, _) = route_shape(&c.units[mid], r);
+        assert!(lines.iter().all(|l| l.windows(2).all(|w| seg_dist(end, w[0], w[1]) > 1.0)), "{lines:?}");
+        assert!(outcome[far].is_some());
     }
 }
