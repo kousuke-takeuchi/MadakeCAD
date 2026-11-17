@@ -65,6 +65,20 @@ export function sideOffset(i: number, n: number): number {
   return (i - (n - 1) / 2) * 5.0;
 }
 
+/**
+ * 辺の各項目 (添字は辺のピン表と同じ) の最初の行の中央揃えオフセット mm (Rust側 block::coarse_offsets)。
+ * すき間の行 (gap) は gap 行、ほかの項目は1行。コネクタの絵を描く辺は5mm間隔だけなので、そこが使う。
+ */
+export function coarseOffsets(side: BlockPin[]): number[] {
+  const rows = side.reduce((n, e) => n + (e.gap ?? 1), 0);
+  let next = 0;
+  return side.map((e) => {
+    const at = sideOffset(next, rows);
+    next += e.gap ?? 1;
+    return at;
+  });
+}
+
 /** 1辺の中の、1つの絵で描くピンのまとまり (`start`〜`end` の手前までが辺のピン表の添字)。 */
 export interface ConnectorGroup {
   kind: ConnectorKind;
@@ -254,11 +268,10 @@ function edgeSegments(out: Primitive[], half: number, gaps: [number, number][], 
 
 /** コネクタのあるブロックの外形: 絵が辺と交わる所を空けた線分 (Rust側 outline_segments と同じ順)。 */
 export function outlineSegments(pins: BlockPins, hw: number, hh: number): Primitive[] {
-  const gaps = (side: BlockPin[] = []): [number, number][] =>
-    connectorGroups(side).map((g) => [
-      sideOffset(g.start, side.length) - CONNECTOR_HALF_SPAN_MM,
-      sideOffset(g.end - 1, side.length) + CONNECTOR_HALF_SPAN_MM,
-    ]);
+  const gaps = (side: BlockPin[] = []): [number, number][] => {
+    const offs = coarseOffsets(side);
+    return connectorGroups(side).map((g) => [offs[g.start] - CONNECTOR_HALF_SPAN_MM, offs[g.end - 1] + CONNECTOR_HALF_SPAN_MM]);
+  };
   const out: Primitive[] = [];
   edgeSegments(out, hw, gaps(pins.top), (x) => ({ x, y: -hh }));
   edgeSegments(out, hh, gaps(pins.right), (y) => ({ x: hw, y }));

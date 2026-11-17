@@ -673,7 +673,7 @@ export type Primitive =
   | { type: "circle"; center: Point; r: number; filled: boolean }
   | { type: "arc"; center: Point; r: number; start_deg: number; end_deg: number }
   | { type: "rect"; p1: Point; p2: Point; filled: boolean }
-  | { type: "text"; at: Point; text: string; height: number };
+  | { type: "text"; at: Point; text: string; height: number; bold?: boolean };
 
 export interface SymbolDef {
   id: string;

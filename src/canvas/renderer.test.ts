@@ -249,6 +249,27 @@ describe("drawSymbol text placement", () => {
     expect(fontSizesAt(0.5)).toEqual([]);
   });
 
+  // ja: シンボルの図形の文字に bold があるものだけが太字のフォントで描かれる (ブロックの見出しの行)
+  it("draws a symbol text primitive in bold only when it is marked bold", () => {
+    const fonts: [string, string][] = [];
+    const { ctx } = recorder();
+    (ctx as unknown as { fillText: (t: string) => void }).fillText = (t: string) => {
+      fonts.push([t, ctx.font]);
+    };
+    const def: SymbolDef = {
+      ...motor,
+      primitives: [
+        { type: "text", at: { x: 0, y: 0 }, text: "PLAIN", height: 4 },
+        { type: "text", at: { x: 0, y: 5 }, text: "HEAD", height: 4, bold: true },
+      ],
+    };
+    const vp = new Viewport();
+    vp.scale = 4;
+    drawSymbol(ctx, vp, placed(0), def, false, undefined, false);
+    expect(fonts.find(([t]) => t === "PLAIN")![1]).not.toContain("bold");
+    expect(fonts.find(([t]) => t === "HEAD")![1]).toContain("bold");
+  });
+
   // ja: シンボルの中の文字は、シンボルを回しても反転しても定義どおりの場所に描かれる
   it("keeps the lettering inside a symbol where the symbol definition puts it, whatever the rotation", () => {
     for (const [rotation, mirror] of [

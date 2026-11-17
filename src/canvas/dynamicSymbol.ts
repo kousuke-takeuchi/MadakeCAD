@@ -18,6 +18,7 @@ import {
   isConnectorKind,
   isGroupedConnector,
   outlineSegments,
+  coarseOffsets,
   sideOffset as offset,
   type ConnectorGroup,
   type ConnectorKind,
@@ -251,6 +252,15 @@ export const BLOCK_SIZE_ATTR = "block_size";
 export const BLOCK_PITCH_ATTR = "block_pitch";
 /** ピン番号を外形の外に描くか内に描くかを持つ属性キー ("outside" か "inside"。無ければ外)。 */
 export const BLOCK_NUMBERS_ATTR = "block_numbers";
+/** ピン名・見出し・番号の文字の高さを持つ属性キー (mm、1.5〜5.0。無ければ BLOCK_PIN_TEXT_MM)。Rust の BLOCK_PIN_TEXT_ATTR と同じ。 */
+export const BLOCK_PIN_TEXT_ATTR = "block_pin_text";
+/** block_pin_text の下限・上限 mm。 */
+export const BLOCK_PIN_TEXT_MIN_MM = 1.5;
+export const BLOCK_PIN_TEXT_MAX_MM = 5.0;
+/** 1つのすき間の行の最大の行数 (Rust側 BLOCK_GAP_MAX)。 */
+export const BLOCK_GAP_MAX = 20;
+/** 1つのブロックの行の最大数 (Rust側 BLOCK_ROW_MAX)。全辺の合計。 */
+export const BLOCK_ROW_MAX = 400;
 /** 細かいピン間隔 mm。グリッドと同じ。 */
 export const BLOCK_FINE_PITCH_MM = 2.5;
 /** 細かい間隔のブロックの最小の外形 mm (幅・高さとも)。 */
@@ -329,9 +339,26 @@ function rowOffsets(n: number, size: number, pitch: BlockPitch): number[] {
   return Array.from({ length: n }, (_, i) => first + i * step + nudge);
 }
 
-/** ブロックの1ピン。 */
+/**
+ * 辺の各項目 (添字は辺のピン表と同じ) の最初の行の、外形の中心から測ったオフセット mm (Rust側 side_offsets)。
+ * 行の数で中央揃えにするので、すき間も箱の大きさとピンの位置に効く。
+ */
+function sideOffsets(side: readonly BlockPin[], size: number, pitch: BlockPitch): number[] {
+  const rows = rowOffsets(sideRows(side), size, pitch);
+  let next = 0;
+  return side.map((e) => {
+    const at = rows[next];
+    next += blockRows(e);
+    return at;
+  });
+}
+
+/**
+ * ブロックの1項目 (Rust側 BlockPin): 普通のピン、すき間の行 (gap)、見出しの行 (caption) のどれか。
+ * 番号が空 (無い) ピンはピン名が鍵になる。
+ */
 export interface BlockPin {
-  no: string;
+  no?: string;
   name?: string;
   /** ポートの接点 (Rust側 BlockPin::contacts)。 */
   contacts?: string[];
@@ -339,6 +366,35 @@ export interface BlockPin {
   connector?: ConnectorKind;
   /** まとめて1つの本体に描くコネクタ (端子台・JST) の名前 (Rust側 BlockPin::connector_ref)。 */
   connector_ref?: string;
+  /** すき間の行: その辺のピンの位置を n 行 (1〜20) 空ける。ピンではない。 */
+  gap?: number;
+  /** 見出しの行: その辺の1行を使い、箱の内側に太字で書く。ピンではない。 */
+  caption?: string;
+}
+
+/** 普通のピンか (すき間・見出しの行ではない)。 */
+export function isBlockPin(e: BlockPin): boolean {
+  return e.gap === undefined && e.caption === undefined;
+}
+
+/** 項目がその辺で使う行の数 (Rust側 BlockPin::rows)。 */
+export function blockRows(e: BlockPin): number {
+  return e.gap ?? 1;
+}
+
+/** 辺の行の数 (Rust側 side_rows)。 */
+export function sideRows(side: readonly BlockPin[]): number {
+  return side.reduce((n, e) => n + blockRows(e), 0);
+}
+
+/** 番号があるか (Rust側 BlockPin::numbered)。 */
+export function isNumbered(e: BlockPin): boolean {
+  return (e.no ?? "").trim() !== "";
+}
+
+/** ピンの鍵: 番号。番号が無ければピン名 (どちらも前後の空白を除く。Rust側 BlockPin::key)。 */
+export function blockPinKey(e: BlockPin): string {
+  return isNumbered(e) ? (e.no ?? "").trim() : (e.name ?? "").trim();
 }
 
 /** ブロックのピン配置(辺ごと。左右は上→下、上下は左→右)。 */
@@ -487,7 +543,7 @@ function insideCaptionAnchor(inst: SymbolInstance, def: SymbolDef): CaptionAncho
   try {
     const spec = parseBlockSpec(inst.attrs ?? {});
     if (spec.caption !== "inside") return null;
-    corners = blockOutline(spec.pins, spec.size, spec.pitch, spec.numbers);
+    corners = blockOutline(spec.pins, spec.size, spec.pitch, spec.numbers, spec.pinText);
   } catch {
     return null;
   }
@@ -506,8 +562,8 @@ function centredCaptionX(inst: SymbolInstance, def: SymbolDef): number {
   if (def.id !== BLOCK_SYMBOL_ID) return inst.at.x;
   let corners: [Point, Point];
   try {
-    const { pins, size, pitch, numbers } = parseBlockSpec(inst.attrs ?? {});
-    corners = blockOutline(pins, size, pitch, numbers);
+    const { pins, size, pitch, numbers, pinText } = parseBlockSpec(inst.attrs ?? {});
+    corners = blockOutline(pins, size, pitch, numbers, pinText);
   } catch {
     return inst.at.x;
   }
@@ -518,8 +574,8 @@ function topLeftCornerAnchor(inst: SymbolInstance, def: SymbolDef): CaptionAncho
   if (def.id !== BLOCK_SYMBOL_ID) return null;
   let corners: [Point, Point];
   try {
-    const { pins, size, pitch, numbers } = parseBlockSpec(inst.attrs ?? {});
-    corners = blockOutline(pins, size, pitch, numbers);
+    const { pins, size, pitch, numbers, pinText } = parseBlockSpec(inst.attrs ?? {});
+    corners = blockOutline(pins, size, pitch, numbers, pinText);
   } catch {
     return null;
   }
@@ -673,18 +729,20 @@ function snapUp(v: number, step: number): number {
   return Math.ceil(v / step - 1e-9) * step;
 }
 
-function nameWidth(name: string): number {
-  return textWidthMm(name, BLOCK_PIN_TEXT_MM);
+function nameWidth(name: string, th: number): number {
+  return textWidthMm(name, th);
 }
 
-function maxNameWidth(side: BlockPin[]): number {
-  return side.reduce((w, p) => Math.max(w, nameWidth(p.name ?? "")), 0);
+function maxNameWidth(side: BlockPin[], th: number): number {
+  return side.reduce((w, p) => Math.max(w, nameWidth(p.caption !== undefined ? p.caption.trim() : (p.name ?? ""), th)), 0);
 }
 
-function captionInset(side: BlockPin[]): number {
+/** 上辺・下辺のピンが外形の内側で使う高さ mm (Rust側 caption_inset)。文字の高さに比例する (2mm で 5 / 7.5mm)。 */
+function captionInset(side: BlockPin[], th: number): number {
+  const k = th / BLOCK_PIN_TEXT_MM;
   if (side.length === 0) return 0;
   if (connectorGroups(side).some((g) => groupLabel(g) !== null)) return CONNECTOR_LABEL_INSET_MM;
-  return side.some((p) => (p.name ?? "") !== "") ? 7.5 : 5.0;
+  return side.some((p) => (p.name ?? "") !== "" || p.caption !== undefined) ? 7.5 * k : 5.0 * k;
 }
 
 /** 左右の辺の、外形からピン名までの余白 mm (Rust側 side_pad)。 */
@@ -693,15 +751,15 @@ function sidePad(side: BlockPin[]): number {
 }
 
 /** 左右の辺の内側に書く文字の最大幅 mm (Rust側 side_text_width)。 */
-function sideTextWidth(side: BlockPin[]): number {
-  let width = maxNameWidth(side);
+function sideTextWidth(side: BlockPin[], th: number): number {
+  let width = maxNameWidth(side, th);
   for (const group of connectorGroups(side)) {
     const label = groupLabel(group);
     if (label === null) continue;
-    const labelW = nameWidth(label);
+    const labelW = nameWidth(label, th);
     const name = side[group.start].name ?? "";
     const need =
-      group.end - group.start >= 2 || name === "" ? labelW : nameWidth(name) + CONNECTOR_LABEL_GAP_MM + labelW;
+      group.end - group.start >= 2 || name === "" ? labelW : nameWidth(name, th) + CONNECTOR_LABEL_GAP_MM + labelW;
     width = Math.max(width, need);
   }
   return width;
@@ -716,11 +774,13 @@ function sideOf(pins: BlockPins, key: (typeof BLOCK_SIDES)[number]): BlockPin[] 
  * [a の添字, b の添字] (Rust側 same_line_pairs)。size はその辺に沿った外形の寸法。
  */
 function sameLinePairs(a: BlockPin[], b: BlockPin[], size: number, pitch: BlockPitch): [number, number][] {
-  const oa = rowOffsets(a.length, size, pitch);
-  const ob = rowOffsets(b.length, size, pitch);
+  const oa = sideOffsets(a, size, pitch);
+  const ob = sideOffsets(b, size, pitch);
   const pairs: [number, number][] = [];
   a.forEach((pa, i) => {
-    const j = b.findIndex((pb) => (pb.no ?? "").trim() === (pa.no ?? "").trim());
+    // 貫通ピンは番号のあるピンだけ (すき間・見出し・番号の無いピンは組にならない)
+    if (!isBlockPin(pa) || !isNumbered(pa)) return;
+    const j = b.findIndex((pb) => isBlockPin(pb) && isNumbered(pb) && (pb.no ?? "").trim() === (pa.no ?? "").trim());
     if (j >= 0 && Math.abs(oa[i] - ob[j]) < 1e-9) pairs.push([i, j]);
   });
   return pairs;
@@ -731,7 +791,7 @@ function sameLinePairs(a: BlockPin[], b: BlockPin[], size: number, pitch: BlockP
  * 貫通ピンの組の番号は中央に1つだけ描くので、その最大幅と、残りの左の最大幅+残りの右の最大幅+間
  * (両方あるとき) の大きいほうが収まればよい。h は外形の高さ。
  */
-function insideNumbersWidth(pins: BlockPins, h: number, pitch: BlockPitch): number {
+function insideNumbersWidth(pins: BlockPins, h: number, pitch: BlockPitch, th: number): number {
   const left = sideOf(pins, "left");
   const right = sideOf(pins, "right");
   const pairs =
@@ -740,17 +800,20 @@ function insideNumbersWidth(pins: BlockPins, h: number, pitch: BlockPitch): numb
     let widest = 0;
     let count = 0;
     list.forEach((pin, i) => {
-      if (pairs.some((q) => q[second ? 1 : 0] === i)) return;
-      widest = Math.max(widest, nameWidth((pin.no ?? "").trim()));
+      if (!isBlockPin(pin) || pairs.some((q) => q[second ? 1 : 0] === i)) return;
+      // 番号の無いピンは番号の位置に名前を書く
+      widest = Math.max(widest, nameWidth(blockPinKey(pin), th));
       count++;
     });
     return [widest, count];
   };
   const [lw, ln] = rest(left, false);
   const [rw, rn] = rest(right, true);
-  const merged = pairs.reduce((m, [i]) => Math.max(m, nameWidth((left[i].no ?? "").trim())), 0);
+  const merged = pairs.reduce((m, [i]) => Math.max(m, nameWidth((left[i].no ?? "").trim(), th)), 0);
   const sides = lw + rw + (ln > 0 && rn > 0 ? BLOCK_INSIDE_GAP_MM : 0);
-  return 2 * BLOCK_TEXT_PAD_MM + Math.max(merged, sides);
+  // 見出しは番号と同じ行には無いが、箱の中に収まる幅は要る
+  const caption = [...left, ...right].reduce((m, e) => (e.caption !== undefined ? Math.max(m, nameWidth(e.caption.trim(), th)) : m), 0);
+  return 2 * BLOCK_TEXT_PAD_MM + Math.max(merged, sides, caption);
 }
 
 /**
@@ -780,7 +843,7 @@ function checkConnectors(pins: BlockPins): void {
   for (const side of BLOCK_SIDES) {
     for (const pin of sideOf(pins, side)) {
       if (pin.connector_ref == null) continue;
-      const no = (pin.no ?? "").trim();
+      const no = blockPinKey(pin);
       if (pin.connector_ref.trim() === "") throw new Error(`block pin ${no}: connector_ref must not be empty`);
       if (pin.connector == null) {
         throw new Error(`block pin ${no}: connector_ref needs a grouped connector (screw, jst_ph_f, jst_xh_f)`);
@@ -797,7 +860,7 @@ function checkConnectors(pins: BlockPins): void {
       if (group.ref === null) continue;
       if (seen.has(group.ref)) {
         throw new Error(
-          `block pin ${(list[group.start].no ?? "").trim()}: connector_ref ${group.ref} is used by another group; its pins must be next to each other on one side`,
+          `block pin ${blockPinKey(list[group.start])}: connector_ref ${group.ref} is used by another group; its pins must be next to each other on one side`,
         );
       }
       seen.add(group.ref);
@@ -812,6 +875,8 @@ export function parseBlockSpec(attrs: Record<string, string>): {
   numbers: BlockNumbers;
   caption: BlockCaption;
   leads: BlockLeads;
+  /** ピン名・見出し・番号の文字の高さ mm。属性が無ければnull (今までの BLOCK_PIN_TEXT_MM)。 */
+  pinText: number | null;
 } {
   const rawPins = attrs[BLOCK_PINS_ATTR];
   let pins: BlockPins = {};
@@ -839,9 +904,21 @@ export function parseBlockSpec(attrs: Record<string, string>): {
       if (pin.connector_ref != null && typeof pin.connector_ref !== "string") {
         throw new Error(`${BLOCK_PINS_ATTR} is not valid JSON: connector_ref must be a string`);
       }
+      // Rust では serde が読むときに断る (gap は 0 以上の整数、caption は文字列)
+      if (pin.gap != null && (typeof pin.gap !== "number" || !Number.isInteger(pin.gap) || pin.gap < 0)) {
+        throw new Error(`${BLOCK_PINS_ATTR} is not valid JSON: gap must be a non-negative integer`);
+      }
+      if (pin.caption != null && typeof pin.caption !== "string") {
+        throw new Error(`${BLOCK_PINS_ATTR} is not valid JSON: caption must be a string`);
+      }
     }
   }
-  const all = BLOCK_SIDES.flatMap((s) => sideOf(pins, s));
+  // null は「無い」と同じ (Rust の Option)。以降は undefined だけを見る
+  for (const pin of BLOCK_SIDES.flatMap((s) => sideOf(pins, s))) {
+    if (pin.gap === null) delete pin.gap;
+    if (pin.caption === null) delete pin.caption;
+  }
+  const all = BLOCK_SIDES.flatMap((s) => sideOf(pins, s)).filter(isBlockPin);
   if (all.length > BLOCK_PIN_MAX) {
     throw new Error(`block has too many pins: ${all.length} (max ${BLOCK_PIN_MAX})`);
   }
@@ -849,12 +926,20 @@ export function parseBlockSpec(attrs: Record<string, string>): {
   const seen = new Map<string, { side: number; pin: BlockPin; paired: boolean }>();
   BLOCK_SIDES.forEach((key, side) => {
     for (const pin of sideOf(pins, key)) {
-      const no = (pin.no ?? "").trim();
+      // すき間・見出しの行は、他の項目を混ぜず・範囲内なら、ピンの決まりの外
+      if (!isBlockPin(pin)) {
+        checkEntry(pin);
+        continue;
+      }
+      // 番号が無いピンは名前が鍵。どちらも無ければ断る
+      const no = blockPinKey(pin);
       if (!no) throw new Error("block pin number must not be empty");
       const first = seen.get(no);
       if (!first) {
         seen.set(no, { side, pin, paired: false });
       } else {
+        // 番号の無いピンは貫通できない
+        if (!isNumbered(pin) || !isNumbered(first.pin)) throw new Error(`duplicate block pin name: ${no}`);
         if (first.paired || Math.floor(first.side / 2) !== Math.floor(side / 2) || first.side === side) {
           throw new Error(`duplicate block pin number: ${no}`);
         }
@@ -871,6 +956,10 @@ export function parseBlockSpec(attrs: Record<string, string>): {
     }
   });
   checkConnectors(pins);
+  const rowCount = BLOCK_SIDES.reduce((n, k) => n + sideRows(sideOf(pins, k)), 0);
+  if (rowCount > BLOCK_ROW_MAX) {
+    throw new Error(`block has too many rows: ${rowCount} (max ${BLOCK_ROW_MAX})`);
+  }
 
   const rawPitch = attrs[BLOCK_PITCH_ATTR]?.trim();
   let pitch: BlockPitch;
@@ -887,11 +976,22 @@ export function parseBlockSpec(attrs: Record<string, string>): {
   if (rawCaption === undefined || rawCaption === "above") caption = "above";
   else if (rawCaption === "inside") caption = "inside";
   else throw new Error(`${BLOCK_CAPTION_ATTR} must be "above" or "inside": ${JSON.stringify(rawCaption)}`);
+  const rawPinText = attrs[BLOCK_PIN_TEXT_ATTR]?.trim();
+  let pinText: number | null = null;
+  if (rawPinText !== undefined) {
+    const v = rawPinText === "" ? NaN : Number(rawPinText);
+    if (!Number.isFinite(v) || v < BLOCK_PIN_TEXT_MIN_MM || v > BLOCK_PIN_TEXT_MAX_MM) {
+      throw new Error(
+        `${BLOCK_PIN_TEXT_ATTR} must be between ${BLOCK_PIN_TEXT_MIN_MM.toFixed(1)} and ${BLOCK_PIN_TEXT_MAX_MM.toFixed(1)} mm: ${JSON.stringify(rawPinText)}`,
+      );
+    }
+    pinText = v;
+  }
   if (pitch === "fine") {
     const pin = all.find((q) => q.connector != null);
     if (pin) {
       throw new Error(
-        `block pin ${(pin.no ?? "").trim()}: a connector picture cannot be used with ${BLOCK_PITCH_ATTR} 2.5`,
+        `block pin ${blockPinKey(pin)}: a connector picture cannot be used with ${BLOCK_PITCH_ATTR} 2.5`,
       );
     }
   }
@@ -900,7 +1000,7 @@ export function parseBlockSpec(attrs: Record<string, string>): {
     const pin = all.find((q) => q.connector != null);
     if (pin) {
       throw new Error(
-        `block pin ${(pin.no ?? "").trim()}: a connector picture cannot be used with ${BLOCK_NUMBERS_ATTR} inside`,
+        `block pin ${blockPinKey(pin)}: a connector picture cannot be used with ${BLOCK_NUMBERS_ATTR} inside`,
       );
     }
   }
@@ -919,8 +1019,8 @@ export function parseBlockSpec(attrs: Record<string, string>): {
       throw new Error("block_size must be positive");
     }
     size = { w: snapUp(w, blockSizeStep(pitch)), h: snapUp(h, blockSizeStep(pitch)) };
-    const rows = Math.max(sideOf(pins, "left").length, sideOf(pins, "right").length);
-    const cols = Math.max(sideOf(pins, "top").length, sideOf(pins, "bottom").length);
+    const rows = Math.max(sideRows(sideOf(pins, "left")), sideRows(sideOf(pins, "right")));
+    const cols = Math.max(sideRows(sideOf(pins, "top")), sideRows(sideOf(pins, "bottom")));
     const needW = sideNeed(cols, pitch);
     const needH = sideNeed(rows, pitch);
     if (size.w < needW - 1e-9 || size.h < needH - 1e-9) {
@@ -937,7 +1037,23 @@ export function parseBlockSpec(attrs: Record<string, string>): {
   if (leads === "none" && numbers !== "inside") {
     throw new Error(`${BLOCK_LEADS_ATTR} none needs ${BLOCK_NUMBERS_ATTR} inside`);
   }
-  return { pins, size, pitch, numbers, caption, leads };
+  return { pins, size, pitch, numbers, caption, leads, pinText };
+}
+
+/** すき間・見出しの行を調べる (Rust側 check_entry と同じ順・同じ文)。 */
+function checkEntry(e: BlockPin): void {
+  const mixed =
+    (e.gap !== undefined && e.caption !== undefined) ||
+    isNumbered(e) ||
+    (e.name ?? "").trim() !== "" ||
+    (e.contacts ?? []).length > 0 ||
+    e.connector != null ||
+    e.connector_ref != null;
+  if (mixed) throw new Error("block gap or caption entry cannot have other fields");
+  if (e.gap !== undefined && (e.gap < 1 || e.gap > BLOCK_GAP_MAX)) {
+    throw new Error(`block gap must be 1 to ${BLOCK_GAP_MAX} rows: ${e.gap}`);
+  }
+  if (e.caption !== undefined && e.caption.trim() === "") throw new Error("block caption must not be blank");
 }
 
 /** 左右の辺の内側に書く文字の1つ分: 縦の位置・外形の内壁からの張り出し・まとまりの名前か (Rust側 SideText)。 */
@@ -948,20 +1064,24 @@ interface SideText {
 }
 
 /** 左右の辺の内側に書く文字 (ピン名とまとまりの名前) の位置 (Rust側 side_texts。pinLayout / labelAt と同じ式)。 */
-function sideTexts(side: BlockPin[]): SideText[] {
-  const n = side.length;
+function sideTexts(side: BlockPin[], th: number): SideText[] {
+  const offs = coarseOffsets(side);
   const nameIn = BLOCK_TEXT_PAD_MM + CONNECTOR_IN_MM;
   const out: SideText[] = [];
   side.forEach((pin, i) => {
+    if (pin.caption !== undefined) {
+      out.push({ y: offs[i], extent: BLOCK_TEXT_PAD_MM + nameWidth(pin.caption.trim(), th), label: false });
+      return;
+    }
     const name = pin.name ?? "";
     if (name === "") return;
     const start = pin.connector != null ? nameIn : BLOCK_TEXT_PAD_MM;
-    out.push({ y: offset(i, n), extent: start + nameWidth(name), label: false });
+    out.push({ y: offs[i], extent: start + nameWidth(name, th), label: false });
   });
   for (const group of connectorGroups(side)) {
     const label = groupLabel(group);
     if (label === null) continue;
-    const first = offset(group.start, n);
+    const first = offs[group.start];
     const count = group.end - group.start;
     let y = first;
     let start = nameIn;
@@ -969,9 +1089,9 @@ function sideTexts(side: BlockPin[]): SideText[] {
       y = first + BLOCK_PIN_PITCH_MM / 2 + BLOCK_PIN_PITCH_MM * Math.floor((count - 1) / 2);
     } else {
       const name = side[group.start].name ?? "";
-      if (name !== "") start = nameIn + nameWidth(name) + CONNECTOR_LABEL_GAP_MM;
+      if (name !== "") start = nameIn + nameWidth(name, th) + CONNECTOR_LABEL_GAP_MM;
     }
-    out.push({ y, extent: start + nameWidth(label), label: true });
+    out.push({ y, extent: start + nameWidth(label, th), label: true });
   }
   return out;
 }
@@ -980,13 +1100,13 @@ function sideTexts(side: BlockPin[]): SideText[] {
  * 左右の辺の文字が同じ行 (文字の高さの範囲が重なる) に並び、そのどちらかがまとまりの名前のとき、
  * 左の文字・文字の間隔・右の文字が収まる幅 mm。そういう行が無ければ0 (Rust側 shared_row_width)。
  */
-function sharedRowWidth(pins: BlockPins): number {
-  const left = sideTexts(sideOf(pins, "left"));
-  const right = sideTexts(sideOf(pins, "right"));
+function sharedRowWidth(pins: BlockPins, th: number): number {
+  const left = sideTexts(sideOf(pins, "left"), th);
+  const right = sideTexts(sideOf(pins, "right"), th);
   let need = 0;
   for (const l of left) {
     for (const r of right) {
-      if ((l.label || r.label) && Math.abs(l.y - r.y) < BLOCK_PIN_TEXT_MM - 1e-9) {
+      if ((l.label || r.label) && Math.abs(l.y - r.y) < th - 1e-9) {
         need = Math.max(need, l.extent + CONNECTOR_LABEL_GAP_MM + r.extent);
       }
     }
@@ -994,36 +1114,51 @@ function sharedRowWidth(pins: BlockPins): number {
   return need;
 }
 
-/** ブロックの外形寸法 mm (Rust側 `block_box` と同じ)。 */
+/** 番号を外に描くとき、左右のピン名・見出しが向かい合って収まる幅 mm (Rust側 outside_text_width)。 */
+function outsideTextWidth(pins: BlockPins, pitchMm: number, th: number): number {
+  const left = sideOf(pins, "left");
+  const right = sideOf(pins, "right");
+  return sidePad(left) + sidePad(right) + sideTextWidth(left, th) + sideTextWidth(right, th) + pitchMm;
+}
+
+/**
+ * ブロックの外形寸法 mm (Rust側 `block_box` と同じ)。`pinText` はピン名・見出し・番号の文字の高さ
+ * (block_pin_text。nullなら今までの BLOCK_PIN_TEXT_MM)。
+ */
 export function blockBox(
   pins: BlockPins,
   size: { w: number; h: number } | null,
   pitch: BlockPitch = "coarse",
   numbers: BlockNumbers = "outside",
+  pinText: number | null = null,
 ): [number, number] {
   const step = blockSizeStep(pitch);
+  const th = pinText ?? BLOCK_PIN_TEXT_MM;
   if (size) {
     // 指定の幅でも、左右のまとまりの名前が同じ行で重なるなら、収まる幅まで広げる
-    let w = Math.max(size.w, snapUp(sharedRowWidth(pins), step));
-    if (numbers === "inside") w = Math.max(w, snapUp(insideNumbersWidth(pins, size.h, pitch), step));
+    let w = Math.max(size.w, snapUp(sharedRowWidth(pins, th), step));
+    if (numbers === "inside") {
+      w = Math.max(w, snapUp(insideNumbersWidth(pins, size.h, pitch, th), step));
+    } else if (pinText !== null) {
+      // 文字の大きさを決めたブロックは、手動の幅でも向かい合う名前がぶつからない幅まで広げる
+      w = Math.max(w, snapUp(outsideTextWidth(pins, blockPitchMm(pitch), th), step));
+    }
     return [w, size.h];
   }
   const left = sideOf(pins, "left");
   const right = sideOf(pins, "right");
   const top = sideOf(pins, "top");
   const bottom = sideOf(pins, "bottom");
-  const rows = Math.max(left.length, right.length);
-  const cols = Math.max(top.length, bottom.length);
+  const rows = Math.max(sideRows(left), sideRows(right));
+  const cols = Math.max(sideRows(top), sideRows(bottom));
   const pm = blockPitchMm(pitch);
   const minW = pitch === "fine" ? BLOCK_FINE_MIN_MM : BLOCK_MIN_W_MM;
   const minH = pitch === "fine" ? BLOCK_FINE_MIN_MM : BLOCK_MIN_H_MM;
   const needCols = pitch === "fine" ? sideNeed(cols, pitch) : cols * pm + pm;
   const needRows = pitch === "fine" ? sideNeed(rows, pitch) : rows * pm + pm;
-  const h = snapUp(Math.max(minH, needRows, captionInset(top) + captionInset(bottom) + pm), step);
+  const h = snapUp(Math.max(minH, needRows, captionInset(top, th) + captionInset(bottom, th) + pm), step);
   const wText =
-    numbers === "inside"
-      ? insideNumbersWidth(pins, h, pitch)
-      : sidePad(left) + sidePad(right) + sideTextWidth(left) + sideTextWidth(right) + pm;
+    numbers === "inside" ? insideNumbersWidth(pins, h, pitch, th) : outsideTextWidth(pins, pm, th);
   const w = Math.max(minW, wText, needCols);
   return [snapUp(w, step), h];
 }
@@ -1037,8 +1172,9 @@ export function blockOutline(
   size: { w: number; h: number } | null,
   pitch: BlockPitch = "coarse",
   numbers: BlockNumbers = "outside",
+  pinText: number | null = null,
 ): [Point, Point] {
-  const [w, h] = blockBox(pins, size, pitch, numbers);
+  const [w, h] = blockBox(pins, size, pitch, numbers, pinText);
   const sx = axisShift(w, pitch);
   const sy = axisShift(h, pitch);
   return [p(-w / 2 + sx, -h / 2 + sy), p(w / 2 + sx, h / 2 + sy)];
@@ -1064,9 +1200,10 @@ function labelAt(
   hw: number,
   hh: number,
   pitchMm: number,
+  th: number,
 ): Point {
   const first = offs[group.start];
-  const labelW = nameWidth(label);
+  const labelW = nameWidth(label, th);
   const nameIn = BLOCK_TEXT_PAD_MM + CONNECTOR_IN_MM;
   if (dir === "left" || dir === "right") {
     const count = group.end - group.start;
@@ -1076,12 +1213,21 @@ function labelAt(
       y = first + pitchMm / 2 + pitchMm * Math.floor((count - 1) / 2);
     } else {
       const name = side[group.start].name ?? "";
-      if (name !== "") start = nameIn + nameWidth(name) + CONNECTOR_LABEL_GAP_MM;
+      if (name !== "") start = nameIn + nameWidth(name, th) + CONNECTOR_LABEL_GAP_MM;
     }
     return p(dir === "left" ? -hw + start + labelW / 2 : hw - start - labelW / 2, y);
   }
   const mid = (first + offs[group.end - 1]) / 2;
   return p(mid, dir === "up" ? -hh + CONNECTOR_LABEL_TOP_MM : hh - CONNECTOR_LABEL_TOP_MM);
+}
+
+/** 見出しの行の文字の中心 (Rust側 caption_at)。左辺は左寄せ・右辺は右寄せ、上下辺はその列の名前の行。 */
+function captionAt(text: string, off: number, dir: BlockDir, hw: number, hh: number, pitchMm: number, th: number): Point {
+  const w = nameWidth(text, th);
+  if (dir === "left") return p(-hw + BLOCK_TEXT_PAD_MM + w / 2, off);
+  if (dir === "right") return p(hw - BLOCK_TEXT_PAD_MM - w / 2, off);
+  if (dir === "up") return p(off, -hh + th + pitchMm / 2);
+  return p(off, hh - th - pitchMm / 2);
 }
 
 /** 1本のピンの描き位置 (Rust側 pin_layout と同じ式)。 */
@@ -1094,20 +1240,21 @@ function pinLayout(
   numbers: BlockNumbers = "outside",
   pitchMm: number = BLOCK_PIN_PITCH_MM,
   leadMm: number = BLOCK_LEAD_MM,
+  th: number = BLOCK_PIN_TEXT_MM,
 ): { at: Point; leadFrom: Point; numAt: Point; nameAt: Point } {
   const leadFrom = edgePoint(dir, off, hw, hh);
   const name = bp.name ?? "";
   if (bp.connector == null) {
     const inside = numbers === "inside";
-    const numW = nameWidth((bp.no ?? "").trim());
+    const numW = nameWidth(blockPinKey(bp), th);
     if (dir === "left") {
       return {
         at: p(-hw - leadMm, off),
         leadFrom,
         numAt: inside
           ? p(-hw + BLOCK_TEXT_PAD_MM + numW / 2, off)
-          : p(-hw - leadMm / 2, off - BLOCK_PIN_TEXT_MM),
-        nameAt: p(-hw + BLOCK_TEXT_PAD_MM + nameWidth(name) / 2, off),
+          : p(-hw - leadMm / 2, off - th),
+        nameAt: p(-hw + BLOCK_TEXT_PAD_MM + nameWidth(name, th) / 2, off),
       };
     }
     if (dir === "right") {
@@ -1116,27 +1263,27 @@ function pinLayout(
         leadFrom,
         numAt: inside
           ? p(hw - BLOCK_TEXT_PAD_MM - numW / 2, off)
-          : p(hw + leadMm / 2, off - BLOCK_PIN_TEXT_MM),
-        nameAt: p(hw - BLOCK_TEXT_PAD_MM - nameWidth(name) / 2, off),
+          : p(hw + leadMm / 2, off - th),
+        nameAt: p(hw - BLOCK_TEXT_PAD_MM - nameWidth(name, th) / 2, off),
       };
     }
     if (dir === "up") {
       return {
         at: p(off, -hh - leadMm),
         leadFrom,
-        numAt: p(off, -hh + BLOCK_PIN_TEXT_MM),
-        nameAt: p(off, -hh + BLOCK_PIN_TEXT_MM + pitchMm / 2),
+        numAt: p(off, -hh + th),
+        nameAt: p(off, -hh + th + pitchMm / 2),
       };
     }
     return {
       at: p(off, hh + leadMm),
       leadFrom,
-      numAt: p(off, hh - BLOCK_PIN_TEXT_MM),
-      nameAt: p(off, hh - BLOCK_PIN_TEXT_MM - pitchMm / 2),
+      numAt: p(off, hh - th),
+      nameAt: p(off, hh - th - pitchMm / 2),
     };
   }
-  const numW = nameWidth((bp.no ?? "").trim());
-  const nameW = nameWidth(name);
+  const numW = nameWidth(blockPinKey(bp), th);
+  const nameW = nameWidth(name, th);
   const numOut = CONNECTOR_OUT_MM + CONNECTOR_NUM_GAP_MM;
   const nameIn = BLOCK_TEXT_PAD_MM + CONNECTOR_IN_MM;
   const numTb = (CONNECTOR_OUT_MM + CONNECTOR_LEAD_MM) / 2;
@@ -1144,7 +1291,7 @@ function pinLayout(
     return {
       at: p(-hw - CONNECTOR_LEAD_MM, off),
       leadFrom: p(-hw - CONNECTOR_OUT_MM, off),
-      numAt: p(-(hw + numOut + numW / 2), off - BLOCK_PIN_TEXT_MM),
+      numAt: p(-(hw + numOut + numW / 2), off - th),
       nameAt: p(-hw + nameIn + nameW / 2, off),
     };
   }
@@ -1152,7 +1299,7 @@ function pinLayout(
     return {
       at: p(hw + CONNECTOR_LEAD_MM, off),
       leadFrom: p(hw + CONNECTOR_OUT_MM, off),
-      numAt: p(hw + numOut + numW / 2, off - BLOCK_PIN_TEXT_MM),
+      numAt: p(hw + numOut + numW / 2, off - th),
       nameAt: p(hw - nameIn - nameW / 2, off),
     };
   }
@@ -1161,14 +1308,14 @@ function pinLayout(
       at: p(off, -hh - CONNECTOR_LEAD_MM),
       leadFrom: p(off, -hh - CONNECTOR_OUT_MM),
       numAt: p(off + CONNECTOR_NUM_SIDE_MM + numW / 2, -(hh + numTb)),
-      nameAt: p(off, -hh + BLOCK_PIN_TEXT_MM + pitchMm / 2),
+      nameAt: p(off, -hh + th + pitchMm / 2),
     };
   }
   return {
     at: p(off, hh + CONNECTOR_LEAD_MM),
     leadFrom: p(off, hh + CONNECTOR_OUT_MM),
     numAt: p(off + CONNECTOR_NUM_SIDE_MM + numW / 2, hh + numTb),
-    nameAt: p(off, hh - BLOCK_PIN_TEXT_MM - pitchMm / 2),
+    nameAt: p(off, hh - th - pitchMm / 2),
   };
 }
 
@@ -1202,9 +1349,10 @@ function translatePrimitive(prim: Primitive, dx: number, dy: number): Primitive 
  * block_numbers = "inside" なら左右の番号を外形の内側に描き、ピン名は描かない。
  */
 export function blockSymbol(attrs: Record<string, string>): SymbolDef {
-  const { pins: table, size, pitch, numbers, leads } = parseBlockSpec(attrs);
+  const { pins: table, size, pitch, numbers, leads, pinText } = parseBlockSpec(attrs);
   const leadMm = blockLeadMm(leads);
-  const [w, h] = blockBox(table, size, pitch, numbers);
+  const th = pinText ?? BLOCK_PIN_TEXT_MM;
+  const [w, h] = blockBox(table, size, pitch, numbers, pinText);
   const hw = w / 2;
   const hh = h / 2;
   const sx = axisShift(w, pitch);
@@ -1226,11 +1374,19 @@ export function blockSymbol(attrs: Record<string, string>): SymbolDef {
     numbers === "inside" && tbFree ? sameLinePairs(sideOf(table, "top"), sideOf(table, "bottom"), w, pitch) : [];
   const push = (side: BlockPin[], dir: BlockDir) => {
     const n = side.length;
-    const offs = rowOffsets(n, dir === "left" || dir === "right" ? h : w, pitch);
+    const offs = sideOffsets(side, dir === "left" || dir === "right" ? h : w, pitch);
     const groups = connectorGroups(side);
     for (let i = 0; i < n; i++) {
       const bp = side[i];
-      const no = (bp.no ?? "").trim();
+      // すき間は何も描かない。見出しは箱の内側のその行に太字で書く (接続点は無い)
+      if (!isBlockPin(bp)) {
+        if (bp.caption !== undefined) {
+          const caption = bp.caption.trim();
+          primitives.push({ type: "text", at: captionAt(caption, offs[i], dir, hw, hh, pitchMm, th), text: caption, height: th, bold: true });
+        }
+        continue;
+      }
+      const no = blockPinKey(bp);
       const name = bp.name ?? "";
       // まとまりの最初のピンの前に、そのまとまりの絵と名前を描く
       const group = groups.find((g) => g.start === i);
@@ -1240,10 +1396,10 @@ export function blockSymbol(attrs: Record<string, string>): SymbolDef {
         primitives.push(...connectorPrimitives(group.kind, dir, edges));
         const label = groupLabel(group);
         if (label !== null) {
-          primitives.push({ type: "text", at: labelAt(side, offs, group, label, dir, hw, hh, pitchMm), text: label, height: BLOCK_PIN_TEXT_MM });
+          primitives.push({ type: "text", at: labelAt(side, offs, group, label, dir, hw, hh, pitchMm, th), text: label, height: th });
         }
       }
-      const { at, leadFrom, numAt, nameAt } = pinLayout(bp, offs[i], dir, hw, hh, numbers, pitchMm, leadMm);
+      const { at, leadFrom, numAt, nameAt } = pinLayout(bp, offs[i], dir, hw, hh, numbers, pitchMm, leadMm, th);
       // リード線なしのブロックは線を描かない (ピン接続点が外形の辺の上)
       if (Math.abs(leadFrom.x - at.x) > 1e-9 || Math.abs(leadFrom.y - at.y) > 1e-9) {
         primitives.push({ type: "line", pts: [leadFrom, at] });
@@ -1253,12 +1409,13 @@ export function blockSymbol(attrs: Record<string, string>): SymbolDef {
       const isFirst = (dir === "left" || dir === "up") && pairs.some((q) => q[0] === i);
       const isSecond = (dir === "right" || dir === "down") && pairs.some((q) => q[1] === i);
       if (isFirst) {
-        primitives.push({ type: "text", at: vertical ? p(0, offs[i]) : p(offs[i], 0), text: no, height: BLOCK_PIN_TEXT_MM });
-      } else if (!isSecond) {
-        primitives.push({ type: "text", at: numAt, text: no, height: BLOCK_PIN_TEXT_MM });
+        primitives.push({ type: "text", at: vertical ? p(0, offs[i]) : p(offs[i], 0), text: no, height: th });
+      } else if (!isSecond && (isNumbered(bp) || numbers === "inside")) {
+        // 番号の無いピンは、外には何も書かない。番号を内側に描くブロックでは番号の位置に名前を書く
+        primitives.push({ type: "text", at: numAt, text: no, height: th });
       }
       if (name && numbers === "outside") {
-        primitives.push({ type: "text", at: nameAt, text: name, height: BLOCK_PIN_TEXT_MM });
+        primitives.push({ type: "text", at: nameAt, text: name, height: th });
       }
       const contacts = (bp.contacts ?? []).map((c) => c.trim());
       pins.push(contacts.length ? { number: no, name, at, dir, contacts } : { number: no, name, at, dir });

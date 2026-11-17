@@ -750,9 +750,9 @@ describe("block captions and group names (Rust twin)", () => {
 describe("fine pitch blocks (Rust twin)", () => {
   // ja: golden ファイルの全例 (2.5mm間隔・番号内側) で、TS は Rust と同じプリミティブ・ピン・属性の置き場所を返す
   it("draws every block of the fine-pitch golden file exactly like Rust", () => {
-    expect(fineGolden.cases.length).toBe(21);
+    expect(fineGolden.cases.length).toBe(29);
     for (const c of fineGolden.cases) {
-      const def = blockSymbol(c.attrs as Record<string, string>);
+      const def = blockSymbol(c.attrs as unknown as Record<string, string>);
       expect({
         name: c.name,
         primitives: rounded(def.primitives),
@@ -1108,5 +1108,95 @@ describe("leadless blocks (Rust twin)", () => {
     expect(parseBlockSpec({ ...base, block_leads: "none" }).leads).toBe("none");
     expect(() => parseBlockSpec({ block_pins: pins, block_leads: "none" })).toThrow("block_leads none needs block_numbers inside");
     expect(() => parseBlockSpec({ ...base, block_leads: "short" })).toThrow(/block_leads must be "lead" or "none"/);
+  });
+});
+
+describe("block pin rows and text size (Rust twin)", () => {
+  const sym = (pins: string, extra: Record<string, string> = {}) => blockSymbol({ block_pins: pins, ...extra });
+  const pinY = (def: SymbolDef, no: string) => def.pins.find((q) => q.number === no)!.at.y;
+  const textOf = (def: SymbolDef, t: string) => def.primitives.find((q) => q.type === "text" && q.text === t) as
+    | { at: { x: number; y: number }; height: number; bold?: boolean }
+    | undefined;
+
+  // ja: 番号の無いピンは名前を鍵にし、外には何も書かず、名前は内側に書く
+  it("keys an unnumbered pin by its name and prints nothing outside the box for it", () => {
+    const def = sym('{"left":[{"name":"EN"},{"no":"2","name":"IN"}],"right":[{"name":"OUT"}]}');
+    expect(def.pins.map((q) => q.number)).toEqual(["EN", "2", "OUT"]);
+    const rect = def.primitives.find((q) => q.type === "rect") as { p1: { x: number }; p2: { x: number } };
+    const outside = def.primitives.filter(
+      (q) => q.type === "text" && (q.at.x < rect.p1.x || q.at.x > rect.p2.x),
+    ) as { text: string }[];
+    expect(outside.map((q) => q.text)).toEqual(["2"]);
+    expect(textOf(def, "EN")).toBeDefined();
+  });
+
+  // ja: 番号なしで名前が同じ2本・番号なしの名前が別のピンの番号と同じ・番号も名前も無いピンは Rust と同じ文言で断る
+  it("refuses duplicate names of unnumbered pins and a pin with neither number nor name", () => {
+    const err = (pins: string) => () => sym(pins);
+    expect(err('{"left":[{"name":"A"},{"name":"A"}]}')).toThrow("duplicate block pin name: A");
+    expect(err('{"left":[{"name":"A"}],"right":[{"name":" A "}]}')).toThrow("duplicate block pin name: A");
+    expect(err('{"left":[{"no":"A"},{"name":"A"}]}')).toThrow("duplicate block pin name: A");
+    expect(err('{"left":[{"name":"  "}]}')).toThrow("block pin number must not be empty");
+  });
+
+  // ja: すき間の行は前後のピンを行数だけ離し、箱の高さにも数える
+  it("leaves the gap rows empty between pins and counts them in the height", () => {
+    const def = sym('{"left":[{"no":"1"},{"gap":2},{"no":"2"}]}');
+    expect(def.pins).toHaveLength(2);
+    expect([pinY(def, "1"), pinY(def, "2")]).toEqual([-7.5, 7.5]);
+    expect(blockBox(parseBlockSpec({ block_pins: '{"left":[{"no":"1"},{"gap":6}]}' }).pins, null)[1]).toBe(40);
+  });
+
+  // ja: すき間は1〜20行で他の項目を混ぜず、行数の合計にも上限がある。文言は Rust と同じ
+  it("words the gap, caption and row-limit refusals exactly like Rust", () => {
+    const err = (pins: string) => () => sym(pins);
+    expect(err('{"left":[{"gap":0}]}')).toThrow("block gap must be 1 to 20 rows: 0");
+    expect(err('{"left":[{"gap":21}]}')).toThrow("block gap must be 1 to 20 rows: 21");
+    expect(err('{"left":[{"gap":-1}]}')).toThrow(/block_pins is not valid JSON/);
+    expect(err('{"left":[{"gap":2,"no":"1"}]}')).toThrow("block gap or caption entry cannot have other fields");
+    expect(err('{"left":[{"gap":2,"caption":"X"}]}')).toThrow("block gap or caption entry cannot have other fields");
+    expect(err('{"left":[{"caption":"  "}]}')).toThrow("block caption must not be blank");
+    const many = `{"left":[${Array(21).fill('{"gap":20}').join(",")}]}`;
+    expect(err(many)).toThrow("block has too many rows: 420 (max 400)");
+  });
+
+  // ja: 見出しの行は1行を使って箱の中に太字で書き、ピンにならない。左辺は左寄せ、右辺は右寄せ
+  it("draws a caption row bold inside the box on its row without a pin", () => {
+    const def = sym('{"left":[{"caption":"POWER"},{"no":"1","name":"V"}],"right":[{"caption":"OUT"},{"no":"2"}]}');
+    expect(def.pins.map((q) => q.number)).toEqual(["1", "2"]);
+    const rect = def.primitives.find((q) => q.type === "rect") as { p1: { x: number }; p2: { x: number } };
+    const power = textOf(def, "POWER")!;
+    const out = textOf(def, "OUT")!;
+    expect(power.bold).toBe(true);
+    expect(out.bold).toBe(true);
+    expect(power.at.x).toBeCloseTo(rect.p1.x + 1.5 + textWidthMm("POWER", 2) / 2, 9);
+    expect(out.at.x).toBeCloseTo(rect.p2.x - 1.5 - textWidthMm("OUT", 2) / 2, 9);
+    expect(power.at.y).toBe(-2.5);
+  });
+
+  // ja: block_pin_text は文字の高さを変え、1.5〜5.0mm 以外は Rust と同じ文言で断る
+  it("scales the texts with block_pin_text and refuses values outside 1.5 to 5.0", () => {
+    const def = sym('{"left":[{"caption":"CAP"},{"no":"1","name":"INPUT"}]}', { block_pin_text: "3.5" });
+    for (const t of ["CAP", "INPUT", "1"]) expect(textOf(def, t)!.height).toBe(3.5);
+    expect(parseBlockSpec({ block_pin_text: " 1.5 " }).pinText).toBe(1.5);
+    expect(parseBlockSpec({}).pinText).toBeNull();
+    for (const bad of ["1.4", "5.1", "abc", ""]) {
+      expect(() => parseBlockSpec({ block_pin_text: bad })).toThrow(/block_pin_text must be between 1\.5 and 5\.0 mm/);
+    }
+    const wide = (t?: string) =>
+      blockBox(
+        parseBlockSpec({ block_pins: '{"left":[{"no":"1","name":"INPUT"}],"right":[{"no":"2","name":"OUTPUT"}]}' }).pins,
+        null,
+        "coarse",
+        "outside",
+        t ? Number(t) : null,
+      )[0];
+    expect(wide("3.5")).toBeGreaterThan(wide());
+  });
+
+  // ja: 2mm を明示しても今までと同じ絵になる (属性を使わないブロックは変わらない)
+  it("draws the default size exactly like a block without the attribute", () => {
+    const pins = '{"left":[{"no":"1","name":"A"}],"right":[{"no":"2"}]}';
+    expect(sym(pins, { block_pin_text: "2" })).toEqual(sym(pins));
   });
 });

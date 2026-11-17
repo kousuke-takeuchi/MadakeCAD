@@ -683,7 +683,8 @@ export function drawSymbol(
         // 文字は常に水平に書くので、ベースラインへのずらしはシンボルと一緒に回さず
         // 画面の下向きに取る(Rust側svg.rsと同じ規則)
         const p = vp.toScreen(transformLocal(prim.at, inst));
-        setDrawingFont(ctx, prim.height, vp.scale, "sans-serif");
+        // 太字 (ブロックの見出しの行) は SVG の font-weight="bold" と同じ
+        setDrawingFont(ctx, prim.height, vp.scale, "sans-serif", prim.bold ? "bold " : "");
         ctx.textAlign = "center";
         const label = terminalRename?.get(prim.text) ?? prim.text;
         drawingText(ctx, label, p.x, p.y + (prim.height * vp.scale) / 2.8);
