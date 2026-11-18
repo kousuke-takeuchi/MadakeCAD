@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3908仕様項目**。
+全6領域・**3917仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -477,7 +477,7 @@
 - 電源・接地のピンしか持たない機器も、印だけを付けた箱として描かれる。 <sub>`a_unit_with_only_power_pins_is_drawn_with_marks`</sub>
 - 2つの箱のあいだの線が交差しないように、元の順序が逆でもピンの並びを入れ替える。 <sub>`straight_connections_do_not_cross`</sub>
 - 同じ入力からは、いつも同じ配置ができる。 <sub>`the_same_request_gives_the_same_layout`</sub>
-- 電源のピンには、短い線 (その辺のいちばん広い番号に合わせた長さ) の先に、ネット名を値にした電源の印が付く。 <sub>`each_power_pin_gets_its_own_rail_mark_named_after_the_net`</sub>
+- 電源のピンには、ネット名を値にした電源の印が付く。短い線 (その辺のいちばん広い番号に合わせた長さ) の先から、引き出しがピン間隔ぶん上へ伸びて箱から離れる向きへ曲がり、その先に印が立つ。 <sub>`each_power_pin_gets_its_own_rail_mark_named_after_the_net`</sub>
 - 接地の印は、モデルが示す元の図の印のシンボルを使う。値からネット名を取るシンボルなら、値にネット名を入れる。 <sub>`ground_uses_the_marks_symbol_of_the_source`</sub>
 - 元の図に接地の印が無いときは、ライブラリの電源の印を下向き (180度回転) にして、ネット名を値にして置く。 <sub>`ground_falls_back_to_the_library_mark`</sub>
 - 出ていくネットには札が1つだけ付き、列の順で最初のピンに下がる。このシートでも配線するネットなら、札はそのピンの短い線の先のさらに5mm先にあり、短い線の先と札のすべてが配線の端になる。 <sub>`a_leaving_net_gets_one_tag_at_the_first_pin_in_column_order`</sub>
@@ -528,9 +528,9 @@
 ### draft_look_tests
 
 - 棒・長い番号の見本の元の図のファイルを作り直す。普段は走らせず、手で動かしたときだけ作り直す。 <sub>`write_the_bars_fixture`</sub>
-- 1つの機器の3本の接地ピンは隣の行に番号順に並び、縦の棒でつながって、棒の下の端に接地の印が1つだけ付く。 <sub>`three_ground_pins_of_one_unit_get_one_mark_at_the_lower_end_of_a_bar`</sub>
-- 1つの機器の2本の電源ピンは、棒の上の端に電源の印を1つだけ付ける。 <sub>`two_power_pins_of_one_unit_get_one_mark_at_the_upper_end_of_a_bar`</sub>
-- 棒には、3本の端が会う所 (真ん中のピンの短い線の先) に接点の丸が付き、棒の両端には付かない。 <sub>`a_bar_has_a_junction_where_three_ends_meet`</sub>
+- 1つの機器の3本の接地ピンは隣の行に番号順に並び、縦の棒でつながって、接地の印を1つだけ持つ。棒の下の端からピン間隔ぶん下へ伸び、箱から離れる向きへ曲がった先に印が下がる。 <sub>`three_ground_pins_of_one_unit_get_one_mark_at_the_lower_end_of_a_bar`</sub>
+- 1つの機器の2本の電源ピンは、電源の印を1つだけ持つ。印は棒の上の端からピン間隔ぶん上へ伸びて箱から離れる向きへ曲がった先に立つ。 <sub>`two_power_pins_of_one_unit_get_one_mark_at_the_upper_end_of_a_bar`</sub>
+- 棒には、3本の端が会う所 (真ん中のピンの短い線の先と、印の引き出しが出る端) に接点の丸が付き、反対の端には付かない。 <sub>`a_bar_has_a_junction_where_three_ends_meet`</sub>
 - 1つの機器の2本のピンで運ぶ信号のネットは、同じ辺の隣の行に番号順に並ぶ。 <sub>`pins_of_a_signal_group_are_in_adjacent_rows_in_key_order`</sub>
 - 1つの機器の中だけのジャンパ (同じネットの2本のピンだけ) は棒だけでつなぐ。配線は引かず、ラベルも付けないが、2本のピンは同じネットのまま。 <sub>`a_jumper_inside_one_unit_is_only_a_bar`</sub>
 - 1つの機器の2本のピンで運ぶ出ていくネットは、札が1つだけで、棒の端に下がる。配線は引かない。 <sub>`a_leaving_net_carried_by_two_pins_of_one_unit_has_one_tag_on_the_bar`</sub>
@@ -549,6 +549,15 @@
 - 列k+1は、列kの右の張り出しから通り道1つぶん (20mmと、10mm+横切るネット1本につき2.5mmの大きい方) あけて始まり、最初の列は描画範囲の左端から始まる。 <sub>`columns_are_packed_with_the_channel_rule`</sub>
 - ネットが少ないときの通り道は20mmで、列が1つだけでも描画範囲の中央ではなく左端に置く。 <sub>`a_single_column_sits_at_the_left_edge`</sub>
 - 機器の印は、その機器自身の参照記号の文字にも、下に積んだ次の機器の参照記号の文字にも触れず、すき間はピン間隔4つぶん以上ある。 <sub>`marks_keep_clear_of_the_captions_and_the_gap_stays_four_pitches`</sub>
+- シートの上の相手が全て同じ列にあるピンは右の辺に置く。ただし最後の列では左の辺に置く。 <sub>`a_pin_with_peers_only_in_its_own_column_goes_right_except_in_the_last_column`</sub>
+- 相手が混ざるときは、同じ列の相手を右の相手として数える (最後の列では左)。左に1つ・同じ列に2つの相手を持つピンは右に置く。 <sub>`same_column_peers_count_as_right_in_a_mixed_case`</sub>
+- 列の右の通り道は、その列の機器どうしをつなぐネット (その通り道を通る) も数えるので、10mm + そこを通るネット1本につき2.5mm の幅になる。 <sub>`the_channel_counts_the_nets_inside_a_column`</sub>
+- 積んだ見本・基本の見本・棒の見本を下書きしても、つながりは変わらない。シートの機器のピンのまとまりは、どちらのピン間隔でも、経路をあきらめたときも、元の図と同じ。 <sub>`the_pin_groups_of_drafted_sheets_equal_the_source`</sub>
+- 札の旗 (書き出しが書く行き先を入れたもの) を横切る配線も触れる配線も無い。1つの列に積んで互いに配線した機器と2枚のシート名を持つ札の見本でも、基本の見本でも、どちらのピン間隔でも、経路をあきらめたネットがあるとき (代わりの札も障害物) でも同じ。 <sub>`no_wire_crosses_or_touches_a_tag_flag`</sub>
+- 経路をあきらめたネットの札は組の棒の上の端に下がるので、棒は札の点でしか旗に触れない。 <sub>`a_fallback_tag_hangs_at_the_upper_end_of_its_bar`</sub>
+- どの組の配線の端も、相手にいちばん近い棒の端になる。相手が全て上か同じ高さなら上の端、全て下なら下の端、上にも下にもあれば真ん中 (格子の上)。 <sub>`every_group_terminal_is_the_bar_end_nearest_to_its_peers`</sub>
+- どの印の文字も、全ての配線 (棒・短い線・印の引き出し・引いた配線) とピン番号にかからず、印どうしも触れない。電源の組でも接地の組でも、ピン間隔5.0でも2.5でも、1つの辺に電源と接地の組が2つずつあっても同じ。 <sub>`mark_texts_are_clear_of_wires_and_pin_numbers`</sub>
+- 下書きのシートでは、印字されたピン番号が箱の外形にもピン名にも触れない。6文字の番号でも、ピン間隔2.5でも同じ (箱は番号を辺の外で終わらせる)。 <sub>`no_pin_number_touches_the_box_outline_or_a_pin_name`</sub>
 - 見て確かめるために、棒の見本を下書きしたシートを MADAKE_DRAFT_SVG の場所へSVGで書き出す (--ignored で実行する)。 <sub>`write_the_bars_sheet_as_svg`</sub>
 - 手元のファイルの依頼を順に下書きして、シートをSVGで書き出し、見て確かめる (--ignored で実行。環境変数 MADAKE_DRAFT_REQUESTS と MADAKE_DRAFT_OUT を指定する。無ければ何もしない)。 <sub>`draft_requests_from_a_file_for_looking`</sub>
 

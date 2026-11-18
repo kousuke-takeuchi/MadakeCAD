@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3908 specification clauses** across 6 areas.
+**3917 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -477,7 +477,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A unit that has only power and ground pins on the sheet is still drawn, with the marks and nothing else. <sub>`a_unit_with_only_power_pins_is_drawn_with_marks`</sub>
 - Pins are ordered so that the wires between two boxes do not cross, even when the source order is reversed. <sub>`straight_connections_do_not_cross`</sub>
 - The same request always gives the same layout. <sub>`the_same_request_gives_the_same_layout`</sub>
-- The power pin of each unit gets a rail mark at the end of its stub (as long as the widest number of that side asks), and the mark is named after the net. <sub>`each_power_pin_gets_its_own_rail_mark_named_after_the_net`</sub>
+- The power pin of each unit gets a rail mark named after the net: from the end of its stub (as long as the widest number of that side asks) a lead goes one pitch up and then away from the box, and the mark stands at its end. <sub>`each_power_pin_gets_its_own_rail_mark_named_after_the_net`</sub>
 - A ground mark uses the mark symbol the model names for that net, with the net name as its value when the symbol takes it from the value. <sub>`ground_uses_the_marks_symbol_of_the_source`</sub>
 - When the source has no ground mark, the library rail mark is used, pointing down, with the net name as its value. <sub>`ground_falls_back_to_the_library_mark`</sub>
 - A leaving net gets one tag, on the first pin in column order; when the net is also wired on the sheet, the tag hangs 5 mm beyond that pin's stub end, and the stub ends and the tag are all ends of the wiring. <sub>`a_leaving_net_gets_one_tag_at_the_first_pin_in_column_order`</sub>
@@ -528,9 +528,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### draft_look_tests
 
 - Rebuilds tests/fixtures/draft-source-bars.mdkproj (run by hand with --ignored). <sub>`write_the_bars_fixture`</sub>
-- Three ground pins of one unit sit in adjacent rows, in key order, and share one ground mark at the lower end of a vertical bar. <sub>`three_ground_pins_of_one_unit_get_one_mark_at_the_lower_end_of_a_bar`</sub>
-- Two power pins of one unit share one power mark at the upper end of the bar. <sub>`two_power_pins_of_one_unit_get_one_mark_at_the_upper_end_of_a_bar`</sub>
-- The bar has a junction where three ends meet (the stub end of a middle pin) and none at its two ends. <sub>`a_bar_has_a_junction_where_three_ends_meet`</sub>
+- Three ground pins of one unit sit in adjacent rows, in key order, and share one ground mark: the vertical bar goes on one pitch below the last pin, turns away from the box, and the mark hangs at the end. <sub>`three_ground_pins_of_one_unit_get_one_mark_at_the_lower_end_of_a_bar`</sub>
+- Two power pins of one unit share one power mark, led out from the upper end of the bar: one pitch up, then away from the box. <sub>`two_power_pins_of_one_unit_get_one_mark_at_the_upper_end_of_a_bar`</sub>
+- The bar has a junction wherever three ends meet: the stub end of a middle pin and the end where the mark lead leaves; the other end of the bar has none. <sub>`a_bar_has_a_junction_where_three_ends_meet`</sub>
 - A signal net carried by two pins of one unit puts its pins in adjacent rows on one side, in key order. <sub>`pins_of_a_signal_group_are_in_adjacent_rows_in_key_order`</sub>
 - A jump inside one unit (both pins on the same net and nothing else) is only a bar: no wire is routed and no label is needed, and the two pins stay on one net. <sub>`a_jumper_inside_one_unit_is_only_a_bar`</sub>
 - A leaving net carried by two pins of one unit has one tag, hanging at the end of the bar, and no routed wire. <sub>`a_leaving_net_carried_by_two_pins_of_one_unit_has_one_tag_on_the_bar`</sub>
@@ -549,6 +549,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Column k+1 starts one channel after the right extent of column k, with channel = max(20 mm, 10 mm + 2.5 mm per net that crosses it), and the first column starts at the left edge of the drawing area. <sub>`columns_are_packed_with_the_channel_rule`</sub>
 - With few nets the channel is 20 mm, and a single column sits at the left edge, not in the middle. <sub>`a_single_column_sits_at_the_left_edge`</sub>
 - The marks of a unit do not touch the unit's own caption or the caption of the next unit below, and the gap stays at least four pitches. <sub>`marks_keep_clear_of_the_captions_and_the_gap_stays_four_pitches`</sub>
+- A pin whose peers on the sheet are all in its own column goes on the right side, except in the last column, where it goes on the left. <sub>`a_pin_with_peers_only_in_its_own_column_goes_right_except_in_the_last_column`</sub>
+- In a mixed case same-column peers count as peers on the right (on the left in the last column): one peer to the left and two in the own column put the pin on the right. <sub>`same_column_peers_count_as_right_in_a_mixed_case`</sub>
+- The channel to the right of a column also counts the nets that join units of that column (they run in that channel), so it is 10 mm + 2.5 mm per net there. <sub>`the_channel_counts_the_nets_inside_a_column`</sub>
+- Drafting the stacked fixture, the core fixture and the bars fixture keeps the connections: the device pin groups of the sheet are those of the source, at both pitches, also when the router gives up. <sub>`the_pin_groups_of_drafted_sheets_equal_the_source`</sub>
+- No wire crosses or touches a tag flag, drawn with the destination the export prints, on the stacked fixture (units stacked in one column wired to each other, tags with two sheet names) and on the core fixture, at both pitches and when the router gives up on nets (fallback tags are obstacles too). <sub>`no_wire_crosses_or_touches_a_tag_flag`</sub>
+- A fallback tag hangs at the upper end of its group's bar, so the bar leaves the flag at the tag's point only. <sub>`a_fallback_tag_hangs_at_the_upper_end_of_its_bar`</sub>
+- The router terminal of every group is the bar end nearest to its peers: the upper end when all peers lie above or level, the lower end when all lie below, the middle (on the grid) when they lie above and below. <sub>`every_group_terminal_is_the_bar_end_nearest_to_its_peers`</sub>
+- The printed text of each mark is clear of every wire (bars, stubs, mark leads, routed wires) and of every pin number, and no two marks touch, for power and ground groups, at pitch 5.0 and 2.5, also with two power and two ground groups on one side. <sub>`mark_texts_are_clear_of_wires_and_pin_numbers`</sub>
+- On a drafted sheet no printed pin number touches the outline of its box or any pin name, also with a six-character number and at pitch 2.5 (the boxes end their numbers at the box edge). <sub>`no_pin_number_touches_the_box_outline_or_a_pin_name`</sub>
 - Writes the bars fixture as a drafted sheet to the path in MADAKE_DRAFT_SVG (run with --ignored). <sub>`write_the_bars_sheet_as_svg`</sub>
 - Drafts the requests of a JSON file one after another and writes the sheets as SVG for a look (run with --ignored; set MADAKE_DRAFT_REQUESTS and MADAKE_DRAFT_OUT). <sub>`draft_requests_from_a_file_for_looking`</sub>
 

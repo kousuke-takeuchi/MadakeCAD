@@ -6,6 +6,7 @@ use crate::netlist::{extract_netlist, pin_positions};
 use crate::route::RouteOptions;
 use crate::symbol::builtin_symbols;
 use crate::tidy::{text_boxes, TextKind};
+use std::collections::BTreeSet;
 use uuid::Uuid;
 
 // ---- the source drawing, built in code
@@ -193,6 +194,15 @@ fn stub_end(sheet: &Sheet, reference: &str, key: &str) -> Point {
         .unwrap_or_else(|| panic!("{reference}.{key} has a stub"))
 }
 
+/// The lead from a group end to its mark: the three-point wire that starts at `anchor` (end, corner, mark).
+fn mark_lead_of(sheet: &Sheet, anchor: Point) -> Vec<Point> {
+    wires_of(sheet)
+        .into_iter()
+        .find(|w| w.points.len() == 3 && w.points[0].distance_to(&anchor) < 1e-6)
+        .unwrap_or_else(|| panic!("a mark lead leaves {anchor:?}"))
+        .points
+}
+
 fn arms_at(sheet: &Sheet, p: Point) -> usize {
     wires_of(sheet)
         .iter()
@@ -276,8 +286,8 @@ fn on_a_bar(sheet: &Sheet, a: Point, b: Point) -> bool {
 
 // ---- change 1: groups of pins on a bar
 
-/// Three ground pins of one unit sit in adjacent rows, in key order, and share one ground mark at the lower end of a vertical bar.
-/// 1つの機器の3本の接地ピンは隣の行に番号順に並び、縦の棒でつながって、棒の下の端に接地の印が1つだけ付く。
+/// Three ground pins of one unit sit in adjacent rows, in key order, and share one ground mark: the vertical bar goes on one pitch below the last pin, turns away from the box, and the mark hangs at the end.
+/// 1つの機器の3本の接地ピンは隣の行に番号順に並び、縦の棒でつながって、接地の印を1つだけ持つ。棒の下の端からピン間隔ぶん下へ伸び、箱から離れる向きへ曲がった先に印が下がる。
 #[test]
 fn three_ground_pins_of_one_unit_get_one_mark_at_the_lower_end_of_a_bar() {
     let l = layout(&request(&[&["UA"], &["UB"]]));
@@ -286,32 +296,39 @@ fn three_ground_pins_of_one_unit_get_one_mark_at_the_lower_end_of_a_bar() {
     assert!((p2.y - p1.y - 5.0).abs() < 1e-6 && (p3.y - p2.y - 5.0).abs() < 1e-6, "adjacent rows: {p1:?} {p2:?} {p3:?}");
     assert!(on_a_bar(&l.sheet, e1, e3), "one straight bar joins the first and the last stub end");
     assert!((e1.x - e3.x).abs() < 1e-9);
-    let marks: Vec<_> = marks_of(&l.sheet).into_iter().filter(|m| m.value == "GND" && (m.at.x - e1.x).abs() < 1e-6).collect();
-    assert_eq!(marks.len(), 1, "one mark for the three pins");
-    assert_eq!(marks[0].at, e3, "the ground mark hangs at the lower end");
+    let lead = mark_lead_of(&l.sheet, e3);
+    assert_eq!(lead[1], Point::new(e3.x, e3.y + 5.0), "one pitch below the last pin");
+    assert!(lead[2].y == lead[1].y && lead[2].x < e3.x, "then away from the box (left side)");
+    let marks: Vec<_> = marks_of(&l.sheet).into_iter().filter(|m| m.value == "GND" && m.at == lead[2]).collect();
+    assert_eq!(marks.len(), 1, "one mark for the three pins, at the end of the lead");
 }
 
-/// Two power pins of one unit share one power mark at the upper end of the bar.
-/// 1つの機器の2本の電源ピンは、棒の上の端に電源の印を1つだけ付ける。
+/// Two power pins of one unit share one power mark, led out from the upper end of the bar: one pitch up, then away from the box.
+/// 1つの機器の2本の電源ピンは、電源の印を1つだけ持つ。印は棒の上の端からピン間隔ぶん上へ伸びて箱から離れる向きへ曲がった先に立つ。
 #[test]
 fn two_power_pins_of_one_unit_get_one_mark_at_the_upper_end_of_a_bar() {
     let l = layout(&request(&[&["UA"], &["UB"]]));
     let (e4, e5) = (stub_end(&l.sheet, "UA", "4"), stub_end(&l.sheet, "UA", "5"));
     assert!(on_a_bar(&l.sheet, e4, e5));
-    let marks: Vec<_> = marks_of(&l.sheet).into_iter().filter(|m| m.value == "P24X" && (m.at.x - e4.x).abs() < 1e-6).collect();
+    let lead = mark_lead_of(&l.sheet, e4);
+    assert_eq!(lead[1], Point::new(e4.x, e4.y - 5.0), "one pitch above the first pin");
+    let marks: Vec<_> = marks_of(&l.sheet).into_iter().filter(|m| m.value == "P24X" && m.at == lead[2]).collect();
     assert_eq!(marks.len(), 1);
-    assert_eq!(marks[0].at, e4, "the power mark stands at the upper end");
 }
 
-/// The bar has a junction where three ends meet (the stub end of a middle pin) and none at its two ends.
-/// 棒には、3本の端が会う所 (真ん中のピンの短い線の先) に接点の丸が付き、棒の両端には付かない。
+/// The bar has a junction wherever three ends meet: the stub end of a middle pin and the end where the mark lead leaves; the other end of the bar has none.
+/// 棒には、3本の端が会う所 (真ん中のピンの短い線の先と、印の引き出しが出る端) に接点の丸が付き、反対の端には付かない。
 #[test]
 fn a_bar_has_a_junction_where_three_ends_meet() {
     let l = layout(&request(&[&["UA"], &["UB"]]));
     let dots = junctions_of(&l.sheet);
     let (e1, e2, e3) = (stub_end(&l.sheet, "UA", "1"), stub_end(&l.sheet, "UA", "2"), stub_end(&l.sheet, "UA", "3"));
     assert!(dots.iter().any(|d| d.distance_to(&e2) < 1e-6), "the middle pin");
-    assert!(!dots.iter().any(|d| d.distance_to(&e1) < 1e-6 || d.distance_to(&e3) < 1e-6), "the ends of the bar");
+    assert!(dots.iter().any(|d| d.distance_to(&e3) < 1e-6), "the lower end, where the ground lead leaves");
+    assert!(!dots.iter().any(|d| d.distance_to(&e1) < 1e-6), "the upper end of a ground bar");
+    for d in &dots {
+        assert_eq!(arms_at(&l.sheet, *d), 3, "{d:?}");
+    }
 }
 
 /// A signal net carried by two pins of one unit puts its pins in adjacent rows on one side, in key order.
@@ -674,6 +691,402 @@ fn marks_keep_clear_of_the_captions_and_the_gap_stays_four_pitches() {
     let top_of_ub_caption = caption(ub.id).iter().map(|c| c.min.y).fold(f64::MAX, f64::min);
     let lowest_ua = below_ua.max(bounds_of(&l.sheet, "UA").max.y);
     assert!(top_of_ub_caption - lowest_ua >= 4.0 * 5.0 - 1e-6, "gap {}", top_of_ub_caption - lowest_ua);
+}
+
+// ---- review fixes: same-column peers (B), flags as hard obstacles (C), mark leads (D), numbers at the box edge (A)
+
+fn numbered_pins(n: usize) -> String {
+    let v: Vec<String> = (1..=n).map(|i| format!(r#"{{"no":"{i}","name":"T{i}"}}"#)).collect();
+    format!(r#"{{"left":[{}]}}"#, v.join(","))
+}
+
+/// Builds a source from units (reference, number of pins) and nets (name, pins); every pin gets a short stub with a label of its net.
+fn source_of(name: &str, units: &[(&str, usize)], nets: &[(&str, &[(&str, &str)])]) -> Project {
+    let mut project = Project::new(name);
+    let insts: Vec<SymbolInstance> = units
+        .iter()
+        .enumerate()
+        .map(|(i, (r, n))| {
+            let Entity::Symbol(mut s) = crate::block::test_block(r, "", 60.0 + 70.0 * (i % 3) as f64, 60.0 + 90.0 * (i / 3) as f64, &numbered_pins(*n)) else { unreachable!() };
+            s.attrs.remove(crate::block::BLOCK_SIZE_ATTR);
+            s
+        })
+        .collect();
+    let mut e: Vec<Entity> = Vec::new();
+    for (net, members) in nets {
+        for (r, k) in members.iter() {
+            let inst = insts.iter().find(|s| s.reference == *r).expect("the unit is listed");
+            labelled(&mut e, inst, k, net);
+        }
+    }
+    for inst in insts {
+        e.push(Entity::Symbol(inst));
+    }
+    for entity in e {
+        project.sheets[0].entities.insert(entity.id(), entity);
+    }
+    project
+}
+
+/// Source: four units SA, SB, SC, SD meant to be stacked in one column, wired to each other (K1 to K5, K7 also to SY), four nets that leave the sheet (L1 to L4, the other end on SX), and K6 from SA to SY.
+fn stacked_source() -> Project {
+    source_of(
+        "draft-stacked",
+        &[("SA", 5), ("SB", 4), ("SC", 5), ("SD", 5), ("SX", 4), ("SY", 2)],
+        &[
+            ("K1", &[("SA", "1"), ("SC", "1")]),
+            ("K2", &[("SA", "2"), ("SD", "1")]),
+            ("K3", &[("SB", "1"), ("SD", "2")]),
+            ("K4", &[("SB", "2"), ("SC", "2"), ("SA", "3")]),
+            ("K5", &[("SC", "3"), ("SD", "3")]),
+            ("L1", &[("SA", "4"), ("SX", "1")]),
+            ("L2", &[("SB", "3"), ("SX", "2")]),
+            ("L3", &[("SC", "4"), ("SX", "3")]),
+            ("L4", &[("SD", "4"), ("SX", "4")]),
+            ("K6", &[("SA", "5"), ("SY", "1")]),
+            ("K7", &[("SY", "2"), ("SB", "4"), ("SC", "5"), ("SD", "5")]),
+        ],
+    )
+}
+
+/// An open project whose two sheets already carry L1 and L2, so those tags show two sheet names.
+fn stacked_open() -> Project {
+    open_with_sheets(&["Pump room west", "Pump room east"], "L1").tap(|p| {
+        for s in &mut p.sheets {
+            let l = NetLabel { id: Uuid::new_v4(), at: Point::new(50.0, 60.0), name: "L2".into(), rotation: 0, attrs: Default::default() };
+            s.entities.insert(l.id, Entity::NetLabel(l));
+        }
+    })
+}
+
+trait Tap: Sized {
+    fn tap(mut self, f: impl FnOnce(&mut Self)) -> Self {
+        f(&mut self);
+        self
+    }
+}
+impl Tap for Project {}
+
+const STACK: [&str; 4] = ["SA", "SB", "SC", "SD"];
+
+fn stacked_request(columns: &[&[&str]], pitch: f64) -> DraftRequest {
+    let mut r = request(columns);
+    r.power_nets.clear();
+    r.ground_nets = Some(Vec::new());
+    r.pitch_mm = pitch;
+    r
+}
+
+/// The three ways the stacked fixture is drafted: the stack alone, the stack before SY (not the last column), the stack after SY (the last column).
+fn stacked_columns() -> Vec<Vec<&'static [&'static str]>> {
+    vec![vec![&STACK[..]], vec![&STACK[..], &["SY"][..]], vec![&["SY"][..], &STACK[..]]]
+}
+
+/// The side of a drafted pin: left when its stub runs to the left of the pin.
+fn side_of(sheet: &Sheet, reference: &str, key: &str) -> &'static str {
+    let (p, e) = (pin_pt(sheet, reference, key), stub_end(sheet, reference, key));
+    if e.x < p.x { "left" } else { "right" }
+}
+
+/// Device pin groups of a sheet (pins of at least two), only the references in `refs`.
+fn device_groups(sheet: &Sheet, refs: &[&str]) -> BTreeSet<BTreeSet<(String, String)>> {
+    let defs = sheet_symbol_defs(sheet);
+    extract_netlist(sheet, &defs)
+        .into_iter()
+        .map(|n| n.pins.into_iter().filter(|p| refs.contains(&p.reference.as_str())).map(|p| (p.reference, p.pin)).collect::<BTreeSet<_>>())
+        .filter(|g| g.len() >= 2)
+        .collect()
+}
+
+/// The open project with the drafted sheet added, as the export sees it.
+fn with_sheet(open: &Project, sheet: &Sheet) -> Project {
+    let mut p = open.clone();
+    p.sheets.push(sheet.clone());
+    p
+}
+
+/// Every wire segment that touches a tag flag. The flag is the one the export draws: `net_tag_with` with the destination `sheet_xrefs` prints. The only wire allowed to touch a flag is one that ends at the tag's point and lies at or below the flag's lower edge (the tag's own stub, branch or bar: a wire ending at the tag's point is on the tag's net, or the pin-group test reports a short).
+fn wires_touching_flags(project: &Project, sheet: &Sheet) -> Vec<String> {
+    let xrefs = crate::xref::sheet_xrefs(project, sheet.id);
+    let font = crate::svg::LABEL_FONT * sheet.annotation_scale();
+    let mut bad = Vec::new();
+    for l in labels_of(sheet) {
+        let Some(tag) = crate::net_tag::net_tag_with(&l, font, sheet.xref_style, xrefs.get(&l.id).map(String::as_str)) else { continue };
+        let r = rect_of(&tag.points);
+        for w in wires_of(sheet) {
+            for s in w.points.windows(2) {
+                let (a, b) = (s[0], s[1]);
+                let (x0, x1, y0, y1) = (a.x.min(b.x), a.x.max(b.x), a.y.min(b.y), a.y.max(b.y));
+                let hit = x0 <= r.max.x + 1e-9 && x1 >= r.min.x - 1e-9 && y0 <= r.max.y + 1e-9 && y1 >= r.min.y - 1e-9;
+                let at_anchor = a.distance_to(&l.at) < 1e-6 || b.distance_to(&l.at) < 1e-6;
+                let own = at_anchor && y0 >= r.max.y - 1e-9;
+                if hit && !own {
+                    bad.push(format!("{} {} flag {r:?}: segment {a:?}-{b:?}", sheet.name, l.name));
+                }
+            }
+        }
+    }
+    bad
+}
+
+/// A pin whose peers on the sheet are all in its own column goes on the right side, except in the last column, where it goes on the left.
+/// シートの上の相手が全て同じ列にあるピンは右の辺に置く。ただし最後の列では左の辺に置く。
+#[test]
+fn a_pin_with_peers_only_in_its_own_column_goes_right_except_in_the_last_column() {
+    for (columns, want) in [(vec![&STACK[..], &["SY"][..]], "right"), (vec![&["SY"][..], &STACK[..]], "left"), (vec![&STACK[..]], "left")] {
+        let p = plan_function_sheet(&stacked_source(), &stacked_open(), &stacked_request(&columns, 5.0)).expect("the stack fits");
+        for (r, k) in [("SA", "1"), ("SA", "2"), ("SA", "3"), ("SB", "1"), ("SB", "2"), ("SC", "1"), ("SC", "3"), ("SD", "3")] {
+            assert_eq!(side_of(&p.sheet, r, k), want, "{columns:?}: {r}.{k}");
+        }
+    }
+}
+
+/// In a mixed case same-column peers count as peers on the right (on the left in the last column): one peer to the left and two in the own column put the pin on the right.
+/// 相手が混ざるときは、同じ列の相手を右の相手として数える (最後の列では左)。左に1つ・同じ列に2つの相手を持つピンは右に置く。
+#[test]
+fn same_column_peers_count_as_right_in_a_mixed_case() {
+    // SB.4 (K7): SY on the left, SC.5 and SD.5 in its own column; SX makes the stack not the last column
+    let req = stacked_request(&[&["SY"], &STACK, &["SX"]], 5.0);
+    let p = plan_function_sheet(&stacked_source(), &stacked_open(), &req).expect("fits");
+    assert_eq!(side_of(&p.sheet, "SB", "4"), "right");
+    assert_eq!(side_of(&p.sheet, "SA", "5"), "left", "K6 has its only peer to the left");
+    let req = stacked_request(&[&["SY"], &STACK], 5.0);
+    let p = plan_function_sheet(&stacked_source(), &stacked_open(), &req).expect("fits");
+    assert_eq!(side_of(&p.sheet, "SB", "4"), "left", "in the last column same-column peers count as left");
+}
+
+/// The channel to the right of a column also counts the nets that join units of that column (they run in that channel), so it is 10 mm + 2.5 mm per net there.
+/// 列の右の通り道は、その列の機器どうしをつなぐネット (その通り道を通る) も数えるので、10mm + そこを通るネット1本につき2.5mm の幅になる。
+#[test]
+fn the_channel_counts_the_nets_inside_a_column() {
+    let req = stacked_request(&[&STACK, &["SY"]], 5.0);
+    let m = model_of(&stacked_source(), &stacked_open(), &req);
+    let l = lay_out(&m, &stacked_open(), &req).expect("fits");
+    // crossing: K6, K7; inside the stack on the right: K1, K2, K3, K4, K5 (K7 counted once)
+    let want = grid_up(10.0 + 2.5 * 7.0);
+    assert!((l.columns[1].left - l.columns[0].right - want).abs() < 1e-6, "{:?} want {want}", l.columns);
+}
+
+/// Drafting the stacked fixture, the core fixture and the bars fixture keeps the connections: the device pin groups of the sheet are those of the source, at both pitches, also when the router gives up.
+/// 積んだ見本・基本の見本・棒の見本を下書きしても、つながりは変わらない。シートの機器のピンのまとまりは、どちらのピン間隔でも、経路をあきらめたときも、元の図と同じ。
+#[test]
+fn the_pin_groups_of_drafted_sheets_equal_the_source() {
+    let narrow = RouteOptions { frame_margin_mm: 100.0, ..RouteOptions::default() };
+    for pitch in [5.0, 2.5] {
+        for opts in [RouteOptions::default(), narrow.clone()] {
+            for cols in stacked_columns() {
+                let src = stacked_source();
+                let p = plan_with_options(&src, &stacked_open(), &stacked_request(&cols, pitch), &opts).expect("fits");
+                let refs: Vec<&str> = cols.iter().flat_map(|c| c.iter().copied()).collect();
+                assert_eq!(device_groups(&p.sheet, &refs), device_groups(&src.sheets[0], &refs), "stacked {cols:?} pitch {pitch}");
+            }
+            let mut r = request(&[&["UA"], &["UB"], &["UC"]]);
+            r.pitch_mm = pitch;
+            let p = plan_with_options(&bars_source(), &open(), &r, &opts).expect("fits");
+            let refs = ["UA", "UB", "UC"];
+            assert_eq!(device_groups(&p.sheet, &refs), device_groups(&bars_source().sheets[0], &refs), "bars pitch {pitch}");
+            let mut r = request(&[&["U1", "M1"], &["U2"], &["TB1", "R1"]]);
+            r.ground_nets = None;
+            r.pitch_mm = pitch;
+            let p = plan_with_options(&fixture_source(), &open(), &r, &opts).expect("fits");
+            let refs = ["U1", "M1", "U2", "TB1", "R1"];
+            assert_eq!(device_groups(&p.sheet, &refs), device_groups(&fixture_source().sheets[0], &refs), "core pitch {pitch}");
+        }
+    }
+}
+
+/// No wire crosses or touches a tag flag, drawn with the destination the export prints, on the stacked fixture (units stacked in one column wired to each other, tags with two sheet names) and on the core fixture, at both pitches and when the router gives up on nets (fallback tags are obstacles too).
+/// 札の旗 (書き出しが書く行き先を入れたもの) を横切る配線も触れる配線も無い。1つの列に積んで互いに配線した機器と2枚のシート名を持つ札の見本でも、基本の見本でも、どちらのピン間隔でも、経路をあきらめたネットがあるとき (代わりの札も障害物) でも同じ。
+#[test]
+fn no_wire_crosses_or_touches_a_tag_flag() {
+    let narrow = RouteOptions { frame_margin_mm: 60.0, ..RouteOptions::default() };
+    let mut labelled = 0;
+    for pitch in [5.0, 2.5] {
+        for opts in [RouteOptions::default(), narrow.clone()] {
+            for cols in stacked_columns() {
+                let open = stacked_open();
+                let p = plan_with_options(&stacked_source(), &open, &stacked_request(&cols, pitch), &opts).expect("fits");
+                labelled += p.labelled.len();
+                let bad = wires_touching_flags(&with_sheet(&open, &p.sheet), &p.sheet);
+                assert!(bad.is_empty(), "stacked {cols:?} pitch {pitch}: {bad:#?}");
+            }
+            for cols in [vec![vec!["U1".to_string(), "M1".into()], vec!["U2".into()], vec!["TB1".into(), "R1".into()]], vec![vec!["U1".into()], vec!["U2".into()]]] {
+                let mut r = request(&[]);
+                r.columns = cols.clone();
+                r.ground_nets = None;
+                r.pitch_mm = pitch;
+                let p = plan_with_options(&fixture_source(), &open(), &r, &opts).expect("fits");
+                let bad = wires_touching_flags(&with_sheet(&open(), &p.sheet), &p.sheet);
+                assert!(bad.is_empty(), "core {cols:?} pitch {pitch}: {bad:#?}");
+            }
+        }
+    }
+    assert!(labelled > 0, "the narrow frame makes the router give up on some nets, so fallback tags are checked");
+}
+
+/// A fallback tag hangs at the upper end of its group's bar, so the bar leaves the flag at the tag's point only.
+/// 経路をあきらめたネットの札は組の棒の上の端に下がるので、棒は札の点でしか旗に触れない。
+#[test]
+fn a_fallback_tag_hangs_at_the_upper_end_of_its_bar() {
+    let opts = RouteOptions { frame_margin_mm: 100.0, ..RouteOptions::default() };
+    let p = plan_with_options(&bars_source(), &open(), &request(&[&["UA"], &["UB"]]), &opts).expect("valid");
+    assert!(p.labelled.contains(&"BUS".to_string()), "{:?}", p.labelled);
+    let tags: Vec<Point> = labels_of(&p.sheet).into_iter().filter(|l| l.name == "BUS").map(|l| l.at).collect();
+    for (r, top) in [("UA", "10"), ("UB", "4")] {
+        let e = stub_end(&p.sheet, r, top);
+        assert!(tags.iter().any(|t| t.distance_to(&e) < 1e-6), "{r}.{top}: {tags:?}");
+    }
+    let bad = wires_touching_flags(&with_sheet(&open(), &p.sheet), &p.sheet);
+    assert!(bad.is_empty(), "{bad:#?}");
+}
+
+/// The router terminal of every group is the bar end nearest to its peers: the upper end when all peers lie above or level, the lower end when all lie below, the middle (on the grid) when they lie above and below.
+/// どの組の配線の端も、相手にいちばん近い棒の端になる。相手が全て上か同じ高さなら上の端、全て下なら下の端、上にも下にもあれば真ん中 (格子の上)。
+#[test]
+fn every_group_terminal_is_the_bar_end_nearest_to_its_peers() {
+    let mut seen = BTreeSet::new();
+    for (src, open, req) in [
+        (stacked_source(), stacked_open(), stacked_request(&[&STACK, &["SY"]], 5.0)),
+        (stacked_source(), stacked_open(), stacked_request(&[&["SY"], &STACK, &["SX"]], 5.0)),
+        (bars_source(), self::open(), request(&[&["UA"], &["UB"]])),
+    ] {
+        let m = model_of(&src, &open, &req);
+        let l = lay_out(&m, &open, &req).expect("fits");
+        for u in &m.units {
+            let mut by: BTreeMap<usize, Vec<Point>> = BTreeMap::new();
+            for p in &u.pins {
+                if matches!(m.nets[p.net].class, NetClass::Internal | NetClass::Leaving) {
+                    by.entry(p.net).or_default().push(stub_end(&l.sheet, &u.reference, &p.key));
+                }
+            }
+            for (net, mut ends) in by {
+                let mut sides: BTreeMap<i64, Vec<Point>> = BTreeMap::new();
+                for e in ends.drain(..) {
+                    sides.entry((e.x * 1000.0).round() as i64).or_default().push(e);
+                }
+                for ends in sides.values() {
+                    let (top, bottom) = (ends.iter().map(|e| e.y).fold(f64::MAX, f64::min), ends.iter().map(|e| e.y).fold(f64::MIN, f64::max));
+                    if ends.len() < 2 {
+                        continue;
+                    }
+                    let x = ends[0].x;
+                    let Some(t) = l.terminals.iter().find(|t| t.net == net && !t.is_tag && (t.at.x - x).abs() < 1e-6 && t.at.y >= top - 1e-6 && t.at.y <= bottom + 1e-6) else { continue };
+                    let peers: Vec<f64> = m
+                        .units
+                        .iter()
+                        .filter(|u2| u2.reference != u.reference)
+                        .flat_map(|u2| u2.pins.iter().filter(|p| p.net == net).map(|p| pin_pt(&l.sheet, &u2.reference, &p.key).y))
+                        .collect();
+                    let (above, below) = (peers.iter().any(|&y| y < top - 1e-9), peers.iter().any(|&y| y > bottom + 1e-9));
+                    let want = match (above, below) {
+                        (true, true) => grid_down((top + bottom) / 2.0),
+                        (false, true) => bottom,
+                        _ => top,
+                    };
+                    assert!((t.at.y - want).abs() < 1e-6, "{} {}: terminal {:?}, want y {want} (bar {top}..{bottom})", u.reference, m.nets[net].name, t.at);
+                    seen.insert((above, below));
+                }
+            }
+        }
+    }
+    assert!(seen.contains(&(false, true)), "the fixtures hold a group whose peers are all below: {seen:?}");
+}
+
+/// Source for the marks: one unit with two power nets (P24X on pins 1 and 2, P12X on pin 3) and two ground nets (GND on pins 4 and 5, 0V on pin 6), all on its left side.
+fn marks_source() -> Project {
+    source_of(
+        "draft-marks",
+        &[("UM", 6)],
+        &[("P24X", &[("UM", "1"), ("UM", "2")]), ("P12X", &[("UM", "3")]), ("GND", &[("UM", "4"), ("UM", "5")]), ("0V", &[("UM", "6")])],
+    )
+}
+
+/// The printed text of each mark is clear of every wire (bars, stubs, mark leads, routed wires) and of every pin number, and no two marks touch, for power and ground groups, at pitch 5.0 and 2.5, also with two power and two ground groups on one side.
+/// どの印の文字も、全ての配線 (棒・短い線・印の引き出し・引いた配線) とピン番号にかからず、印どうしも触れない。電源の組でも接地の組でも、ピン間隔5.0でも2.5でも、1つの辺に電源と接地の組が2つずつあっても同じ。
+#[test]
+fn mark_texts_are_clear_of_wires_and_pin_numbers() {
+    let mut checked = 0;
+    for pitch in [5.0, 2.5] {
+        let mut marks_req = request(&[&["UM"]]);
+        marks_req.power_nets = vec!["P24X".into(), "P12X".into()];
+        marks_req.ground_nets = Some(vec!["GND".into(), "0V".into()]);
+        marks_req.pitch_mm = pitch;
+        let mut bars_req = request(&[&["UA"], &["UB"], &["UC"]]);
+        bars_req.pitch_mm = pitch;
+        for (src, req, refs) in [(marks_source(), marks_req, vec!["UM"]), (bars_source(), bars_req, vec!["UA", "UB", "UC"])] {
+            let p = plan_function_sheet(&src, &open(), &req).expect("fits");
+            let defs = sheet_symbol_defs(&p.sheet);
+            let texts = text_boxes(&p.sheet, &defs);
+            let numbers: Vec<(String, Rect)> = refs.iter().flat_map(|r| number_rects(&p.sheet, r)).collect();
+            let all = marks_of(&p.sheet);
+            for (i, a) in all.iter().enumerate() {
+                for b in &all[i + 1..] {
+                    assert!(!mark_rect(&p.sheet, a).overlaps(&mark_rect(&p.sheet, b)), "pitch {pitch}: marks {} and {} touch", a.value, b.value);
+                }
+            }
+            for m in marks_of(&p.sheet) {
+                for t in texts.iter().filter(|t| t.owner == Some(m.id)) {
+                    checked += 1;
+                    for w in wires_of(&p.sheet) {
+                        for s in w.points.windows(2) {
+                            assert!(!t.rect.overlaps(&seg_rect(s[0], s[1])), "pitch {pitch}: text {} of a mark at {:?} on the wire {:?}-{:?}", t.text, m.at, s[0], s[1]);
+                        }
+                    }
+                    for (n, r) in &numbers {
+                        assert!(!t.rect.overlaps(r), "pitch {pitch}: text {} on the pin number {n}", t.text);
+                    }
+                }
+                // the figure of a mark touches no wire but its own lead
+                let fig = crate::tidy::symbol_bounds(&m, &DefIndex::new(&defs).get(&m).unwrap()).unwrap();
+                for w in wires_of(&p.sheet) {
+                    if w.points.last().is_some_and(|q| q.distance_to(&m.at) < 1e-6) {
+                        continue;
+                    }
+                    for s in w.points.windows(2) {
+                        assert!(!fig.overlaps(&seg_rect(s[0], s[1])), "pitch {pitch}: mark {} at {:?} on the wire {:?}-{:?}", m.value, m.at, s[0], s[1]);
+                    }
+                }
+            }
+        }
+    }
+    assert!(checked >= 8, "{checked}");
+}
+
+/// On a drafted sheet no printed pin number touches the outline of its box or any pin name, also with a six-character number and at pitch 2.5 (the boxes end their numbers at the box edge).
+/// 下書きのシートでは、印字されたピン番号が箱の外形にもピン名にも触れない。6文字の番号でも、ピン間隔2.5でも同じ (箱は番号を辺の外で終わらせる)。
+#[test]
+fn no_pin_number_touches_the_box_outline_or_a_pin_name() {
+    for pitch in [5.0, 2.5] {
+        let mut r = request(&[&["UA"], &["UB"], &["UC"]]);
+        r.pitch_mm = pitch;
+        let p = plan(&r);
+        for reference in ["UA", "UB", "UC"] {
+            let inst = unit_of(&p.sheet, reference);
+            assert_eq!(inst.attrs.get(crate::block::BLOCK_NUMBER_ALIGN_ATTR).map(String::as_str), Some("edge"));
+            let spec = block::parse_block_spec(&inst.attrs).unwrap();
+            let (lo, hi) = block::block_outline(&spec);
+            let (lo, hi) = (Point::new(inst.at.x + lo.x, inst.at.y + lo.y), Point::new(inst.at.x + hi.x, inst.at.y + hi.y));
+            let defs = sheet_symbol_defs(&p.sheet);
+            let def = DefIndex::new(&defs).get(&inst).unwrap();
+            let names: Vec<Rect> = def
+                .primitives
+                .iter()
+                .filter_map(|q| match q {
+                    crate::symbol::Primitive::Text { at, text, height, .. } if at.x > lo.x - inst.at.x && at.x < hi.x - inst.at.x => {
+                        let (hw, hh) = (text_width(text, *height) / 2.0, height / 2.0);
+                        Some(Rect::from_corners(Point::new(inst.at.x + at.x - hw, inst.at.y + at.y - hh), Point::new(inst.at.x + at.x + hw, inst.at.y + at.y + hh)))
+                    }
+                    _ => None,
+                })
+                .collect();
+            for (n, r) in number_rects(&p.sheet, reference) {
+                assert!(r.max.x < lo.x - 1e-6 || r.min.x > hi.x + 1e-6, "pitch {pitch}: number {n} of {reference} touches the box {r:?}");
+                for name in &names {
+                    assert!(!r.overlaps(name), "pitch {pitch}: number {n} of {reference} touches a pin name");
+                }
+            }
+        }
+    }
 }
 
 // ---- the picture
