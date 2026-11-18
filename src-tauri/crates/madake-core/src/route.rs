@@ -118,7 +118,7 @@ impl Dir {
         1 << self.idx()
     }
 
-    fn opp(self) -> Dir {
+    pub(crate) fn opp(self) -> Dir {
         match self {
             Dir::N => Dir::S,
             Dir::E => Dir::W,
@@ -447,6 +447,12 @@ impl RouteGrid {
                 self.v_blocked[(iy * nx + ix) as usize] = true;
             }
         }
+    }
+
+    /// 矩形を`clearance_mm`だけ広げて通れない領域に足す (シートの中身からは分からない、呼び出し側が決めた立入禁止)。
+    pub(crate) fn block_area(&mut self, r: &Rect) {
+        let c = self.opts.clearance_mm;
+        self.mark_rect(&inflate(r, c));
     }
 
     /// ピンやラベルの点を通れなくする。格子点の上なら点を、格子の線の上なら線の1辺を塞ぐ。

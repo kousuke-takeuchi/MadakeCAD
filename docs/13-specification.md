@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3865 specification clauses** across 6 areas.
+**3875 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -478,11 +478,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Every power pin gets its own rail mark on a 5 mm stub, and the mark is named after the net. <sub>`each_power_pin_gets_its_own_rail_mark_named_after_the_net`</sub>
 - A ground mark uses the mark symbol the model names for that net, with the net name as its value when the symbol takes it from the value. <sub>`ground_uses_the_marks_symbol_of_the_source`</sub>
 - When the source has no ground mark, the library rail mark is used, pointing down, with the net name as its value. <sub>`ground_falls_back_to_the_library_mark`</sub>
-- A leaving net gets one tag, on the first pin in column order; all its carried pins are terminals, and that pin's terminal is the end of the tag stub. <sub>`a_leaving_net_gets_one_tag_at_the_first_pin_in_column_order`</sub>
+- A leaving net gets one tag, on the first pin in column order; when the net is also wired on the sheet, the tag hangs 5 mm beyond that pin's stub, and the pins and the tag are all ends of the wiring. <sub>`a_leaving_net_gets_one_tag_at_the_first_pin_in_column_order`</sub>
 - A leaving net with one carried pin has a tag but no terminal. <sub>`a_leaving_net_with_one_pin_has_no_terminal`</sub>
 - A tag on a right-side pin points outward (tag_flow = out); a tag on a left-side pin has its body on the outer side too, and no flow. <sub>`a_tag_on_a_right_side_pin_points_outward`</sub>
 - The destinations option becomes the destination text of the tag. <sub>`a_destination_option_becomes_the_tags_destination`</sub>
 - Tags on adjacent pins do not touch, at 5 mm and at 2.5 mm pitch. <sub>`tags_on_adjacent_pins_do_not_touch`</sub>
+- A tag keeps room for the names other sheets add inside it later: its keep-out holds the flag with ten characters and with the longest sheet name of the open project. <sub>`a_tag_reserves_room_for_ten_characters_and_the_longest_sheet_name`</sub>
 - Every box origin, pin, stub end and tag lies on the 2.5 mm grid, at both pitches. <sub>`every_pin_and_origin_is_on_the_grid`</sub>
 - Columns are spread over the drawing area, from its left side to its right side, in the given order. <sub>`columns_are_spread_over_the_drawing_area`</sub>
 - Nothing on the new sheet enters the title block. <sub>`nothing_enters_the_title_block`</sub>
@@ -497,6 +498,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The counts in the plan are the counts on the sheet. <sub>`the_plan_counts_match_the_sheet`</sub>
 - Planning the same request twice gives the same sheet once the random entity ids are replaced by their order of appearance. <sub>`planning_twice_gives_the_same_sheet`</sub>
 - A net that leaves the sheet keeps its tag, and the wire to the tag ends exactly on the tag's stub, so the pins and the tag are one net. <sub>`a_leaving_net_with_two_pins_is_wired_to_its_tag`</sub>
+- Where a leaving net is also wired, no wire runs through or along a tag flag: only the tag's own wire touches its flag, at the tag's point. At a pitch of 5 mm every other wire keeps the router clearance; at 2.5 mm, where adjacent flags are only 0.25 mm apart, no other wire touches a flag. <sub>`no_wire_runs_through_or_along_a_tag_flag`</sub>
+- A tag sits at a free end: exactly one wire reaches its point, and its flag touches no other flag, no unit outline and no mark. <sub>`a_tag_hangs_at_a_free_end_clear_of_other_tags_boxes_and_marks`</sub>
+- Wherever three or more wire arms meet there is a junction dot, also where the wire to the peers leaves a tag's branch at a pin's stub. <sub>`every_point_where_three_wires_meet_has_a_junction`</sub>
+- When the router cannot place a leaving net, the tagged pin is joined to its tag by a straight wire and the other pins get same-named labels, so pins and tag stay one net and nothing dangles. <sub>`a_tag_stays_joined_when_the_router_gives_up`</sub>
+- Room is kept for the sheet names that other sheets add inside a tag later: after a second sheet with a long name is drafted, no wire of either sheet comes near the widened flags. <sub>`wires_keep_clear_of_the_sheet_names_that_tags_show_later`</sub>
+- No wire comes closer than the router clearance to the graphics or the printed name of a power or ground mark, except the mark's own stub. <sub>`wires_keep_clear_of_marks_and_their_names`</sub>
+- On the finished sheet, unit origins, pins, the ends of stubs, tags and marks are on the 2.5 mm grid; only the bends of routed wires may lie on the 1.25 mm router grid. <sub>`everything_but_routed_bends_is_on_the_grid`</sub>
+- No wire, tag or mark leaves the frame's inner area or enters the title block (with its revision rows), on A3 and on A4 with the default frame, and with a frame of wide margins and a large title block. <sub>`nothing_leaves_the_frame_or_enters_the_title_block`</sub>
+- The router stays out of the title block rectangle that the layout hands it: a title block put over the middle of a wire that ran freely makes the wire go round it. <sub>`the_router_keeps_out_of_the_title_block_the_layout_reports`</sub>
 - A drafted sheet draws exactly like the golden file (entity ids replaced by their order of appearance). Set MADAKE_UPDATE_DRAFT_GOLDEN=1 to rewrite the file. <sub>`a_drafted_sheet_renders_like_the_golden_file`</sub>
 
 ### draft_check

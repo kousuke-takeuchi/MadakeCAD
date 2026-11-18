@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3865仕様項目**。
+全6領域・**3875仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -478,11 +478,12 @@
 - 電源のピンには1本ずつ、5mmの短い線の先に、ネット名を値にした電源の印が付く。 <sub>`each_power_pin_gets_its_own_rail_mark_named_after_the_net`</sub>
 - 接地の印は、モデルが示す元の図の印のシンボルを使う。値からネット名を取るシンボルなら、値にネット名を入れる。 <sub>`ground_uses_the_marks_symbol_of_the_source`</sub>
 - 元の図に接地の印が無いときは、ライブラリの電源の印を下向き (180度回転) にして、ネット名を値にして置く。 <sub>`ground_falls_back_to_the_library_mark`</sub>
-- 出ていくネットにはタグが1つだけ付き、列の順で最初のピンに置かれる。持っているピンはすべて配線の端になり、タグのピンの端は線の先になる。 <sub>`a_leaving_net_gets_one_tag_at_the_first_pin_in_column_order`</sub>
+- 出ていくネットには札が1つだけ付き、列の順で最初のピンに下がる。このシートでも配線するネットなら、札はそのピンの短い線のさらに5mm先にあり、ピンと札のすべてが配線の端になる。 <sub>`a_leaving_net_gets_one_tag_at_the_first_pin_in_column_order`</sub>
 - 持っているピンが1本だけの出ていくネットには、タグが付くが、配線の端は作らない。 <sub>`a_leaving_net_with_one_pin_has_no_terminal`</sub>
 - 右側のピンのタグは外向き (tag_flow = out)、左側のピンのタグは本体が外側 (左) に伸びる向きで、out は付かない。 <sub>`a_tag_on_a_right_side_pin_points_outward`</sub>
 - destinations に書いた行き先は、タグの行き先の文字になる。 <sub>`a_destination_option_becomes_the_tags_destination`</sub>
 - 隣り合うピンのタグは、ピン間隔が5mmでも2.5mmでも、互いに触れない。 <sub>`tags_on_adjacent_pins_do_not_touch`</sub>
+- 札は、後から中に書かれる他のシートの名前の場所を空けておく。配線が近づかない範囲は、10文字の行き先と、開いているプロジェクトの最も長いシート名を入れた旗を含む。 <sub>`a_tag_reserves_room_for_ten_characters_and_the_longest_sheet_name`</sub>
 - 箱の原点・ピン・短い線の先・タグは、どちらのピン間隔でも2.5mmの格子の上にある。 <sub>`every_pin_and_origin_is_on_the_grid`</sub>
 - 列は描画範囲の左から右へ、指定した順に、全体に広がって並ぶ。 <sub>`columns_are_spread_over_the_drawing_area`</sub>
 - 新しいシートの上のものは、何も表題欄に入らない。 <sub>`nothing_enters_the_title_block`</sub>
@@ -497,6 +498,15 @@
 - 計画の数 (機器・ピン・配線したネット・印・タグ) は、シートの中身と一致する。 <sub>`the_plan_counts_match_the_sheet`</sub>
 - 同じ依頼を2回計画すると、ランダムな id を出てくる順の番号に置き換えれば、全く同じシートになる。 <sub>`planning_twice_gives_the_same_sheet`</sub>
 - シートの外へ出るネットはタグを持ち、そこへ行く配線はタグの短い線の先でちょうど止まるので、ピンとタグは1つのネットになる。 <sub>`a_leaving_net_with_two_pins_is_wired_to_its_tag`</sub>
+- 出ていくネットをこのシートでも配線するとき、札の旗の上や脇を通る配線は無い。旗に触れるのは、札の点で止まる札自身の線だけ。ピン間隔5mmではほかの線は経路探索のすき間を空け、隣の旗どうしが0.25mmしか離れない2.5mmでも旗に触れる線は無い。 <sub>`no_wire_runs_through_or_along_a_tag_flag`</sub>
+- 札は線の行き止まりにある。札の点へ届く線はちょうど1本で、旗はほかの旗にも、機器の外形にも、印にも触れない。 <sub>`a_tag_hangs_at_a_free_end_clear_of_other_tags_boxes_and_marks`</sub>
+- 3本以上の線が会う点には必ず接点の丸がある。札への枝と相手への線がピンの短い線の先で分かれるところも同じ。 <sub>`every_point_where_three_wires_meet_has_a_junction`</sub>
+- 出ていくネットの配線を引けないときは、札のピンは札まで一直線の線でつなぎ、ほかのピンには同じ名前のラベルを付ける。ピンと札は1つのネットのままで、宙に浮く線も無い。 <sub>`a_tag_stays_joined_when_the_router_gives_up`</sub>
+- 札の中に後から書かれる他のシートの名前の場所を空けておく。長い名前のシートを先に下書きしてから2枚目を下書きしても、どちらのシートの配線も広がった旗に近づかない。 <sub>`wires_keep_clear_of_the_sheet_names_that_tags_show_later`</sub>
+- 電源・接地の印の図形と名前の文字には、その印自身の短い線を除き、どの配線も経路探索のすき間より近づかない。 <sub>`wires_keep_clear_of_marks_and_their_names`</sub>
+- 仕上がったシートでは、機器の原点・ピン・短い線の先・札・印は2.5mmの格子の上にある。1.25mmの経路の格子に乗ってよいのは、引いた配線の曲がりだけ。 <sub>`everything_but_routed_bends_is_on_the_grid`</sub>
+- 配線・札・印は図枠の内側から出ず、表題欄 (改訂欄の行を含む) にも入らない。既定の図枠の A3 と A4 でも、余白が広く表題欄の大きい図枠でも同じ。 <sub>`nothing_leaves_the_frame_or_enters_the_title_block`</sub>
+- 経路探索は、配置の段から渡された表題欄の矩形に入らない。自由に引いた配線の途中に表題欄を置き直すと、配線はそれを避けて回る。 <sub>`the_router_keeps_out_of_the_title_block_the_layout_reports`</sub>
 - 下書きのシートは、ゴールデンファイル (id は出てくる順の番号に置き換え) と全く同じ絵になる。ファイルを作り直すときは MADAKE_UPDATE_DRAFT_GOLDEN=1 を付ける。 <sub>`a_drafted_sheet_renders_like_the_golden_file`</sub>
 
 ### draft_check
