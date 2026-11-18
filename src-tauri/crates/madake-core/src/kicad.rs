@@ -455,6 +455,7 @@ pub fn import_kicad_sch(
                 opt("block_leads").as_deref(),
                 opt("block_pin_text").as_deref(),
                 opt("block_view").as_deref(),
+                opt("block_number_align").as_deref(),
             ) {
                 Some(a) => attrs = a,
                 None => report

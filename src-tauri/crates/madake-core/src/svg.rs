@@ -6148,6 +6148,59 @@ mod tests {
         assert_ne!(block_svg(pins, &[]), big);
     }
 
+    /// The x of the text `t` in the SVG and its anchor (`start`, `middle` or `end`).
+    fn text_x(svg: &str, t: &str) -> (f64, String) {
+        let line = svg.lines().find(|l| l.contains(&format!(">{t}</text>"))).unwrap_or_else(|| panic!("{t} is drawn"));
+        let attr = |name: &str| -> Option<String> {
+            let key = format!(" {name}=\"");
+            let i = line.find(&key)? + key.len();
+            Some(line[i..].split('"').next()?.to_string())
+        };
+        (attr("x").expect("x").parse().expect("number"), attr("text-anchor").unwrap_or_else(|| "start".into()))
+    }
+
+    /// With block_number_align "edge" a long outside pin number ends 0.5 mm outside the box edge on its side and runs away from the box (left and right side); without the attribute it stays centred on the lead.
+    /// block_number_align が "edge" なら、外に描く長いピン番号はその辺の外形から0.5mm外で終わり、箱から離れる向きへ伸びる (左右とも)。属性が無ければ今までどおりリードの中央に置く。
+    #[test]
+    fn svg_ends_outside_numbers_at_the_box_edge_with_block_number_align_edge() {
+        let pins = r#"{"left":[{"no":"P24A_2","name":"G"}],"right":[{"no":"12","name":"OUT"}]}"#;
+        let edge = block_svg(pins, &[("block_number_align", "edge")]);
+        let plain = block_svg(pins, &[]);
+        let Entity::Symbol(inst) = crate::block::test_block("U1", "", 100.0, 50.0, pins) else { unreachable!() };
+        let spec = crate::block::parse_block_spec(&inst.attrs).unwrap();
+        let (lo, hi) = crate::block::block_outline(&spec);
+        let (box_left, box_right) = (100.0 + lo.x, 100.0 + hi.x);
+        let th = crate::block::BLOCK_PIN_TEXT_MM;
+        let end_of = |svg: &str, t: &str| {
+            let (x, anchor) = text_x(svg, t);
+            let w = crate::tidy::text_width(t, th);
+            match anchor.as_str() {
+                "middle" => (x - w / 2.0, x + w / 2.0),
+                "end" => (x - w, x),
+                _ => (x, x + w),
+            }
+        };
+        let (_, left_end) = end_of(&edge, "P24A_2");
+        assert!((left_end - (box_left - 0.5)).abs() < 1e-3, "{left_end} vs box {box_left}");
+        let (right_start, _) = end_of(&edge, "12");
+        assert!((right_start - (box_right + 0.5)).abs() < 1e-3, "{right_start} vs box {box_right}");
+        let (l0, l1) = end_of(&plain, "P24A_2");
+        assert!(((l0 + l1) / 2.0 - (box_left - crate::block::BLOCK_LEAD_MM / 2.0)).abs() < 1e-3, "centred on the lead");
+        assert!(l1 > box_left, "the centred long number runs into the box: that is what edge avoids");
+    }
+
+    /// A block without block_number_align, or with any value other than "edge", renders byte-identical SVG to before, so old files do not change.
+    /// block_number_align の無いブロック、または "edge" 以外の値のブロックは、今までとバイトまで同じSVGになるので、古いファイルの絵は変わらない。
+    #[test]
+    fn a_block_without_edge_alignment_renders_byte_identical_svg() {
+        let pins = r#"{"left":[{"no":"P24A_2","name":"G"},{"caption":"C"}],"right":[{"no":"12","name":"OUT"}],"top":[{"no":"7"}]}"#;
+        let plain = block_svg(pins, &[]);
+        for other in ["centre", "", "EDGE", "left"] {
+            assert_eq!(block_svg(pins, &[("block_number_align", other)]), plain, "{other:?}");
+        }
+        assert_ne!(block_svg(pins, &[("block_number_align", "edge")]), plain);
+    }
+
     /// A format-27 file (tagged and plain labels on three sheets, blocks of every older kind, ground marks) opens in this build and every sheet renders byte-identical SVG to what the format-27 build drew.
     /// 形式27のファイル (3枚のシートのタグ付き・タグなしのラベル、古い種類のブロック全部、接地の印) をこのビルドで開くと、どのシートも形式27のビルドが描いたものとバイトまで同じSVGになる。
     #[test]

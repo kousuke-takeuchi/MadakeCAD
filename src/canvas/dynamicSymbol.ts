@@ -261,6 +261,15 @@ export const BLOCK_PITCH_ATTR = "block_pitch";
 export const BLOCK_NUMBERS_ATTR = "block_numbers";
 /** ピン名・見出し・番号の文字の高さを持つ属性キー (mm、1.5〜5.0。無ければ BLOCK_PIN_TEXT_MM)。Rust の BLOCK_PIN_TEXT_ATTR と同じ。 */
 export const BLOCK_PIN_TEXT_ATTR = "block_pin_text";
+/**
+ * 外に描くピン番号の寄せ方を持つ属性キー。"edge" なら番号の終わりを外形の辺から [BLOCK_NUMBER_EDGE_GAP_MM] 外に置き、
+ * 文字は箱から離れる向きへ伸びる。無い・他の値なら今までどおりリードの中央。Rust の BLOCK_NUMBER_ALIGN_ATTR と同じ。
+ */
+export const BLOCK_NUMBER_ALIGN_ATTR = "block_number_align";
+/** "edge" の番号の終わりと外形の辺のあいだ mm (Rust側 BLOCK_NUMBER_EDGE_GAP_MM)。 */
+export const BLOCK_NUMBER_EDGE_GAP_MM = 0.5;
+/** 外のピン番号の寄せ方 (Rust側 BlockNumberAlign)。 */
+export type BlockNumberAlign = "centre" | "edge";
 /** block_pin_text の下限・上限 mm。 */
 export const BLOCK_PIN_TEXT_MIN_MM = 1.5;
 export const BLOCK_PIN_TEXT_MAX_MM = 5.0;
@@ -897,6 +906,8 @@ export function parseBlockSpec(attrs: Record<string, string>): {
   leads: BlockLeads;
   /** ピン名・見出し・番号の文字の高さ mm。属性が無ければnull (今までの BLOCK_PIN_TEXT_MM)。 */
   pinText: number | null;
+  /** 外のピン番号の寄せ方 (block_number_align が "edge" のときだけ "edge")。 */
+  numberAlign: BlockNumberAlign;
 } {
   const rawPins = attrs[BLOCK_PINS_ATTR];
   let pins: BlockPins = {};
@@ -1061,7 +1072,9 @@ export function parseBlockSpec(attrs: Record<string, string>): {
   if (leads === "none" && numbers !== "inside") {
     throw new Error(`${BLOCK_LEADS_ATTR} none needs ${BLOCK_NUMBERS_ATTR} inside`);
   }
-  return { pins, size, pitch, numbers, caption, leads, pinText };
+  // 寄せ方は "edge" だけを読み、他の値は断らずに今までの中央寄せにする (Rust側と同じ)
+  const numberAlign: BlockNumberAlign = attrs[BLOCK_NUMBER_ALIGN_ATTR]?.trim() === "edge" ? "edge" : "centre";
+  return { pins, size, pitch, numbers, caption, leads, pinText, numberAlign };
 }
 
 /** すき間・見出しの行を調べる (Rust側 check_entry と同じ順・同じ文)。 */
@@ -1265,6 +1278,7 @@ function pinLayout(
   pitchMm: number = BLOCK_PIN_PITCH_MM,
   leadMm: number = BLOCK_LEAD_MM,
   th: number = BLOCK_PIN_TEXT_MM,
+  numberAlign: BlockNumberAlign = "centre",
 ): { at: Point; leadFrom: Point; numAt: Point; nameAt: Point } {
   const leadFrom = edgePoint(dir, off, hw, hh);
   const name = bp.name ?? "";
@@ -1277,7 +1291,9 @@ function pinLayout(
         leadFrom,
         numAt: inside
           ? p(-hw + BLOCK_TEXT_PAD_MM + numW / 2, off)
-          : p(-hw - leadMm / 2, off - th),
+          : numberAlign === "edge"
+            ? p(-hw - BLOCK_NUMBER_EDGE_GAP_MM - numW / 2, off - th)
+            : p(-hw - leadMm / 2, off - th),
         nameAt: p(-hw + BLOCK_TEXT_PAD_MM + nameWidth(name, th) / 2, off),
       };
     }
@@ -1287,7 +1303,9 @@ function pinLayout(
         leadFrom,
         numAt: inside
           ? p(hw - BLOCK_TEXT_PAD_MM - numW / 2, off)
-          : p(hw + leadMm / 2, off - th),
+          : numberAlign === "edge"
+            ? p(hw + BLOCK_NUMBER_EDGE_GAP_MM + numW / 2, off - th)
+            : p(hw + leadMm / 2, off - th),
         nameAt: p(hw - BLOCK_TEXT_PAD_MM - nameWidth(name, th) / 2, off),
       };
     }
@@ -1373,7 +1391,7 @@ function translatePrimitive(prim: Primitive, dx: number, dy: number): Primitive 
  * block_numbers = "inside" なら左右の番号を外形の内側に描き、ピン名は描かない。
  */
 export function blockSymbol(attrs: Record<string, string>): SymbolDef {
-  const { pins: table, size, pitch, numbers, leads, pinText } = parseBlockSpec(attrs);
+  const { pins: table, size, pitch, numbers, leads, pinText, numberAlign } = parseBlockSpec(attrs);
   const leadMm = blockLeadMm(leads);
   const th = pinText ?? BLOCK_PIN_TEXT_MM;
   const [w, h] = blockBox(table, size, pitch, numbers, pinText);
@@ -1423,7 +1441,7 @@ export function blockSymbol(attrs: Record<string, string>): SymbolDef {
           primitives.push({ type: "text", at: labelAt(side, offs, group, label, dir, hw, hh, pitchMm, th), text: label, height: th });
         }
       }
-      const { at, leadFrom, numAt, nameAt } = pinLayout(bp, offs[i], dir, hw, hh, numbers, pitchMm, leadMm, th);
+      const { at, leadFrom, numAt, nameAt } = pinLayout(bp, offs[i], dir, hw, hh, numbers, pitchMm, leadMm, th, numberAlign);
       // リード線なしのブロックは線を描かない (ピン接続点が外形の辺の上)
       if (Math.abs(leadFrom.x - at.x) > 1e-9 || Math.abs(leadFrom.y - at.y) > 1e-9) {
         primitives.push({ type: "line", pts: [leadFrom, at] });

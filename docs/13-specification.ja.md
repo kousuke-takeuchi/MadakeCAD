@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3904仕様項目**。
+全6領域・**3908仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1537,6 +1537,8 @@
 - 既定の書き方のシートは、ゾーン住所の書き方を明示した場合とバイトまで同じSVGになる。tag_flow out は旗の多角形だけを変える。 <sub>`the_default_style_renders_as_before_and_flow_out_only_moves_the_polygon`</sub>
 - ブロックの見出しの行は箱の中に太字で描かれる。番号のないピンは名前を1回だけ書いて番号は書かず、すき間の行は何も描かない。 <sub>`svg_draws_block_captions_in_bold_and_unnumbered_pins_by_name`</sub>
 - block_pin_text は図面のピン名・見出し・番号の文字の大きさを決める。既定の大きさを明示しても何も変わらない。 <sub>`svg_draws_block_texts_at_the_block_pin_text_size`</sub>
+- block_number_align が "edge" なら、外に描く長いピン番号はその辺の外形から0.5mm外で終わり、箱から離れる向きへ伸びる (左右とも)。属性が無ければ今までどおりリードの中央に置く。 <sub>`svg_ends_outside_numbers_at_the_box_edge_with_block_number_align_edge`</sub>
+- block_number_align の無いブロック、または "edge" 以外の値のブロックは、今までとバイトまで同じSVGになるので、古いファイルの絵は変わらない。 <sub>`a_block_without_edge_alignment_renders_byte_identical_svg`</sub>
 - 形式27のファイル (3枚のシートのタグ付き・タグなしのラベル、古い種類のブロック全部、接地の印) をこのビルドで開くと、どのシートも形式27のビルドが描いたものとバイトまで同じSVGになる。 <sub>`a_format_27_file_renders_byte_identical_svg_after_migration`</sub>
 - プロジェクトの一部として書き出したシートには、他のシートに残りの部分表示がある機器の部分表示の脇に「/シート.ゾーン」の場所の文字が出ない。 <sub>`svg_draws_no_location_text_beside_views`</sub>
 
@@ -2938,6 +2940,8 @@
 - すき間は1〜20行で他の項目を混ぜず、行数の合計にも上限がある。文言は Rust と同じ <sub>`block pin rows and text size (Rust twin)`</sub>
 - 見出しの行は1行を使って箱の中に太字で書き、ピンにならない。左辺は左寄せ、右辺は右寄せ <sub>`block pin rows and text size (Rust twin)`</sub>
 - block_pin_text は文字の高さを変え、1.5〜5.0mm 以外は Rust と同じ文言で断る <sub>`block pin rows and text size (Rust twin)`</sub>
+- block_number_align が "edge" なら、外の番号は外形の辺から0.5mm外で終わり、箱から離れる向きへ伸びる (左右とも)。上下の番号は変わらない <sub>`block pin rows and text size (Rust twin)`</sub>
+- block_number_align が無い・"edge" 以外のときは、今までと全く同じ絵になり、断りもしない <sub>`block pin rows and text size (Rust twin)`</sub>
 - 2mm を明示しても今までと同じ絵になる (属性を使わないブロックは変わらない) <sub>`block pin rows and text size (Rust twin)`</sub>
 
 ### frameEditor

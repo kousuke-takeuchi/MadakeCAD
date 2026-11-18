@@ -2020,6 +2020,7 @@ pub fn import_dxf(
                         let leads = attrs.remove("BLOCK_LEADS");
                         let pin_text = attrs.remove("BLOCK_PIN_TEXT");
                         let view = attrs.remove("BLOCK_VIEW");
+                        let number_align = attrs.remove("BLOCK_NUMBER_ALIGN");
                         match crate::block::imported_block_attrs(
                             pins.as_deref(),
                             size.as_deref(),
@@ -2029,6 +2030,7 @@ pub fn import_dxf(
                             leads.as_deref(),
                             pin_text.as_deref(),
                             view.as_deref(),
+                            number_align.as_deref(),
                         ) {
                             Some(a) => attrs.extend(a),
                             None => report
@@ -3401,6 +3403,7 @@ mod tests {
             assert_eq!(crate::block::drawn_like(&back.attrs), crate::block::drawn_like(&orig.attrs), "{reference}");
         }
         assert!(dxf.contains("BLOCK_PIN_TEXT"), "文字の高さの属性が書き出される");
+        assert!(dxf.contains("BLOCK_NUMBER_ALIGN"), "番号の寄せ方の属性が書き出される");
     }
 
     /// A view block exported to DXF imports back as a view, and a plain block does not become one.

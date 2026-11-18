@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3904 specification clauses** across 6 areas.
+**3908 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1537,6 +1537,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A sheet with no tags and the default style renders byte-identical SVG to the sheet rendered with the zone style set explicitly, and the flow-out flag moves only the polygon. <sub>`the_default_style_renders_as_before_and_flow_out_only_moves_the_polygon`</sub>
 - A block's caption row is drawn in bold inside the box, an unnumbered pin prints its name once and no number, and a spacer row draws nothing. <sub>`svg_draws_block_captions_in_bold_and_unnumbered_pins_by_name`</sub>
 - block_pin_text sets the font size of the pin names, captions and numbers in the drawing, and writing the default size explicitly changes nothing. <sub>`svg_draws_block_texts_at_the_block_pin_text_size`</sub>
+- With block_number_align "edge" a long outside pin number ends 0.5 mm outside the box edge on its side and runs away from the box (left and right side); without the attribute it stays centred on the lead. <sub>`svg_ends_outside_numbers_at_the_box_edge_with_block_number_align_edge`</sub>
+- A block without block_number_align, or with any value other than "edge", renders byte-identical SVG to before, so old files do not change. <sub>`a_block_without_edge_alignment_renders_byte_identical_svg`</sub>
 - A format-27 file (tagged and plain labels on three sheets, blocks of every older kind, ground marks) opens in this build and every sheet renders byte-identical SVG to what the format-27 build drew. <sub>`a_format_27_file_renders_byte_identical_svg_after_migration`</sub>
 - A sheet exported as part of its project draws no "/sheet.zone" text beside a view of a unit whose other views are on another sheet. <sub>`svg_draws_no_location_text_beside_views`</sub>
 
@@ -2938,6 +2940,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - words the gap, caption and row-limit refusals exactly like Rust <sub>`block pin rows and text size (Rust twin)`</sub>
 - draws a caption row bold inside the box on its row without a pin <sub>`block pin rows and text size (Rust twin)`</sub>
 - scales the texts with block_pin_text and refuses values outside 1.5 to 5.0 <sub>`block pin rows and text size (Rust twin)`</sub>
+- ends an outside number 0.5 mm outside the box edge with block_number_align edge <sub>`block pin rows and text size (Rust twin)`</sub>
+- draws exactly as before without block_number_align or with another value <sub>`block pin rows and text size (Rust twin)`</sub>
 - draws the default size exactly like a block without the attribute <sub>`block pin rows and text size (Rust twin)`</sub>
 
 ### frameEditor

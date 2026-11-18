@@ -44,6 +44,11 @@ pub const BLOCK_CAPTION_ATTR: &str = "block_caption";
 pub const BLOCK_PIN_TEXT_ATTR: &str = "block_pin_text";
 /// 部分表示 (1つの機器を複数の図に分けて描くブロック) の印を持つ属性キー (`"1"` で部分表示。無ければ普通のブロック)。
 pub const BLOCK_VIEW_ATTR: &str = "block_view";
+/// 外に描く左右のピン番号の寄せ方の属性キー。`"edge"` なら番号の終わりを外形の辺から [`BLOCK_NUMBER_EDGE_GAP_MM`] 外に置き、
+/// 文字は箱から離れる向きへ伸びる。無い・他の値なら今までどおりリードの中央 (断らない)。
+pub const BLOCK_NUMBER_ALIGN_ATTR: &str = "block_number_align";
+/// `block_number_align` = `"edge"` の番号の終わりと外形の辺のあいだ (mm)。
+pub const BLOCK_NUMBER_EDGE_GAP_MM: f64 = 0.5;
 /// `block_pin_text` の下限 (mm)。
 pub const BLOCK_PIN_TEXT_MIN_MM: f64 = 1.5;
 /// `block_pin_text` の上限 (mm)。
@@ -137,6 +142,16 @@ pub enum BlockNumbers {
     Outside,
     /// 外形の内側、辺のすぐ内。ピン名は描かない。
     Inside,
+}
+
+/// 外に描く左右のピン番号の寄せ方。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BlockNumberAlign {
+    /// リードの中央 (これまでどおり)。
+    #[default]
+    Centre,
+    /// 番号の終わりを外形の辺から [`BLOCK_NUMBER_EDGE_GAP_MM`] 外に置く (文字は箱から離れる向きへ伸びる)。
+    Edge,
 }
 
 /// ピンの並びピッチ (mm)。2.5mmグリッドの倍数。
@@ -249,6 +264,8 @@ pub struct BlockSpec {
     pub leads: BlockLeads,
     /// ピン名・見出し・番号の文字の高さ (mm)。属性が無ければ`None` (今までの [`BLOCK_PIN_TEXT_MM`])。
     pub pin_text: Option<f64>,
+    /// 外に描く左右のピン番号の寄せ方 (`block_number_align`)。
+    pub number_align: BlockNumberAlign,
 }
 
 impl BlockSpec {
@@ -525,7 +542,12 @@ pub fn parse_block_spec(attrs: &BTreeMap<String, String>) -> Result<BlockSpec, S
     if leads == BlockLeads::None && numbers != BlockNumbers::Inside {
         return Err(format!("{BLOCK_LEADS_ATTR} none needs {BLOCK_NUMBERS_ATTR} inside"));
     }
-    Ok(BlockSpec { pins, size, pitch, numbers, caption, leads, pin_text })
+    // 寄せ方は "edge" だけを読み、他の値は断らずに今までの中央寄せにする
+    let number_align = match attrs.get(BLOCK_NUMBER_ALIGN_ATTR).map(|s| s.trim()) {
+        Some("edge") => BlockNumberAlign::Edge,
+        _ => BlockNumberAlign::Centre,
+    };
+    Ok(BlockSpec { pins, size, pitch, numbers, caption, leads, pin_text, number_align })
 }
 
 /// すき間・見出しの行 (`gap` / `caption`) を調べる: 他の項目を混ぜない・すき間は1〜[`BLOCK_GAP_MAX`]行・見出しは空でない。
@@ -880,7 +902,19 @@ struct PinLayout {
 
 /// ピンの描き位置。コネクタの無いピンは今までどおり。コネクタのあるピンは接続点が外形から5mm、
 /// リードは絵の外端から、番号は絵の外 (左右はリードの上、上下はリードの右)、左右の名前は3mm内側から。
-fn pin_layout(bp: &BlockPin, off: f64, dir: PinDir, hw: f64, hh: f64, numbers: BlockNumbers, pitch_mm: f64, lead_mm: f64, th: f64) -> PinLayout {
+#[allow(clippy::too_many_arguments)]
+fn pin_layout(
+    bp: &BlockPin,
+    off: f64,
+    dir: PinDir,
+    hw: f64,
+    hh: f64,
+    numbers: BlockNumbers,
+    pitch_mm: f64,
+    lead_mm: f64,
+    th: f64,
+    align: BlockNumberAlign,
+) -> PinLayout {
     let edge = edge_point(dir, off, hw, hh);
     if bp.connector.is_none() {
         let inside = numbers == BlockNumbers::Inside;
@@ -890,6 +924,8 @@ fn pin_layout(bp: &BlockPin, off: f64, dir: PinDir, hw: f64, hh: f64, numbers: B
                 Point::new(-hw - lead_mm, off),
                 if inside {
                     Point::new(-hw + BLOCK_TEXT_PAD_MM + num_w / 2.0, off)
+                } else if align == BlockNumberAlign::Edge {
+                    Point::new(-hw - BLOCK_NUMBER_EDGE_GAP_MM - num_w / 2.0, off - th)
                 } else {
                     Point::new(-hw - lead_mm / 2.0, off - th)
                 },
@@ -899,6 +935,8 @@ fn pin_layout(bp: &BlockPin, off: f64, dir: PinDir, hw: f64, hh: f64, numbers: B
                 Point::new(hw + lead_mm, off),
                 if inside {
                     Point::new(hw - BLOCK_TEXT_PAD_MM - num_w / 2.0, off)
+                } else if align == BlockNumberAlign::Edge {
+                    Point::new(hw + BLOCK_NUMBER_EDGE_GAP_MM + num_w / 2.0, off - th)
                 } else {
                     Point::new(hw + lead_mm / 2.0, off - th)
                 },
@@ -1082,7 +1120,7 @@ fn block_symbol_from_spec(spec: &BlockSpec) -> SymbolDef {
                     primitives.push(text(at.x, at.y, &label, th));
                 }
             }
-            let layout = pin_layout(bp, offs[i], dir, hw, hh, numbers, pitch_mm, lead_mm, th);
+            let layout = pin_layout(bp, offs[i], dir, hw, hh, numbers, pitch_mm, lead_mm, th, spec.number_align);
             // リード線なしのブロックは線を描かない (ピン接続点が外形の辺の上)
             if (layout.lead_from.x - layout.at.x).abs() > 1e-9 || (layout.lead_from.y - layout.at.y).abs() > 1e-9 {
                 primitives.push(lead(layout.lead_from.x, layout.lead_from.y, layout.at.x, layout.at.y));
@@ -1212,6 +1250,7 @@ pub fn imported_block_attrs(
     leads: Option<&str>,
     pin_text: Option<&str>,
     view: Option<&str>,
+    number_align: Option<&str>,
 ) -> Option<BTreeMap<String, String>> {
     let mut attrs = BTreeMap::new();
     for (k, v) in [
@@ -1223,6 +1262,7 @@ pub fn imported_block_attrs(
         (BLOCK_LEADS_ATTR, leads),
         (BLOCK_PIN_TEXT_ATTR, pin_text),
         (BLOCK_VIEW_ATTR, view),
+        (BLOCK_NUMBER_ALIGN_ATTR, number_align),
     ] {
         if let Some(v) = v.filter(|v| !v.is_empty()) {
             attrs.insert(k.to_string(), v.to_string());
@@ -1313,6 +1353,7 @@ pub(crate) fn rows_block_sheet() -> crate::model::Sheet {
     );
     let crate::model::Entity::Symbol(mut rows_inst) = rows else { unreachable!() };
     rows_inst.attrs.insert(BLOCK_PIN_TEXT_ATTR.into(), "3".into());
+    rows_inst.attrs.insert(BLOCK_NUMBER_ALIGN_ATTR.into(), "edge".into());
     for e in [named, crate::model::Entity::Symbol(rows_inst)] {
         sheet.entities.insert(e.id(), e);
     }
@@ -2569,7 +2610,7 @@ mod tests {
         assert!(BLOCK_UNREADABLE_WARNING.contains("属性"), "{BLOCK_UNREADABLE_WARNING}");
         assert!(!BLOCK_UNREADABLE_WARNING.contains("ピン表"), "{BLOCK_UNREADABLE_WARNING}");
         assert!(BLOCK_UNREADABLE_WARNING.contains("見本の箱"), "{BLOCK_UNREADABLE_WARNING}");
-        assert!(imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, Some("3"), None, None, None, None, None).is_none(), "間隔が読めないときも警告の対象");
+        assert!(imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, Some("3"), None, None, None, None, None, None).is_none(), "間隔が読めないときも警告の対象");
     }
 
     fn placed_fine(pins: &str, size: &str) -> (crate::model::SymbolInstance, SymbolDef) {
@@ -3022,10 +3063,10 @@ mod tests {
     /// ブロックの参照記号の置き場所は、書き出したファイルを読み戻しても残る: 取り込みは block_caption をピン表と一緒に保つ。
     #[test]
     fn imported_block_attrs_keep_the_caption_place() {
-        let attrs = imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, Some("inside"), None, None, None).unwrap();
+        let attrs = imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, Some("inside"), None, None, None, None).unwrap();
         assert_eq!(attrs[BLOCK_CAPTION_ATTR], "inside");
-        assert!(imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, Some("below"), None, None, None).is_none());
-        let attrs = imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, None, None, None, None).unwrap();
+        assert!(imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, Some("below"), None, None, None, None).is_none());
+        let attrs = imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, None, None, None, None, None).unwrap();
         assert!(!attrs.contains_key(BLOCK_CAPTION_ATTR));
     }
 
@@ -3100,7 +3141,7 @@ mod tests {
         bad.insert(BLOCK_LEADS_ATTR.to_string(), "short".to_string());
         assert!(parse_block_spec(&bad).unwrap_err().contains(BLOCK_LEADS_ATTR));
         // 取り込みも保つ
-        let kept = imported_block_attrs(Some(pins), None, Some("2.5"), Some("inside"), None, Some("none"), None, None).unwrap();
+        let kept = imported_block_attrs(Some(pins), None, Some("2.5"), Some("inside"), None, Some("none"), None, None, None).unwrap();
         assert_eq!(kept[BLOCK_LEADS_ATTR], "none");
     }
 
@@ -3382,8 +3423,8 @@ mod tests {
     #[test]
     fn importing_a_block_keeps_block_pin_text() {
         let pins = r#"{"left":[{"name":"A"}]}"#;
-        let kept = imported_block_attrs(Some(pins), None, None, None, None, None, Some("3"), None).unwrap();
+        let kept = imported_block_attrs(Some(pins), None, None, None, None, None, Some("3"), None, None).unwrap();
         assert_eq!(kept[BLOCK_PIN_TEXT_ATTR], "3");
-        assert!(imported_block_attrs(Some(pins), None, None, None, None, None, Some("9"), None).is_none());
+        assert!(imported_block_attrs(Some(pins), None, None, None, None, None, Some("9"), None, None).is_none());
     }
 }

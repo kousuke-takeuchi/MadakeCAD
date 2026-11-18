@@ -1226,6 +1226,28 @@ describe("block pin rows and text size (Rust twin)", () => {
     expect(wide("3.5")).toBeGreaterThan(wide());
   });
 
+  // ja: block_number_align が "edge" なら、外の番号は外形の辺から0.5mm外で終わり、箱から離れる向きへ伸びる (左右とも)。上下の番号は変わらない
+  it("ends an outside number 0.5 mm outside the box edge with block_number_align edge", () => {
+    const pins = '{"left":[{"no":"P24A_2","name":"G"}],"right":[{"no":"12","name":"OUT"}],"top":[{"no":"7"}]}';
+    const def = sym(pins, { block_number_align: "edge" });
+    const rect = def.primitives.find((q) => q.type === "rect") as { p1: { x: number }; p2: { x: number } };
+    const left = textOf(def, "P24A_2")!;
+    const right = textOf(def, "12")!;
+    expect(left.at.x + textWidthMm("P24A_2", 2) / 2).toBeCloseTo(rect.p1.x - 0.5, 9);
+    expect(right.at.x - textWidthMm("12", 2) / 2).toBeCloseTo(rect.p2.x + 0.5, 9);
+    expect(textOf(def, "7")).toEqual(textOf(sym(pins), "7"));
+    expect(parseBlockSpec({ block_number_align: " edge " }).numberAlign).toBe("edge");
+  });
+
+  // ja: block_number_align が無い・"edge" 以外のときは、今までと全く同じ絵になり、断りもしない
+  it("draws exactly as before without block_number_align or with another value", () => {
+    const pins = '{"left":[{"no":"P24A_2","name":"G"}],"right":[{"no":"12","name":"OUT"}]}';
+    for (const other of ["centre", "", "EDGE", "left"]) {
+      expect(sym(pins, { block_number_align: other })).toEqual(sym(pins));
+      expect(parseBlockSpec({ block_number_align: other }).numberAlign).toBe("centre");
+    }
+  });
+
   // ja: 2mm を明示しても今までと同じ絵になる (属性を使わないブロックは変わらない)
   it("draws the default size exactly like a block without the attribute", () => {
     const pins = '{"left":[{"no":"1","name":"A"}],"right":[{"no":"2"}]}';
