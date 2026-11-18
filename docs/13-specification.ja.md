@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3837仕様項目**。
+全6領域・**3848仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -498,6 +498,20 @@
 - 同じ依頼を2回計画すると、ランダムな id を出てくる順の番号に置き換えれば、全く同じシートになる。 <sub>`planning_twice_gives_the_same_sheet`</sub>
 - シートの外へ出るネットはタグを持ち、そこへ行く配線はタグの短い線の先でちょうど止まるので、ピンとタグは1つのネットになる。 <sub>`a_leaving_net_with_two_pins_is_wired_to_its_tag`</sub>
 - 下書きのシートは、ゴールデンファイル (id は出てくる順の番号に置き換え) と全く同じ絵になる。ファイルを作り直すときは MADAKE_UPDATE_DRAFT_GOLDEN=1 を付ける。 <sub>`a_drafted_sheet_renders_like_the_golden_file`</sub>
+
+### draft_check
+
+- 元の図を全部合わせて写した2枚の下書きは、検算に通り、数えたネットがすべて一致する。 <sub>`a_full_set_of_drafted_sheets_passes`</sub>
+- どのシートにも描かれていないピンは、元のネットの名前つきで「足りない」と報告される。 <sub>`a_pin_on_no_sheet_is_missing`</sub>
+- 開いた図にだけあって元の図に無いピンは、「余分」と報告される。 <sub>`a_pin_the_source_does_not_have_is_extra`</sub>
+- 片方のシートでタグの名前を変えると、ネットが2つに割れる。検算は元のネットの名前と2つの組を示す。 <sub>`a_tag_renamed_on_one_sheet_splits_the_net`</sub>
+- 元では別のネットだった2本が開いた図で1本につながると、「混ざった」と報告される。 <sub>`two_source_nets_joined_by_a_wire_are_merged`</sub>
+- 無視する参照記号に挙げた機器は両側から除かれるので、描いていない機器でも「足りない」にならない。 <sub>`ignored_references_are_left_out`</sub>
+- 3枚のシートにピンがあるネットは、どのシートにもタグがあり、1本のネットとして数えられる。 <sub>`a_net_over_three_sheets_is_one_net`</sub>
+- 電源のネットの名前が別のシートでは普通のタグになっていても、同じ名前の印とタグは1本のネットになる。 <sub>`power_marks_and_tags_of_one_name_are_one_net`</sub>
+- 検算は、元の図も開いたプロジェクトも書き換えない。 <sub>`the_check_changes_nothing`</sub>
+- 一覧は自然順に並ぶ。U2 は U10 より前、ピン 9 は 10 より前。 <sub>`lists_are_in_natural_order`</sub>
+- 描いてあるのにどこにもつながっていないピンは、「足りない」ではなく「割れた」に出る。 <sub>`an_unconnected_view_pin_is_split_not_missing`</sub>
 
 ### DXF連携 (AutoCAD Electrical / EPLAN)
 

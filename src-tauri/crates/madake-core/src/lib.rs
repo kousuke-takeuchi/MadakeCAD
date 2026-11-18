@@ -11,6 +11,7 @@ pub mod caption;
 pub mod command;
 pub mod connector;
 pub mod draft;
+pub mod draft_check;
 pub mod dxf;
 pub mod frame_template;
 pub mod geometry;

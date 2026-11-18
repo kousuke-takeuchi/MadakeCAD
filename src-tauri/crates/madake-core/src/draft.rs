@@ -266,6 +266,26 @@ fn analyse(source: &Project) -> Source {
     Source { nets, pin_net, by_name, instances, unit_pins }
 }
 
+/// プロジェクトのネットリストを、機器のピンだけの組にしたもの ([`device_nets`])。
+pub(crate) struct DeviceNets {
+    /// ネット名と、機器のピン (参照記号, ピンの鍵)。ネットの印・貫通のピンは含めない。全シートを統合したネット。
+    pub nets: Vec<(String, BTreeSet<(String, String)>)>,
+    /// 図面に描いてある機器のピン (つながっていないピンも含む)。
+    pub drawn: BTreeSet<(String, String)>,
+}
+
+/// 全シートのプロジェクトネットリストを機器のピンだけに減らす。元の図の読み取り ([`build_model`]) と同じ減らし方で、
+/// 下書きの検算 (`draft_check`) が両側にこれを使う。
+pub(crate) fn device_nets(project: &Project) -> DeviceNets {
+    let src = analyse(project);
+    let drawn = src
+        .unit_pins
+        .iter()
+        .flat_map(|(r, pins)| pins.iter().map(move |(k, _, _)| (r.clone(), k.clone())))
+        .collect();
+    DeviceNets { nets: src.nets.into_iter().map(|n| (n.name, n.pins)).collect(), drawn }
+}
+
 impl DraftRequest {
     /// 元の図を見なくてもわかる誤りを調べる。
     fn check_shape(&self, open: &Project) -> Result<(), String> {

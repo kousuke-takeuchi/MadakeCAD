@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3837 specification clauses** across 6 areas.
+**3848 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -498,6 +498,20 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Planning the same request twice gives the same sheet once the random entity ids are replaced by their order of appearance. <sub>`planning_twice_gives_the_same_sheet`</sub>
 - A net that leaves the sheet keeps its tag, and the wire to the tag ends exactly on the tag's stub, so the pins and the tag are one net. <sub>`a_leaving_net_with_two_pins_is_wired_to_its_tag`</sub>
 - A drafted sheet draws exactly like the golden file (entity ids replaced by their order of appearance). Set MADAKE_UPDATE_DRAFT_GOLDEN=1 to rewrite the file. <sub>`a_drafted_sheet_renders_like_the_golden_file`</sub>
+
+### draft_check
+
+- Two drafted sheets that together cover the source pass the check, with every counted net matched. <sub>`a_full_set_of_drafted_sheets_passes`</sub>
+- A pin that is on no sheet is reported as missing, with the name of its source net. <sub>`a_pin_on_no_sheet_is_missing`</sub>
+- A pin on a sheet that the source does not have is reported as extra. <sub>`a_pin_the_source_does_not_have_is_extra`</sub>
+- A tag renamed on one sheet cuts the net in two: the check lists the source net and the two groups. <sub>`a_tag_renamed_on_one_sheet_splits_the_net`</sub>
+- Two source nets that are one net in the open project (here a tag takes the name of another net) are reported as merged. <sub>`two_source_nets_joined_by_a_wire_are_merged`</sub>
+- References named in ignore_references are left out on both sides, so a unit that is not drawn is not missing. <sub>`ignored_references_are_left_out`</sub>
+- A net with pins on three sheets has a tag on every sheet and counts as one net. <sub>`a_net_over_three_sheets_is_one_net`</sub>
+- A power net whose name is also an ordinary tag on another sheet: marks and tags of one name are one net. <sub>`power_marks_and_tags_of_one_name_are_one_net`</sub>
+- Checking changes neither the source nor the open project. <sub>`the_check_changes_nothing`</sub>
+- Lists are in natural order: U2 comes before U10, and pin 9 before pin 10. <sub>`lists_are_in_natural_order`</sub>
+- A pin that is drawn but connected to nothing is reported under split, not as missing. <sub>`an_unconnected_view_pin_is_split_not_missing`</sub>
 
 ### DXF interop (AutoCAD Electrical / EPLAN)
 
