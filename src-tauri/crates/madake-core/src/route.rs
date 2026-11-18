@@ -544,6 +544,33 @@ impl RouteGrid {
         Some(Lead { points: pts, node, out })
     }
 
+    /// 格子の線の上の縦か横の線分 `a`-`b` が、通れない場所 (箱・文字・図枠・表題欄・立入禁止の領域・ピンやラベルの点) を
+    /// 通らないか。経路探索と同じ通れない場所と、同じすき間で調べる。両端は格子点の上にあること。
+    pub(crate) fn segment_free(&self, a: Point, b: Point) -> bool {
+        let (Some(na), Some(nb)) = (self.node_at(a), self.node_at(b)) else { return false };
+        let ((ax, ay), (bx, by)) = (self.xy(na), self.xy(nb));
+        if ax != bx && ay != by {
+            return false;
+        }
+        let mut n = na;
+        loop {
+            if self.blocked[n] || self.pin_blocked[n] {
+                return false;
+            }
+            if n == nb {
+                return true;
+            }
+            let d = self.dir_between(n, nb);
+            if self.edge_blocked(n, d) {
+                return false;
+            }
+            match self.step(n, d) {
+                Some(next) => n = next,
+                None => return false,
+            }
+        }
+    }
+
     /// 2つの引き出し線の終わりの点どうしを、他のネットを避けて結ぶ。ピンから ピンまでの点列 (折れ点だけ) を返す。
     pub fn connect(&self, a: &Lead, b: &Lead, occ: &Occ) -> Option<Vec<Point>> {
         let mut tree = Tree::default();

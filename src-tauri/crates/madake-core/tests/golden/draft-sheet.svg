@@ -143,9 +143,11 @@
 <polyline points="60,32.500 65,32.500" fill="none" stroke="#000000" stroke-width="0.350"/>
 <polyline points="60,37.500 65,37.500" fill="none" stroke="#000000" stroke-width="0.350"/>
 <polyline points="60,42.500 65,42.500" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="62.500,85 65,85 65,42.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="62.500,85 75,85" fill="none" stroke="#000000" stroke-width="0.350"/>
 <polyline points="65,32.500 86.250,32.500" fill="none" stroke="#000000" stroke-width="0.350"/>
 <polyline points="65,37.500 90,37.500 90,47.500 92.500,47.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="65,42.500 75,42.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="75,42.500 75,85" fill="none" stroke="#000000" stroke-width="0.350"/>
 <polyline points="86.250,32.500 86.250,18.750 121.250,18.750 121.250,42.500 150,42.500" fill="none" stroke="#000000" stroke-width="0.350"/>
 <polyline points="86.250,32.500 92.500,32.500 92.500,42.500 95,42.500" fill="none" stroke="#000000" stroke-width="0.350"/>
 <polyline points="92.500,47.500 92.500,60 97.500,60 97.500,77.500 152.500,77.500" fill="none" stroke="#000000" stroke-width="0.350"/>

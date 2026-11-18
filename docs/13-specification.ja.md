@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3960仕様項目**。
+全6領域・**3984仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -531,6 +531,33 @@
 - 経路探索は、配置の段から渡された表題欄の矩形に入らない。自由に引いた配線の途中に表題欄を置き直すと、配線はそれを避けて回る。 <sub>`the_router_keeps_out_of_the_title_block_the_layout_reports`</sub>
 - 下書きのシートは、ゴールデンファイル (id は出てくる順の番号に置き換え) と全く同じ絵になる。ファイルを作り直すときは MADAKE_UPDATE_DRAFT_GOLDEN=1 を付ける。 <sub>`a_drafted_sheet_renders_like_the_golden_file`</sub>
 
+### draft_channel_tests
+
+- 1本だけのネットは、いちばん左の位置、つまり最初のトラックに置く。 <sub>`a_single_net_takes_the_first_track`</sub>
+- 幹の範囲を両側に5mm広げても重ならない2本のネットは、1つのトラックを分け合える。 <sub>`nets_with_distant_spans_share_one_track`</sub>
+- 範囲のあいだがちょうど10mm (広げた範囲が触れるだけ) なら相乗りでき、それより近いと相乗りできない。 <sub>`spans_closer_than_ten_millimetres_do_not_share_a_track`</sub>
+- 全ての位置のうち、交差がいちばん少ない位置に置く。2本目は、2か所で交差する右ではなく、交差しない左に置く。 <sub>`the_position_with_the_fewest_crossings_wins`</sub>
+- 入れ子の範囲は交差なしで引ける。範囲がいちばん広いネットは外側のトラックに行き、どの枝も他の幹を横切らない。 <sub>`nested_spans_are_assigned_without_a_crossing`</sub>
+- 両側の同じ高さにある2つの端は1本の横線になり、トラックは要らない。 <sub>`two_terminals_at_one_height_need_no_track`</sub>
+- ネットを渡す順に関わらず結果は同じで、同じネットを2回割り当てても同じ結果になる。 <sub>`the_assignment_does_not_depend_on_the_input_order`</sub>
+- どの位置に置いても先に置いたネットに触れてしまうネットは割り当てずに残し、格子の経路探索に任せる。 <sub>`a_net_that_would_short_at_every_position_is_left_unplaced`</sub>
+- 枝が別のネットの短い線の先を通ってしまうと短絡なので、そのネットは使えない。その短い線が無ければ使える。 <sub>`a_drop_through_a_foreign_stub_end_is_refused`</sub>
+- 枝が動かない接点の丸を通る・札の枝を横切るときは使えない。別の配線の途中を直角に横切るだけなら使える。 <sub>`a_junction_or_a_tag_branch_on_the_way_is_refused_but_a_plain_crossing_is_not`</sub>
+- 別のネットの配線と頂点や線の上で触れてしまうネットは使えない。直角に交わるだけなら使える。 <sub>`a_wire_touching_an_accepted_net_is_refused`</sub>
+- 端が3つあるネットの配線は、幹1本と、端ごとに1本の枝と、3本以上の端が会う幹の点ごとの接点になる。 <sub>`a_trunk_with_three_drops_has_a_junction_at_the_middle_drop_only`</sub>
+- 縦に積んだ2つの機器のあいだの3本のネットは、別々の3本のトラックに縦の幹を1本ずつ持つ。途中の折れは無く、シートの配線は全て2点の直線になる。 <sub>`three_nets_between_stacked_units_get_three_trunks_and_no_jog`</sub>
+- トラックは2.5mm間隔で2.5mmの格子の上にあり、両側の列の張り出しから5mm以上離れている。 <sub>`tracks_are_on_the_grid_and_keep_their_distance_from_the_columns`</sub>
+- 通り道の配線の頂点は全て2.5mmの格子の上にある。 <sub>`every_vertex_of_a_channel_wire_is_on_the_grid`</sub>
+- 隣り合う2つの列の5つの機器にまたがる5ピンのネットは、幹1本と枝5本で描かれ、3本が会う枝ごとに接点の丸がある。通り道にそれ以外の線は無い。 <sub>`a_net_over_five_units_in_two_columns_is_one_trunk_with_five_drops`</sub>
+- 1つのネットの5ピンが3つの機器にあるとき (2つの機器は2ピンずつで棒になる)、幹1本と枝3本で描かれる。 <sub>`bars_count_as_one_terminal_each`</sub>
+- 両側の同じ高さにある2つの端は、短い線の先から先まで1本の横線になる。幹も接点も無い。 <sub>`terminals_at_one_height_are_one_straight_wire`</sub>
+- 端が通り道の外にあるネット (2つ先の列まで届く) は通り道を使えない。格子の経路探索が引き、つながりは変わらない。 <sub>`a_net_reaching_two_columns_over_goes_to_the_grid_router`</sub>
+- 札の枝を持つ出ていくネット (組が2つ) は通り道を使えず、格子の経路探索が引く。シートに組が1つだけの出ていくネットは配線そのものが無い。 <sub>`a_net_with_a_tag_branch_goes_to_the_grid_router`</sub>
+- 通り道の幅は10mm + トラック1本につき2.5mmで、20mm以上。トラックは必ず収まる。 <sub>`the_channel_width_follows_the_track_count`</sub>
+- 同じ依頼を2回計画すると、ランダムなidを除けば、全く同じ配線になる。 <sub>`planning_twice_gives_the_same_channel_wires`</sub>
+- 通り道の配線がふさがれたネット (ここでは幹の上に立入禁止の領域を置く) は格子の経路探索に渡され、それでもつながり、つながりは変わらない。 <sub>`a_blocked_channel_net_is_taken_by_the_grid_router`</sub>
+- 基本・棒・積んだ見本のどれでも、どちらのピン間隔でも、下書きのシートは元の図と同じつながりを持ち、札の旗・印・文字の枠・箱に触れる配線は無い。 <sub>`drafted_fixtures_keep_the_connections_and_wires_off_everything`</sub>
+
 ### draft_check
 
 - 呼び出し側がこれから下書きする全てのシートの名前を渡すと、1列目の左の札は後から足される名前の分の場所を空けておき、どの旗も図枠からはみ出さない。 <sub>`planned_sheets_keep_every_tag_inside_the_frame`</sub>
@@ -572,12 +599,12 @@
 - 札の旗は、行き先の文字の場所を含めて、A3でもA4でも描画範囲の中に収まる。 <sub>`every_tag_flag_stays_inside_the_drawing_area`</sub>
 - 同じネットをすでに持つ他のシートの名前まで含めると札が描画範囲の右の縁を越える依頼は、A4でもA3でも、列の番号と超えた量 (mm) を挙げて断る。 <sub>`tags_that_would_cross_the_edge_are_refused_with_column_and_excess`</sub>
 - 行き先の文字が長すぎて収まらないときも、同じ形で断る。 <sub>`a_destination_too_long_for_the_sheet_is_refused`</sub>
-- 列k+1は、列kの右の張り出しから通り道1つぶん (20mmと、10mm+横切るネット1本につき2.5mmの大きい方) あけて始まり、最初の列は描画範囲の左端から始まる。 <sub>`columns_are_packed_with_the_channel_rule`</sub>
+- 列k+1は、列kの右の張り出しから通り道1つぶん (20mmと、10mm+トラック1本につき2.5mmの大きい方) あけて始まり、最初の列は描画範囲の左端から始まる。 <sub>`columns_are_packed_with_the_channel_rule`</sub>
 - ネットが少ないときの通り道は20mmで、列が1つだけでも描画範囲の中央ではなく左端に置く。 <sub>`a_single_column_sits_at_the_left_edge`</sub>
 - 機器の印は、その機器自身の参照記号の文字にも、下に積んだ次の機器の参照記号の文字にも触れず、すき間はピン間隔4つぶん以上ある。 <sub>`marks_keep_clear_of_the_captions_and_the_gap_stays_four_pitches`</sub>
 - シートの上の相手が全て同じ列にあるピンは右の辺に置く。ただし最後の列では左の辺に置く。 <sub>`a_pin_with_peers_only_in_its_own_column_goes_right_except_in_the_last_column`</sub>
 - 相手が混ざるときは、同じ列の相手は数えない。左に1つ・同じ列に2つの相手を持つピンは、最後の列でも左に置く。 <sub>`same_column_peers_do_not_vote_in_a_mixed_case`</sub>
-- 列の右の通り道は、その列の機器どうしをつなぐネット (その通り道を通る) も数えるので、10mm + そこを通るネット1本につき2.5mm の幅になる。 <sub>`the_channel_counts_the_nets_inside_a_column`</sub>
+- 積んだ列の右の通り道には、その列の機器どうしをつなぐネットのトラックが入るので、幅は必要なトラックの数に従う (離れたネットは1つのトラックを分け合う)。ネットの数ではない。 <sub>`the_channel_counts_the_nets_inside_a_column`</sub>
 - 積んだ見本・基本の見本・棒の見本を下書きしても、つながりは変わらない。シートの機器のピンのまとまりは、どちらのピン間隔でも、経路をあきらめたときも、元の図と同じ。 <sub>`the_pin_groups_of_drafted_sheets_equal_the_source`</sub>
 - 札の旗 (書き出しが書く行き先を入れたもの) を横切る配線も触れる配線も無い。1つの列に積んで互いに配線した機器と2枚のシート名を持つ札の見本でも、基本の見本でも、どちらのピン間隔でも、経路をあきらめたネットがあるとき (代わりの札も障害物) でも同じ。 <sub>`no_wire_crosses_or_touches_a_tag_flag`</sub>
 - 経路をあきらめたネットの札は組の棒の上の端に下がるので、棒は札の点でしか旗に触れない。 <sub>`a_fallback_tag_hangs_at_the_upper_end_of_its_bar`</sub>

@@ -116,7 +116,7 @@ fn write_the_bars_fixture() {
 
 // ---- helpers
 
-fn request(columns: &[&[&str]]) -> DraftRequest {
+pub(super) fn request(columns: &[&[&str]]) -> DraftRequest {
     DraftRequest {
         name: "Look".into(),
         columns: columns.iter().map(|c| c.iter().map(|r| r.to_string()).collect()).collect(),
@@ -130,7 +130,7 @@ fn request(columns: &[&[&str]]) -> DraftRequest {
     }
 }
 
-fn open() -> Project {
+pub(super) fn open() -> Project {
     Project::new("open")
 }
 
@@ -150,23 +150,23 @@ fn plan(req: &DraftRequest) -> DraftPlan {
     plan_function_sheet(&bars_source(), &open(), req).expect("the plan is made")
 }
 
-fn wires_of(sheet: &Sheet) -> Vec<Wire> {
+pub(super) fn wires_of(sheet: &Sheet) -> Vec<Wire> {
     sheet.entities.values().filter_map(|e| if let Entity::Wire(w) = e { Some(w.clone()) } else { None }).collect()
 }
 
-fn labels_of(sheet: &Sheet) -> Vec<NetLabel> {
+pub(super) fn labels_of(sheet: &Sheet) -> Vec<NetLabel> {
     sheet.entities.values().filter_map(|e| if let Entity::NetLabel(l) = e { Some(l.clone()) } else { None }).collect()
 }
 
-fn junctions_of(sheet: &Sheet) -> Vec<Point> {
+pub(super) fn junctions_of(sheet: &Sheet) -> Vec<Point> {
     sheet.entities.values().filter_map(|e| if let Entity::Junction(j) = e { Some(j.at) } else { None }).collect()
 }
 
-fn marks_of(sheet: &Sheet) -> Vec<SymbolInstance> {
+pub(super) fn marks_of(sheet: &Sheet) -> Vec<SymbolInstance> {
     sheet.entities.values().filter_map(|e| if let Entity::Symbol(s) = e { Some(s.clone()) } else { None }).filter(|s| s.reference.is_empty()).collect()
 }
 
-fn unit_of(sheet: &Sheet, reference: &str) -> SymbolInstance {
+pub(super) fn unit_of(sheet: &Sheet, reference: &str) -> SymbolInstance {
     sheet
         .entities
         .values()
@@ -177,7 +177,7 @@ fn unit_of(sheet: &Sheet, reference: &str) -> SymbolInstance {
         .expect("the unit is on the sheet")
 }
 
-fn pin_pt(sheet: &Sheet, reference: &str, key: &str) -> Point {
+pub(super) fn pin_pt(sheet: &Sheet, reference: &str, key: &str) -> Point {
     let defs = sheet_symbol_defs(sheet);
     pin_points(sheet, &defs)
         .into_iter()
@@ -187,7 +187,7 @@ fn pin_pt(sheet: &Sheet, reference: &str, key: &str) -> Point {
 }
 
 /// The far end of the stub that starts at the pin.
-fn stub_end(sheet: &Sheet, reference: &str, key: &str) -> Point {
+pub(super) fn stub_end(sheet: &Sheet, reference: &str, key: &str) -> Point {
     let p = pin_pt(sheet, reference, key);
     wires_of(sheet)
         .iter()
@@ -204,7 +204,7 @@ fn mark_lead_of(sheet: &Sheet, anchor: Point) -> Vec<Point> {
         .points
 }
 
-fn arms_at(sheet: &Sheet, p: Point) -> usize {
+pub(super) fn arms_at(sheet: &Sheet, p: Point) -> usize {
     wires_of(sheet)
         .iter()
         .flat_map(|w| w.points.windows(2).map(|s| (s[0], s[1])).collect::<Vec<_>>())
@@ -220,18 +220,18 @@ fn arms_at(sheet: &Sheet, p: Point) -> usize {
         .sum()
 }
 
-fn rect_of(points: &[Point]) -> Rect {
+pub(super) fn rect_of(points: &[Point]) -> Rect {
     let mut r = Rect::from_corners(points[0], points[0]);
     points.iter().for_each(|p| r.extend(*p));
     r
 }
 
-fn seg_rect(a: Point, b: Point) -> Rect {
+pub(super) fn seg_rect(a: Point, b: Point) -> Rect {
     Rect::from_corners(a, b)
 }
 
 /// The printed pin numbers outside a unit's box, with their rectangles (text anchored at its centre).
-fn number_rects(sheet: &Sheet, reference: &str) -> Vec<(String, Rect)> {
+pub(super) fn number_rects(sheet: &Sheet, reference: &str) -> Vec<(String, Rect)> {
     let inst = unit_of(sheet, reference);
     let defs = sheet_symbol_defs(sheet);
     let index = DefIndex::new(&defs);
@@ -252,7 +252,7 @@ fn number_rects(sheet: &Sheet, reference: &str) -> Vec<(String, Rect)> {
 }
 
 /// The figure and the printed value of a mark.
-fn mark_rect(sheet: &Sheet, mark: &SymbolInstance) -> Rect {
+pub(super) fn mark_rect(sheet: &Sheet, mark: &SymbolInstance) -> Rect {
     let defs = sheet_symbol_defs(sheet);
     let index = DefIndex::new(&defs);
     let def = index.get(mark).expect("a mark has a definition");
@@ -264,13 +264,13 @@ fn mark_rect(sheet: &Sheet, mark: &SymbolInstance) -> Rect {
     r
 }
 
-fn flag_of(sheet: &Sheet, l: &NetLabel, dest: Option<&str>) -> Option<Rect> {
+pub(super) fn flag_of(sheet: &Sheet, l: &NetLabel, dest: Option<&str>) -> Option<Rect> {
     let font = crate::svg::LABEL_FONT * sheet.annotation_scale();
     let tag = crate::net_tag::net_tag_with(l, font, sheet.xref_style, dest.or_else(|| crate::net_tag::tag_dest(l)))?;
     Some(rect_of(&tag.points))
 }
 
-fn bounds_of(sheet: &Sheet, reference: &str) -> Rect {
+pub(super) fn bounds_of(sheet: &Sheet, reference: &str) -> Rect {
     let s = unit_of(sheet, reference);
     let defs = sheet_symbol_defs(sheet);
     let index = DefIndex::new(&defs);
@@ -620,25 +620,13 @@ fn a_destination_too_long_for_the_sheet_is_refused() {
 
 // ---- change 5: columns are packed
 
-fn channel_after(m: &DraftModel, k: usize, columns: &[usize]) -> f64 {
-    let pos = |c: usize| columns.iter().position(|&x| x == c).unwrap();
-    let mut span: BTreeMap<usize, (usize, usize)> = BTreeMap::new();
-    for u in &m.units {
-        for p in &u.pins {
-            if matches!(m.nets[p.net].class, NetClass::Internal | NetClass::Leaving) {
-                let c = pos(u.column);
-                let e = span.entry(p.net).or_insert((c, c));
-                e.0 = e.0.min(c);
-                e.1 = e.1.max(c);
-            }
-        }
-    }
-    let n = span.values().filter(|(lo, hi)| *lo <= k && *hi > k).count();
-    grid_up(f64::max(20.0, 10.0 + 2.5 * n as f64))
+/// The channel after column k: max(20 mm, 10 mm + 2.5 mm per track the layout needs), on the grid.
+fn channel_after(l: &DraftLayout, k: usize) -> f64 {
+    grid_up(f64::max(20.0, 10.0 + 2.5 * l.channels[k].tracks as f64))
 }
 
-/// Column k+1 starts one channel after the right extent of column k, with channel = max(20 mm, 10 mm + 2.5 mm per net that crosses it), and the first column starts at the left edge of the drawing area.
-/// 列k+1は、列kの右の張り出しから通り道1つぶん (20mmと、10mm+横切るネット1本につき2.5mmの大きい方) あけて始まり、最初の列は描画範囲の左端から始まる。
+/// Column k+1 starts one channel after the right extent of column k, with channel = max(20 mm, 10 mm + 2.5 mm per track), and the first column starts at the left edge of the drawing area.
+/// 列k+1は、列kの右の張り出しから通り道1つぶん (20mmと、10mm+トラック1本につき2.5mmの大きい方) あけて始まり、最初の列は描画範囲の左端から始まる。
 #[test]
 fn columns_are_packed_with_the_channel_rule() {
     let req = request(&[&["UA"], &["UB"], &["UC"]]);
@@ -646,10 +634,10 @@ fn columns_are_packed_with_the_channel_rule() {
     let l = lay_out(&m, &open(), &req).expect("fits");
     let x0 = grid_up(l.frame.0 + AREA_MARGIN_MM);
     assert!((l.columns[0].left - x0).abs() < 1e-6, "{:?} {x0}", l.columns[0]);
-    let first = channel_after(&m, 0, &[0, 1, 2]);
-    assert!(first > 20.0, "five nets cross the first channel: {first}");
+    let first = channel_after(&l, 0);
+    assert!(l.channels[0].tracks >= 1, "the first channel carries nets");
     assert!((l.columns[1].left - l.columns[0].right - first).abs() < 1e-6, "{:?}", l.columns);
-    let second = channel_after(&m, 1, &[0, 1, 2]);
+    let second = channel_after(&l, 1);
     assert!((l.columns[2].left - l.columns[1].right - second).abs() < 1e-6, "{:?}", l.columns);
 }
 
@@ -702,7 +690,7 @@ fn numbered_pins(n: usize) -> String {
 }
 
 /// Builds a source from units (reference, number of pins) and nets (name, pins); every pin gets a short stub with a label of its net.
-fn source_of(name: &str, units: &[(&str, usize)], nets: &[(&str, &[(&str, &str)])]) -> Project {
+pub(super) fn source_of(name: &str, units: &[(&str, usize)], nets: &[(&str, &[(&str, &str)])]) -> Project {
     let mut project = Project::new(name);
     let insts: Vec<SymbolInstance> = units
         .iter()
@@ -730,7 +718,7 @@ fn source_of(name: &str, units: &[(&str, usize)], nets: &[(&str, &[(&str, &str)]
 }
 
 /// Source: four units SA, SB, SC, SD meant to be stacked in one column, wired to each other (K1 to K5, K7 also to SY), four nets that leave the sheet (L1 to L4, the other end on SX), and K6 from SA to SY.
-fn stacked_source() -> Project {
+pub(super) fn stacked_source() -> Project {
     source_of(
         "draft-stacked",
         &[("SA", 5), ("SB", 4), ("SC", 5), ("SD", 5), ("SX", 4), ("SY", 2)],
@@ -751,7 +739,7 @@ fn stacked_source() -> Project {
 }
 
 /// An open project whose two sheets already carry L1 and L2, so those tags show two sheet names.
-fn stacked_open() -> Project {
+pub(super) fn stacked_open() -> Project {
     open_with_sheets(&["Pump room west", "Pump room east"], "L1").tap(|p| {
         for s in &mut p.sheets {
             let l = NetLabel { id: Uuid::new_v4(), at: Point::new(50.0, 60.0), name: "L2".into(), rotation: 0, attrs: Default::default() };
@@ -768,9 +756,9 @@ trait Tap: Sized {
 }
 impl Tap for Project {}
 
-const STACK: [&str; 4] = ["SA", "SB", "SC", "SD"];
+pub(super) const STACK: [&str; 4] = ["SA", "SB", "SC", "SD"];
 
-fn stacked_request(columns: &[&[&str]], pitch: f64) -> DraftRequest {
+pub(super) fn stacked_request(columns: &[&[&str]], pitch: f64) -> DraftRequest {
     let mut r = request(columns);
     r.power_nets.clear();
     r.ground_nets = Some(Vec::new());
@@ -779,18 +767,18 @@ fn stacked_request(columns: &[&[&str]], pitch: f64) -> DraftRequest {
 }
 
 /// The three ways the stacked fixture is drafted: the stack alone, the stack before SY (not the last column), the stack after SY (the last column).
-fn stacked_columns() -> Vec<Vec<&'static [&'static str]>> {
+pub(super) fn stacked_columns() -> Vec<Vec<&'static [&'static str]>> {
     vec![vec![&STACK[..]], vec![&STACK[..], &["SY"][..]], vec![&["SY"][..], &STACK[..]]]
 }
 
 /// The side of a drafted pin: left when its stub runs to the left of the pin.
-fn side_of(sheet: &Sheet, reference: &str, key: &str) -> &'static str {
+pub(super) fn side_of(sheet: &Sheet, reference: &str, key: &str) -> &'static str {
     let (p, e) = (pin_pt(sheet, reference, key), stub_end(sheet, reference, key));
     if e.x < p.x { "left" } else { "right" }
 }
 
 /// Device pin groups of a sheet (pins of at least two), only the references in `refs`.
-fn device_groups(sheet: &Sheet, refs: &[&str]) -> BTreeSet<BTreeSet<(String, String)>> {
+pub(super) fn device_groups(sheet: &Sheet, refs: &[&str]) -> BTreeSet<BTreeSet<(String, String)>> {
     let defs = sheet_symbol_defs(sheet);
     extract_netlist(sheet, &defs)
         .into_iter()
@@ -800,14 +788,14 @@ fn device_groups(sheet: &Sheet, refs: &[&str]) -> BTreeSet<BTreeSet<(String, Str
 }
 
 /// The open project with the drafted sheet added, as the export sees it.
-fn with_sheet(open: &Project, sheet: &Sheet) -> Project {
+pub(super) fn with_sheet(open: &Project, sheet: &Sheet) -> Project {
     let mut p = open.clone();
     p.sheets.push(sheet.clone());
     p
 }
 
 /// Every wire segment that touches a tag flag. The flag is the one the export draws: `net_tag_with` with the destination `sheet_xrefs` prints. The only wire allowed to touch a flag is one that ends at the tag's point and lies at or below the flag's lower edge (the tag's own stub, branch or bar: a wire ending at the tag's point is on the tag's net, or the pin-group test reports a short).
-fn wires_touching_flags(project: &Project, sheet: &Sheet) -> Vec<String> {
+pub(super) fn wires_touching_flags(project: &Project, sheet: &Sheet) -> Vec<String> {
     let xrefs = crate::xref::sheet_xrefs(project, sheet.id);
     let font = crate::svg::LABEL_FONT * sheet.annotation_scale();
     let mut bad = Vec::new();
@@ -856,15 +844,17 @@ fn same_column_peers_do_not_vote_in_a_mixed_case() {
     assert_eq!(side_of(&p.sheet, "SB", "4"), "left", "in the last column same-column peers count as left");
 }
 
-/// The channel to the right of a column also counts the nets that join units of that column (they run in that channel), so it is 10 mm + 2.5 mm per net there.
-/// 列の右の通り道は、その列の機器どうしをつなぐネット (その通り道を通る) も数えるので、10mm + そこを通るネット1本につき2.5mm の幅になる。
+/// The channel to the right of a stacked column holds the tracks of the nets that join its units, so its width follows the tracks needed (nets far apart share a track), not the number of nets.
+/// 積んだ列の右の通り道には、その列の機器どうしをつなぐネットのトラックが入るので、幅は必要なトラックの数に従う (離れたネットは1つのトラックを分け合う)。ネットの数ではない。
 #[test]
 fn the_channel_counts_the_nets_inside_a_column() {
     let req = stacked_request(&[&STACK, &["SY"]], 5.0);
     let m = model_of(&stacked_source(), &stacked_open(), &req);
     let l = lay_out(&m, &stacked_open(), &req).expect("fits");
-    // crossing: K6, K7; inside the stack on the right: K1, K2, K3, K4, K5 (K7 counted once)
-    let want = grid_up(10.0 + 2.5 * 7.0);
+    // K1..K5 join the units of the stack, K6 and K7 reach SY: seven nets
+    let tracks = l.channels[0].tracks;
+    assert!((1..7).contains(&tracks), "seven nets share tracks: {tracks}");
+    let want = grid_up(f64::max(20.0, 10.0 + 2.5 * tracks as f64));
     assert!((l.columns[1].left - l.columns[0].right - want).abs() < 1e-6, "{:?} want {want}", l.columns);
 }
 

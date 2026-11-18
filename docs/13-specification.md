@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3960 specification clauses** across 6 areas.
+**3984 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -531,6 +531,33 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The router stays out of the title block rectangle that the layout hands it: a title block put over the middle of a wire that ran freely makes the wire go round it. <sub>`the_router_keeps_out_of_the_title_block_the_layout_reports`</sub>
 - A drafted sheet draws exactly like the golden file (entity ids replaced by their order of appearance). Set MADAKE_UPDATE_DRAFT_GOLDEN=1 to rewrite the file. <sub>`a_drafted_sheet_renders_like_the_golden_file`</sub>
 
+### draft_channel_tests
+
+- A single net takes the leftmost position, the first track. <sub>`a_single_net_takes_the_first_track`</sub>
+- Two nets whose trunk spans, each widened by 5 mm, do not overlap share one track. <sub>`nets_with_distant_spans_share_one_track`</sub>
+- Spans that are exactly 10 mm apart (the widened spans only touch) may share a track; spans closer than that may not. <sub>`spans_closer_than_ten_millimetres_do_not_share_a_track`</sub>
+- Of all positions the one with the fewest crossings wins: the second net goes left of the first, where nothing crosses, not right of it, where two wires would. <sub>`the_position_with_the_fewest_crossings_wins`</sub>
+- Nested spans need no crossing: the net with the widest span takes the outer track, and every drop reaches its trunk without crossing another. <sub>`nested_spans_are_assigned_without_a_crossing`</sub>
+- Two terminals at the same height on the two sides are one straight wire and need no track. <sub>`two_terminals_at_one_height_need_no_track`</sub>
+- The result does not depend on the order the nets are given in, and planning the same nets twice gives the same result. <sub>`the_assignment_does_not_depend_on_the_input_order`</sub>
+- A net that would have to touch an earlier net whatever its position is left out, so the grid router takes it. <sub>`a_net_that_would_short_at_every_position_is_left_unplaced`</sub>
+- A drop that would run through the end of another net's stub is a short, so the net is not valid; without that stub it is. <sub>`a_drop_through_a_foreign_stub_end_is_refused`</sub>
+- A drop that runs through a fixed junction dot, or crosses a tag's branch, is refused; crossing the middle of a foreign wire at a right angle is not. <sub>`a_junction_or_a_tag_branch_on_the_way_is_refused_but_a_plain_crossing_is_not`</sub>
+- A net whose wire would touch another accepted net's wire at a vertex or along a line is refused, while a right-angle crossing is fine. <sub>`a_wire_touching_an_accepted_net_is_refused`</sub>
+- The geometry of a net with three drops is one trunk, one wire per drop, and a junction at every trunk point where three or more ends meet. <sub>`a_trunk_with_three_drops_has_a_junction_at_the_middle_drop_only`</sub>
+- Two stacked units with three nets between them get three vertical trunks on three different tracks and no jog: every wire of the sheet is a straight line of two points. <sub>`three_nets_between_stacked_units_get_three_trunks_and_no_jog`</sub>
+- The tracks are 2.5 mm apart, on the 2.5 mm grid, and at least 5 mm from the column extents on both sides. <sub>`tracks_are_on_the_grid_and_keep_their_distance_from_the_columns`</sub>
+- Every vertex of a channel wire is on the 2.5 mm grid. <sub>`every_vertex_of_a_channel_wire_is_on_the_grid`</sub>
+- A net of five pins on five units in two adjacent columns is drawn as one trunk with five drops and a junction at each drop where three ends meet; nothing else is drawn in the channel. <sub>`a_net_over_five_units_in_two_columns_is_one_trunk_with_five_drops`</sub>
+- Five pins of one net on three units (two units with two pins each, which form bars) are drawn with one trunk and three drops. <sub>`bars_count_as_one_terminal_each`</sub>
+- Two terminals at the same height on the two sides are one straight horizontal wire from stub end to stub end, with no trunk and no junction. <sub>`terminals_at_one_height_are_one_straight_wire`</sub>
+- A net with a terminal outside the channel (it reaches two columns over) is not channel-routable: the grid router draws it and the connections stay right. <sub>`a_net_reaching_two_columns_over_goes_to_the_grid_router`</sub>
+- A leaving net with two groups hangs its tag on a branch, so it is not channel-routable and the grid router draws it; a leaving net with only one group on the sheet has no wire at all. <sub>`a_net_with_a_tag_branch_goes_to_the_grid_router`</sub>
+- The channel is 10 mm plus 2.5 mm per track and at least 20 mm wide, so the tracks always fit. <sub>`the_channel_width_follows_the_track_count`</sub>
+- Planning the same request twice gives the same wires once the random ids are left out. <sub>`planning_twice_gives_the_same_channel_wires`</sub>
+- A net whose channel wire is blocked (here by a keep-out area over its trunk) is handed to the grid router, which still joins it, and the connections stay the same. <sub>`a_blocked_channel_net_is_taken_by_the_grid_router`</sub>
+- On the core, bars and stacked fixtures, at both pitches, the drafted sheet carries the connections of the source, and no wire touches a tag flag, a mark, a text box or a box. <sub>`drafted_fixtures_keep_the_connections_and_wires_off_everything`</sub>
+
 ### draft_check
 
 - When the caller names every sheet it will draft, the left tag of the first column keeps room for the names the later sheets add, and no flag leaves the frame. <sub>`planned_sheets_keep_every_tag_inside_the_frame`</sub>
@@ -572,12 +599,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Every tag flag, with room for its destination text, lies inside the drawing area on A3 and on A4. <sub>`every_tag_flag_stays_inside_the_drawing_area`</sub>
 - A request whose tags (with the names of the other sheets that already carry the net) would cross the right edge of the drawing area is refused with the column number and the excess in mm, on A4 and on A3. <sub>`tags_that_would_cross_the_edge_are_refused_with_column_and_excess`</sub>
 - A destination text that is too long for the sheet is refused the same way. <sub>`a_destination_too_long_for_the_sheet_is_refused`</sub>
-- Column k+1 starts one channel after the right extent of column k, with channel = max(20 mm, 10 mm + 2.5 mm per net that crosses it), and the first column starts at the left edge of the drawing area. <sub>`columns_are_packed_with_the_channel_rule`</sub>
+- Column k+1 starts one channel after the right extent of column k, with channel = max(20 mm, 10 mm + 2.5 mm per track), and the first column starts at the left edge of the drawing area. <sub>`columns_are_packed_with_the_channel_rule`</sub>
 - With few nets the channel is 20 mm, and a single column sits at the left edge, not in the middle. <sub>`a_single_column_sits_at_the_left_edge`</sub>
 - The marks of a unit do not touch the unit's own caption or the caption of the next unit below, and the gap stays at least four pitches. <sub>`marks_keep_clear_of_the_captions_and_the_gap_stays_four_pitches`</sub>
 - A pin whose peers on the sheet are all in its own column goes on the right side, except in the last column, where it goes on the left. <sub>`a_pin_with_peers_only_in_its_own_column_goes_right_except_in_the_last_column`</sub>
 - In a mixed case the peers in the own column do not vote: one peer to the left and two in the own column put the pin on the left, also in the last column. <sub>`same_column_peers_do_not_vote_in_a_mixed_case`</sub>
-- The channel to the right of a column also counts the nets that join units of that column (they run in that channel), so it is 10 mm + 2.5 mm per net there. <sub>`the_channel_counts_the_nets_inside_a_column`</sub>
+- The channel to the right of a stacked column holds the tracks of the nets that join its units, so its width follows the tracks needed (nets far apart share a track), not the number of nets. <sub>`the_channel_counts_the_nets_inside_a_column`</sub>
 - Drafting the stacked fixture, the core fixture and the bars fixture keeps the connections: the device pin groups of the sheet are those of the source, at both pitches, also when the router gives up. <sub>`the_pin_groups_of_drafted_sheets_equal_the_source`</sub>
 - No wire crosses or touches a tag flag, drawn with the destination the export prints, on the stacked fixture (units stacked in one column wired to each other, tags with two sheet names) and on the core fixture, at both pitches and when the router gives up on nets (fallback tags are obstacles too). <sub>`no_wire_crosses_or_touches_a_tag_flag`</sub>
 - A fallback tag hangs at the upper end of its group's bar, so the bar leaves the flag at the tag's point only. <sub>`a_fallback_tag_hangs_at_the_upper_end_of_its_bar`</sub>
