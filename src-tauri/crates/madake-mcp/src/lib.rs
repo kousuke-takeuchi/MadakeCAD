@@ -348,6 +348,78 @@ impl SharedDoc {
         Err("並べ直しの計算中に図面が何度も変わったため、並べ直しをやめました。もう一度実行してください".to_string())
     }
 
+    /// 元の図のファイルを読む。ファイルは読むだけで書き換えない。読めないときは場所を入れた文で断る。
+    fn load_draft_source(source_path: &str) -> Result<madake_core::model::Project, String> {
+        madake_core::io::load_project(std::path::Path::new(source_path))
+            .map_err(|e| format!("cannot read the source file {source_path}: {e}"))
+    }
+
+    /// 機能シートの下書き。元の図 (`source_path`) を読み、開いているプロジェクトの写しと版番号を取ってロックを放し、
+    /// ロックの外で計画 ([`madake_core::draft::plan_function_sheet`]) を作る。適用はもう一度ロックを取り、版番号が
+    /// 変わっていなければ組み立て済みのシートを **1回の編集** (`RestoreSheet` 1つ。undo一発でシートごと消える) として
+    /// 末尾へ加える。変わっていれば計画を作り直し、3回続けて変わったらエラー。元のファイルは書き換えない。
+    /// 返すJSONは計画 ([`madake_core::draft::DraftPlan`]) の項目 + `sheet_id` + `metrics` (新しいシートの
+    /// [`madake_core::tidy::tidy_metrics`])。
+    pub fn draft_function_sheet(
+        &self,
+        source_path: &str,
+        request: &madake_core::draft::DraftRequest,
+        origin: EditOrigin,
+    ) -> Result<serde_json::Value, String> {
+        self.draft_function_sheet_with(source_path, request, origin, || {})
+    }
+
+    /// [`Self::draft_function_sheet`] の本体。`between` は計画を作った後、適用のロックを取る前に呼ばれる
+    /// (試験で、その間に図面が変わった場合を作るため)。
+    #[doc(hidden)]
+    pub fn draft_function_sheet_with(
+        &self,
+        source_path: &str,
+        request: &madake_core::draft::DraftRequest,
+        origin: EditOrigin,
+        mut between: impl FnMut(),
+    ) -> Result<serde_json::Value, String> {
+        let source = Self::load_draft_source(source_path)?;
+        for _ in 0..3 {
+            let (revision, open) = {
+                let engine = self.engine.lock().unwrap();
+                (engine.revision(), engine.project().clone())
+            };
+            let plan = madake_core::draft::plan_function_sheet(&source, &open, request)?;
+            let defs = sheet_symbol_defs(&plan.sheet);
+            let metrics = madake_core::tidy::tidy_metrics(&plan.sheet, &defs);
+            let mut reply = serde_json::to_value(&plan).map_err(|e| e.to_string())?;
+            if let Some(obj) = reply.as_object_mut() {
+                obj.insert("sheet_id".into(), serde_json::json!(plan.sheet.id));
+                obj.insert("metrics".into(), serde_json::json!(metrics));
+            }
+            between();
+            let patch = {
+                let mut engine = self.engine.lock().unwrap();
+                if engine.revision() != revision {
+                    continue;
+                }
+                let index = engine.project().sheets.len();
+                let command = Command::RestoreSheet { index, sheet: Box::new(plan.sheet) };
+                engine.execute_batch(vec![command], origin).map_err(|e| e.to_string())?
+            };
+            let _ = self.patches.send(patch);
+            return Ok(reply);
+        }
+        Err("下書きの計算中に図面が何度も変わったため、下書きをやめました。もう一度実行してください".to_string())
+    }
+
+    /// 下書きの検算。元の図 (`source_path`) と開いているプロジェクトのつながりを比べる。何も変えない。
+    pub fn check_function_sheets(
+        &self,
+        source_path: &str,
+        ignore_references: &[String],
+    ) -> Result<madake_core::draft_check::DraftCheck, String> {
+        let source = Self::load_draft_source(source_path)?;
+        let open = self.engine.lock().unwrap().project().clone();
+        Ok(madake_core::draft_check::check_function_sheets(&source, &open, ignore_references))
+    }
+
     /// 整えバリアントの開始: 元シートを`count`枚複製して入れる (1回の編集)。
     /// 戻り値は適用したpatchと、案ごとの情報 (複製シートid・ラベル・id対応表)。
     ///
@@ -909,6 +981,40 @@ pub struct RerouteWiresParams {
     pub nets: Vec<String>,
     /// 経路探索の設定 (grid_mm・bend_cost・cross_cost・near_cost・clearance_mm など。省略可)。
     pub options: Option<madake_core::route::RouteOptions>,
+}
+
+#[derive(Debug, schemars::JsonSchema)]
+pub struct DraftFunctionSheetParams {
+    /// 元の図 (全ての配線を持つ `.mdkproj`) の絶対パス。読むだけで書き換えない。
+    pub source_path: String,
+    /// 下書きの依頼 (name・columns・pins・power_nets・ground_nets・destinations・paper・pitch_mm)。
+    #[serde(flatten)]
+    pub request: madake_core::draft::DraftRequest,
+}
+
+/// `source_path` を取り出し、残りを下書きの依頼として読む。serde の `flatten` は
+/// `deny_unknown_fields` と一緒に使えないので手で分け、知らない項目は依頼の側で断る。
+impl<'de> serde::Deserialize<'de> for DraftFunctionSheetParams {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::Error;
+        let mut value = serde_json::Value::deserialize(deserializer)?;
+        let object = value.as_object_mut().ok_or_else(|| D::Error::custom("the draft request must be an object"))?;
+        let source_path = match object.remove("source_path") {
+            Some(serde_json::Value::String(path)) => path,
+            _ => return Err(D::Error::custom("source_path is required and must be a string")),
+        };
+        let request = serde_json::from_value(value).map_err(D::Error::custom)?;
+        Ok(Self { source_path, request })
+    }
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct CheckFunctionSheetsParams {
+    /// 元の図 (全ての配線を持つ `.mdkproj`) の絶対パス。読むだけで書き換えない。
+    pub source_path: String,
+    /// 比べるときに両側から外す参照記号 (描かない通過点など。省略可)。
+    #[serde(default)]
+    pub ignore_references: Vec<String>,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -1937,6 +2043,28 @@ impl MadakeMcp {
         let reply = self
             .doc
             .arrange_sheet(sheet_id, &options, self.doc.mcp_origin())
+            .map_err(|e| ErrorData::invalid_params(e, None))?;
+        json_ok(&reply)
+    }
+
+    #[tool(
+        description = "元の図 (全ての配線を持つ別の .mdkproj) から、開いているプロジェクトに機能シート (1機能=1枚のA3/A4図) を1枚作る。何を載せるかは呼び出し側が決め (columns=左から右の列、各列は上から下の機器の参照記号)、箱の中身・ピンの辺と順・配線・札(タグ)・電源と接地の印・間隔は MadakeCAD が決める。入力: source_path=元の図の絶対パス (必須。読むだけで書き換えない。古い形式は読み込み時にメモリ上で移行する)。name=新しいシート名 (必須。空白だけ・既存のシート名は不可)。columns=1〜8列 (必須。各列は参照記号の並び。参照記号は1回だけ)。pins=機器ごとにピンの鍵を限る {参照記号:[ピン…]} (1つの機器を何枚かに分けるとき。省略した機器は使用中の全ピン=元のネットが2ピン以上のもの)。power_nets=電源のネット名 (元の図のネット。配線せずピンごとに電源の印を付ける)。ground_nets=接地のネット名 (省略時はネットの印を持つ全てのネット)。destinations={ネット名:行き先の文字} (図の外へ続くネット。札の行き先になる)。paper=A3 (既定) か A4 (横)。pitch_mm=箱のピン間隔 2.5 か 5.0 (既定5.0)。ブロックの機器は、ピン名が箱の内側・ピン番号が外側の block_view=1 のブロック (1つの機器を何枚かのシートに分けて見せる「ビュー」) になる。ブロックでない機器 (抵抗・コイルなど) は同じシンボルを置き、1枚のシートにしか載せられない。ネットは3種類: 電源・接地 (配線せず印) / 内部 (全ピンがこのシートにあれば配線でつなぐ) / 出ていくもの (一部のピンが別のシートにあれば、載せたピンを配線し、先頭のピンに札を1つ付ける。札の名前は元のネットのラベル名、無ければ元のネットの最初のピンの「参照記号.ピン」)。札は xref_style=sheet_name のシートで、同じ名前を持つ他のシートの名前を出す。経路が見つからないネットは同名のネットラベル2つでつなぎ labelled に載せる。断るもの (エラーで何も変えない): 元のファイルが読めない・columns の参照記号が元の図に無い・同じ参照記号が2回・pins のピンがその機器に無い・power_nets / ground_nets / destinations のネットが元の図に無い・電源と接地の両方に同じネット・シート名が使用中・他のシートのビューが既に出しているピン・載せるピンが1つも無い・ケーブル/接点付きポートを通るネット・列が図枠に収まらない (列名と超過量mmを返すので機器を別のシートへ移す)・計画と適用の間に開いた図面が変わり続けた (3回まで計画し直す)。シート追加とエンティティ追加は1回の編集で、undo一発でシートごと消え、元のファイルは読むだけ。返り値は sheet_id・units・pins・wired (配線したネット名)・tagged ([{net,pins}])・marked ({power,ground})・labelled・skipped_pins ([{reference,pin,reason}])・metrics (新しいシートの get_tidy_metrics と同じ数値)"
+    )]
+    fn draft_function_sheet(&self, Parameters(p): Parameters<DraftFunctionSheetParams>) -> Result<String, ErrorData> {
+        let reply = self
+            .doc
+            .draft_function_sheet(&p.source_path, &p.request, self.doc.mcp_origin())
+            .map_err(|e| ErrorData::invalid_params(e, None))?;
+        json_ok(&reply)
+    }
+
+    #[tool(
+        description = "下書きした機能シート全部と元の図 (別の .mdkproj) が同じつながりを持つかを検算する。何も変えない。入力: source_path=元の図の絶対パス (必須。読むだけ)。ignore_references=両側から外す参照記号 (描かない通過点など。省略可)。両側とも、ネットの印・貫通のシンボルのピンと ignore_references の機器のピンを除き、ネットごとの (参照記号, ピン) の集まりを比べる。2ピン未満のネットは数えず、ネット名は比べない (集まり方を比べる)。返り値は ok (全部合っていれば true)・source_nets (数えた元のネット数)・matched (一致したネット数)・missing_pins (元の図にあってどのシートにも無いピン [{reference,pin,source_net}])・extra_pins (シートにあって元の図に無いピン)・split (元の1つのネットが開いたプロジェクトで1つにならない [{source_net,parts}]。シートごとに札の名前が違うとここに出る)・merged (元の別々のネットが開いたプロジェクトで1つになっている [{source_nets,pins}])"
+    )]
+    fn check_function_sheets(&self, Parameters(p): Parameters<CheckFunctionSheetsParams>) -> Result<String, ErrorData> {
+        let reply = self
+            .doc
+            .check_function_sheets(&p.source_path, &p.ignore_references)
             .map_err(|e| ErrorData::invalid_params(e, None))?;
         json_ok(&reply)
     }

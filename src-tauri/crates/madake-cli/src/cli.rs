@@ -87,6 +87,19 @@ pub enum Commands {
         #[arg(long, value_name = "MM")]
         channel: Option<f64>,
     },
+    /// 機能シートの下書き (元の図のファイルから、開いているプロジェクトへ1シート足す。1回の編集でundo可)
+    Draft {
+        /// 依頼のJSONファイル (`source_path` と name・columns など。相対の `source_path` はこのファイルの場所から探す)
+        file: PathBuf,
+    },
+    /// 下書きしたシート全部が元の図と同じつながりかを検算する (合っていなければ終了コード1)
+    DraftCheck {
+        /// 元の図 (.mdkproj)
+        source: PathBuf,
+        /// 比べるときに外す参照記号 (繰り返し指定可)
+        #[arg(long = "ignore", value_name = "REF")]
+        ignore: Vec<String>,
+    },
     /// 図面検証 (ERC+電気検証)
     Verify {
         /// シートID (省略時は全シート)
@@ -159,6 +172,16 @@ pub enum Commands {
 }
 
 /// JSONを整形して文字列化する。
+/// 相対パスを今いる場所からの絶対パスにする (中身は見ない。無いファイルはアプリが断る)。
+fn absolute(path: &std::path::Path) -> Result<PathBuf, CliError> {
+    if path.is_absolute() {
+        return Ok(path.to_path_buf());
+    }
+    std::env::current_dir()
+        .map(|d| d.join(path))
+        .map_err(|e| CliError::Io(format!("{}: {e}", path.display())))
+}
+
 fn pretty(v: &Value) -> String {
     serde_json::to_string_pretty(v).unwrap_or_else(|_| v.to_string())
 }
@@ -273,6 +296,38 @@ pub fn run(cli: &Cli, api: &dyn LinkApi) -> Result<String, CliError> {
                 return Ok(pretty(&result));
             }
             Ok(format::arrange(&result))
+        }
+        Commands::Draft { file } => {
+            let text = std::fs::read_to_string(file)
+                .map_err(|e| CliError::Io(format!("{}: {e}", file.display())))?;
+            let mut request: Value = serde_json::from_str(&text)
+                .map_err(|e| CliError::Json(format!("{}: {e}", file.display())))?;
+            let source = request["source_path"].as_str().ok_or_else(|| {
+                CliError::Json(format!("{}: source_path (元の図の場所) が必要です", file.display()))
+            })?;
+            // 相対パスは依頼のファイルの場所から探す (アプリは別の場所で動いているため、絶対パスにして送る)
+            let source = PathBuf::from(source);
+            let source = if source.is_absolute() {
+                source
+            } else {
+                file.parent().map(|d| d.join(&source)).unwrap_or(source)
+            };
+            request["source_path"] = json!(absolute(&source)?.display().to_string());
+            let result = api.draft(request)?;
+            if cli.json {
+                return Ok(pretty(&result));
+            }
+            Ok(format::draft(&result))
+        }
+        Commands::DraftCheck { source, ignore } => {
+            let path = absolute(source)?.display().to_string();
+            let result = api.draft_check(&path, ignore)?;
+            let out = if cli.json { pretty(&result) } else { format::draft_check(&result) };
+            if result["ok"].as_bool() == Some(true) {
+                Ok(out)
+            } else {
+                Err(CliError::CheckFailed(out))
+            }
         }
         Commands::Verify { sheet } => {
             let diags = api.verify(sheet.as_deref())?;
@@ -526,6 +581,14 @@ mod tests {
         }
         fn arrange(&self, sheet_id: Option<&str>, channel_mm: Option<f64>) -> Result<Value, CliError> {
             self.record(format!("arrange({sheet_id:?}, {channel_mm:?})"));
+            Ok(self.result.clone())
+        }
+        fn draft(&self, request: Value) -> Result<Value, CliError> {
+            self.record(format!("draft({request})"));
+            Ok(self.result.clone())
+        }
+        fn draft_check(&self, source_path: &str, ignore_references: &[String]) -> Result<Value, CliError> {
+            self.record(format!("draft_check({source_path}, {ignore_references:?})"));
             Ok(self.result.clone())
         }
         fn netlist(&self, sheet_id: Option<&str>) -> Result<Value, CliError> {
@@ -1283,6 +1346,80 @@ mod tests {
             api.calls(),
             vec!["arrange(None, None)".to_string(), r#"arrange(Some("S"), Some(10.0))"#.to_string()]
         );
+    }
+
+    /// madake draft reads the request file, turns a relative source_path into an absolute one next to the file, and prints a summary or the raw reply.
+    /// madake draftは依頼のJSONを読み、相対の元の図の場所を依頼のファイルの隣からの絶対パスにして送り、要約か生の返り値を出す。
+    #[test]
+    fn draft_sends_the_request_with_an_absolute_source_path() {
+        let dir = std::env::temp_dir().join(format!("madake-cli-draft-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("request.json");
+        std::fs::write(&file, r#"{"source_path": "src/big.mdkproj", "name": "A", "columns": [["U1"]]}"#).unwrap();
+        let reply = json!({"sheet_id": "S1", "units": 1, "pins": 3, "wired": ["N1"], "tagged": [{"net": "J7.2", "pins": 1}],
+            "marked": {"power": 1, "ground": 2}, "labelled": [], "skipped_pins": [{"reference": "U1", "pin": "9", "reason": "net has one pin"}],
+            "metrics": {"crossings": 0, "label_overlaps": 0, "symbol_overlaps": 0, "off_grid": 0}});
+        let api = FakeApi { result: reply.clone(), ..Default::default() };
+        let path = file.to_str().unwrap();
+        let out = run(&parse(&["madake", "draft", path]), &api).unwrap();
+        assert!(out.contains("S1") && out.contains("J7.2") && out.contains("U1.9"), "{out}");
+        let raw = run(&parse(&["madake", "draft", path, "--json"]), &api).unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&raw).unwrap(), reply);
+        let sent = api.calls()[0].clone();
+        let expected = dir.join("src/big.mdkproj").display().to_string();
+        assert!(sent.contains(&format!("\"source_path\":\"{expected}\"")), "{sent}");
+        assert!(sent.contains("\"columns\":[[\"U1\"]]"), "{sent}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// madake draft refuses a request file that is missing, is not JSON, or has no source_path, without calling the app.
+    /// madake draftは、依頼のファイルが無い・JSONでない・元の図の場所が無いときは、アプリを呼ばずに断る。
+    #[test]
+    fn draft_refuses_a_bad_request_file() {
+        let api = FakeApi::default();
+        assert!(run(&parse(&["madake", "draft", "/nonexistent/request.json"]), &api).is_err());
+        let dir = std::env::temp_dir().join(format!("madake-cli-draft-bad-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("r.json");
+        std::fs::write(&file, "not json").unwrap();
+        assert!(run(&parse(&["madake", "draft", file.to_str().unwrap()]), &api).is_err());
+        std::fs::write(&file, r#"{"name": "A"}"#).unwrap();
+        assert!(run(&parse(&["madake", "draft", file.to_str().unwrap()]), &api).is_err());
+        assert!(api.calls().is_empty());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// madake draft-check sends an absolute path and the repeated --ignore references, and succeeds when the sheets match.
+    /// madake draft-checkは絶対パスと繰り返した--ignoreの参照記号を送り、合っていれば成功で終わる。
+    #[test]
+    fn draft_check_sends_the_path_and_the_ignored_references() {
+        let api = FakeApi { result: json!({"ok": true, "source_nets": 6, "matched": 6}), ..Default::default() };
+        let out = run(&parse(&["madake", "draft-check", "/tmp/src.mdkproj", "--ignore", "J7", "--ignore", "TB1"]), &api).unwrap();
+        assert!(out.contains("合っています") && out.contains('6'), "{out}");
+        assert_eq!(api.calls(), vec![r#"draft_check(/tmp/src.mdkproj, ["J7", "TB1"])"#.to_string()]);
+        run(&parse(&["madake", "draft-check", "rel.mdkproj"]), &api).unwrap();
+        let sent = api.calls()[1].clone();
+        assert!(sent.starts_with("draft_check(/") && sent.contains("rel.mdkproj"), "{sent}");
+    }
+
+    /// madake draft-check fails (non-zero exit) when the sheets do not match, and the error carries the report with the problem pins.
+    /// madake draft-checkは、合っていないと失敗 (終了コード0以外) になり、エラーに問題のピンを書いた結果を持つ。
+    #[test]
+    fn draft_check_fails_when_the_sheets_do_not_match() {
+        let reply = json!({"ok": false, "source_nets": 2, "matched": 1,
+            "missing_pins": [{"reference": "U3", "pin": "4", "source_net": "P24X"}], "extra_pins": [],
+            "split": [{"source_net": "SIG_A", "parts": [["U1:3"], ["U2:3", "U4:1"]]}], "merged": []});
+        let api = FakeApi { result: reply.clone(), ..Default::default() };
+        match run(&parse(&["madake", "draft-check", "/tmp/src.mdkproj"]), &api) {
+            Err(CliError::CheckFailed(report)) => {
+                assert!(report.contains("合っていません") && report.contains("U3.4") && report.contains("SIG_A"), "{report}");
+            }
+            other => panic!("検算の失敗になるはず: {other:?}"),
+        }
+        match run(&parse(&["madake", "draft-check", "/tmp/src.mdkproj", "--json"]), &api) {
+            Err(CliError::CheckFailed(report)) => assert_eq!(serde_json::from_str::<Value>(&report).unwrap(), reply),
+            other => panic!("検算の失敗になるはず: {other:?}"),
+        }
     }
 
     /// madake undo tells the user when there is nothing to undo.

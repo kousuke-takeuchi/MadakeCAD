@@ -779,6 +779,33 @@ async fn post_route_arrange(
     Ok(Json(reply))
 }
 
+/// 機能シートの下書き (MCPツール `draft_function_sheet` と同じ本体・同じ返り値)。1回の編集でundo一発。
+/// 本文は `source_path` + 下書きの依頼の項目。読めない本文・知らない項目・断られた依頼は400で何も変えない。
+async fn post_draft_function_sheet(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let params: crate::DraftFunctionSheetParams =
+        serde_json::from_value(body).map_err(|e| bad_request(format!("invalid draft request: {e}")))?;
+    let reply = doc
+        .draft_function_sheet(&params.source_path, &params.request, madake_core::EditOrigin::Mcp)
+        .map_err(bad_request)?;
+    Ok(Json(reply))
+}
+
+/// 下書きの検算 (MCPツール `check_function_sheets` と同じ本体・同じ返り値)。何も変えない。
+async fn post_draft_check(
+    State(doc): State<SharedDoc>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let params: crate::CheckFunctionSheetsParams =
+        serde_json::from_value(body).map_err(|e| bad_request(format!("invalid check request: {e}")))?;
+    let check = doc
+        .check_function_sheets(&params.source_path, &params.ignore_references)
+        .map_err(bad_request)?;
+    Ok(Json(serde_json::json!(check)))
+}
+
 async fn get_verify(
     State(doc): State<SharedDoc>,
     Query(q): Query<NetlistQuery>,
@@ -1436,6 +1463,8 @@ pub fn router(doc: SharedDoc, agent: Arc<AgentManager>, parts: SharedParts) -> R
         .route("/api/v1/simulate/op", post(post_simulate_op))
         .route("/api/v1/route/reroute", post(post_route_reroute))
         .route("/api/v1/route/arrange", post(post_route_arrange))
+        .route("/api/v1/draft/function-sheet", post(post_draft_function_sheet))
+        .route("/api/v1/draft/check", post(post_draft_check))
         .route("/api/v1/templates", get(get_templates))
         .route("/api/v1/templates/apply", post(post_apply_template))
         .route("/api/v1/frame-templates", get(get_frame_templates))

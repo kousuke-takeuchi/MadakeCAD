@@ -1525,6 +1525,16 @@ A mark needs no reference designator: the checks for missing and repeated design
 
 **What closed it.** One mark whose instance value is the net name: marks with the same value, labels of that name and fixed-net marks form one net, across sheets too. A blank value is warned. Like the fixed-net marks it is left out of the parts list and the designator checks, and it is not given a designator when placed.
 
+### G54 — A function sheet cannot be drawn from a complete wiring by rule · quality
+
+**Closed 2026-11-18** (`draft::plan_function_sheet`, `draft_check::check_function_sheets`, MCP tools `draft_function_sheet` / `check_function_sheets`, Link API `/api/v1/draft/*`, CLI `madake draft` / `draft-check`; no format change).
+
+**Current behaviour (verified).** A drawing divided into one-function sheets had to be drawn by script, which had to decide every box size, pin order, tag position and ground mark by hand, and nothing compared the finished sheets with the complete wiring.
+
+**What closed it.** A person or an AI chooses the units and their columns; the application draws the sheet: boxes with only the pins in use, pin sides and order by the position of their peers, wires, tags that name the other sheets, power and ground marks, all on the grid. One unit may be shown on several sheets (blocks with `block_view`). A second command checks that all sheets together carry the same connections as the source and reports missing pins, extra pins, split nets and merged nets. A draft is one edit and the source file is only read.
+
+**Remaining difference.** The choice of which units go on a sheet and the splitting of a sheet that is too full stay with the caller; layout of board schematics made of library symbols is placed, wired and checked but does not read like a hand-drawn schematic; cables and port contacts in the source are refused; a drafted sheet is not updated when the source changes (draft again after deleting the sheet).
+
 ## Summary by impact
 
 | Impact | Gaps |

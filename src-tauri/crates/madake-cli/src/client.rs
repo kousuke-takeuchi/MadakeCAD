@@ -232,6 +232,8 @@ pub enum CliError {
     Json(String),
     /// オプションの組み合わせが正しくない (clapでは表せない条件)。
     Usage(String),
+    /// 検算が「合っていない」と返した。中身は表示する本文で、`main` は標準出力へ出して失敗の終了コードにする。
+    CheckFailed(String),
 }
 
 impl fmt::Display for CliError {
@@ -249,6 +251,7 @@ impl fmt::Display for CliError {
             CliError::Io(msg) => write!(f, "ファイル入出力エラー: {msg}"),
             CliError::Json(msg) => write!(f, "JSONが不正です: {msg}"),
             CliError::Usage(msg) => write!(f, "オプションの指定が正しくありません: {msg}"),
+            CliError::CheckFailed(report) => write!(f, "{report}"),
         }
     }
 }
@@ -342,6 +345,10 @@ pub trait LinkApi {
     fn reroute(&self, sheet_id: Option<&str>, nets: &[String]) -> Result<Value, CliError>;
     /// `POST /api/v1/route/arrange` (`{"sheet_id": ..., "options": {"channel_mm": ...}}`。`options`は幅の指定があるときだけで、`max_gap_mm`は20と幅の大きい方)
     fn arrange(&self, sheet_id: Option<&str>, channel_mm: Option<f64>) -> Result<Value, CliError>;
+    /// `POST /api/v1/draft/function-sheet` (本文は `source_path` + 下書きの依頼の項目)
+    fn draft(&self, request: Value) -> Result<Value, CliError>;
+    /// `POST /api/v1/draft/check` (`{"source_path": ..., "ignore_references": [...]}`)
+    fn draft_check(&self, source_path: &str, ignore_references: &[String]) -> Result<Value, CliError>;
     /// `POST /api/v1/commands` (Command配列 → Patch配列)
     fn exec(&self, commands: Value) -> Result<Value, CliError>;
     /// `POST /api/v1/undo`
@@ -460,6 +467,13 @@ impl LinkApi for HttpClient {
     }
     fn arrange(&self, sheet_id: Option<&str>, channel_mm: Option<f64>) -> Result<Value, CliError> {
         self.post("/route/arrange", arrange_body(sheet_id, channel_mm))
+    }
+
+    fn draft(&self, request: Value) -> Result<Value, CliError> {
+        self.post("/draft/function-sheet", request)
+    }
+    fn draft_check(&self, source_path: &str, ignore_references: &[String]) -> Result<Value, CliError> {
+        self.post("/draft/check", json!({ "source_path": source_path, "ignore_references": ignore_references }))
     }
 
     fn parts(&self, query: Option<&str>, category: Option<&str>) -> Result<Value, CliError> {

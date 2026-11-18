@@ -19,6 +19,11 @@ fn main() -> ExitCode {
             println!("{out}");
             ExitCode::SUCCESS
         }
+        // 検算が合わなかったときは、結果を標準出力へ出して失敗で終わる (スクリプトが読める)
+        Err(madake_cli::CliError::CheckFailed(report)) => {
+            println!("{report}");
+            ExitCode::FAILURE
+        }
         Err(e) => {
             eprintln!("madake: {e}");
             ExitCode::FAILURE

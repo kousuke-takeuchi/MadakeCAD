@@ -8,7 +8,7 @@ UIでできることはすべてスクリプト化できる。3つの入口が�
 
 ### MCPサーバー(AIクライアント向け)
 `127.0.0.1:9310/mcp`(Streamable HTTP、`MADAKE_MCP_PORT`で変更可)。ツール:
-`open_project`・`save_project`(`.mdkproj`を開く・保存する。チャット履歴も一緒に扱う。開くと図面が置き換わり、エージェントの応答中は断る。アプリ内エージェントからは開けない)・`get_project`・`list_symbols`(同梱**と**ユーザーシンボル。同梱の補助記号は `connector_contact`・`power_rail`・`transistor_npn`・`transistor_pnp`・`photocoupler`・`opamp`・`tvs_diode`。`power_rail` は**値**がネット名になり、同じ値の印・同名のネットラベル・固定のネット名の印とシートを跨いでも1つのネットになる。値が空だと `erc.empty_net_name` の警告。`connector_contact` は配線の途中に置く素通しで、左右のピンは1つの節点、参照記号がコネクタ名・値が極の番号 (極の番号はピンの鍵でもある: 値が `5` の接点は、ネットリスト・`get_pins`・`connect_pins`・電線リストで `J7:5`、左のピンは `J7.5#1`・右は `J7.5#2`。値が空なら鍵は `1` のまま。同じコネクタの同じ極がプロジェクトのネットリストで別々のネットにあると(ラベルでシートを跨いでつながったネットは1つと数える)`erc.contact_pole_repeated` のエラーで、プロジェクトの検証が1件だけ出す。同じネットなら許す)。部品表は同じ参照記号を1つのコネクタと数え、SPICEでは0Ωの橋。半導体の記号はシミュレーションの模型を持たない。シンボルの定義は `net_from_value`・`through` も持て、ユーザーシンボルのファイルにも書ける)・`place_symbol`(置いた部品のピンを返す。属性`hide_reference: "true"`で参照記号を印字しない。記号自体は残る)・`draw_wire`・`get_pins`(配置済み部品のピン: 番号・名前・用紙座標・向き)・`connect_pins`(ピン名どうしを直角配線でつなぐ。例 `U1.SDA` から `J1.2`。`connections` で複数をundo一発の1編集で引く)・`place_mate`(プラグとソケットの組を1回で置く。`mates` で複数。任意の`pole`は両方の部品に入り、From-To電線リストが`参照記号:1`の代わりに`参照記号:極番号`と書く。`mates`で極番号なしに同じ参照記号を並べると並び順に1, 2, 3と振る)・`connect_cable`(多芯ケーブルを片側または両側を1本線で描いて引く。`cores`=芯の名前、`a`/`b`=端ごとに`pins`か`part`と`style: multi`(ピンから分岐点まで芯ごとに配線)/`single`(1本線を部品に着ける)。`multi`の端は`pins`/`part`の代わりに`labels`(芯ごとのネットラベル名。`breakout_at`必須)も書け、芯ごとに区間と反対向きへ10mmの配線を引いてその名前のネットラベルで終える。分岐の配線は線径・線色を持たない。芯はピン順に対応する。`cables`で複数をundo一発の1編集で引く)・`execute_commands`(Command全スキーマ公開)・`get_netlist`・`run_verification`・`get_tidy_metrics`(4つの数値と、数えた問題を1件ずつ種類・エンティティ・文字・場所で並べた`details`。最大50件)・`arrange_sheet`(シートの部品を列と行にそろえて並べ直す。`channel_mm`(既定8mm)の通り道をあけ、`max_gap_mm`(既定20mm)より広い空きは詰め、並び順を保ち、端が動いたかたまりの配線を引き直す(端が動かないかたまりの配線は元のまま)。1つの部品だけにつながる接地・電源の印とラベル、ピンの上に直接置いたラベルや印は、その部品と一緒に動く。`sheet_id`・任意の`options`(`channel_mm`・`max_gap_mm`・`align_mm`・`route`。範囲外はエラーで断り何も変えない)。経路が見つからないかたまりは、まず元の配線の形のまま、動いた列・行に合わせて伸び縮みさせ(端はピンに合わせる。かたまりのピン・ラベル・枝分かれ・ジャンクションが全て線の上に残り、他の線・ピン・ラベルに触れず、他の部品の外形を横切らないときだけ)、`kept_shape`に返す。それができないときは、そのかたまりのラベル名・同じネットの別のかたまりのラベル名・ネット名シンボルの名前・`ARR_<n>`のいずれかを名前にしたネットラベルでつなぎ、`labelled`に返す(接地・電源の印は消さない)。ケーブル・盤面配置・寸法・ポートの接点・他のエンティティやFreeCADが指す配線・長さの出所がまちまちな配線・名前の違うラベル(ネット名シンボルを含む)を持つかたまり・図枠に収まらないか表題欄(改訂欄を含む)に掛かる結果は断り、ネットが理由ならネット名を挙げる。1回の編集=undo一発。返り値: `moved`・`columns`・`rows`・`routed`・`labelled`(`[{net, label}]`)・`kept_shape`(ネット名)・`before`/`after`(`get_tidy_metrics`と同じ数値)・`wire_length_mm`・`size_mm`(前後))・`reroute_wires`(シートの配線を、接続を変えずに自動で引き直す。シンボル・文字・他のネットを避けた直角の配線で、曲がりと交差を少なくする。`sheet_id`・`nets`(ネット名。省略で全ネット)・任意の`options`(`grid_mm`は0.5〜10mm、費用・すき間・余白は0以上の有限の数。それ以外はエラーで断り何も変えない)。引き直しは配線で物理的につながったかたまりごとに行う。ケーブルの芯が使うかたまり・線色/線径/品番/線番や長さの出所(`length_source`)がまちまちなかたまり・他のエンティティ(ケーブルの芯・注記の引き出し線・寸法)やFreeCADとの対応付けが指すかたまり・ピンの引き出し線が他のネットに触れてしまうかたまり・経路が見つからないかたまりは元のまま残し、`unchanged`に理由を付けて返す。配線の属性は引き継ぎ、元の`length_m`の合計は新しい配線のうち一番長い1本だけが持つ。名前の無いネットの自動の名前(N001など)は、新しい配線のidが変わるため引き直しの後に入れ替わることがある。1回の編集なのでundo一発で元の配線がid付きで戻る。返り値は`rerouted`・`unchanged`(`[{net, reason}]`)・整えの数値の`before`/`after`・配線長の`wire_length_mm`の前後)・`simulate_op`・`search_parts`・`upsert_part`・`delete_part`・`import_kicad`・`import_dxf`(AutoCAD Electrical / EPLANのDXF。`wire_layers`任意)・`list_terminal_blocks`・`get_terminal_chart`・`check_terminal_block`・`list_templates`・`apply_template`・`list_macros`・`save_macro`・`apply_macro`・`duplicate_symbol`・`save_user_symbol`・`delete_user_symbol`・PLC I/O系・`get_sheet_image`(シートをPNG画像で返す。SVG出力と同じ見た目。`px_per_mm`とmmの`region`で拡大)・`export_svg`・`export_pdf`・`export_dxf`(AutoCAD 2000形式DXF)・`export_kicad`(`.kicad_sch`)・`export_report`(帳票7種のいずれかをCSVまたは図枠付きPDFへ)・`export_pdf_book`(表紙+全シート+選択帳票を1つのPDFへ)・`export_bom`・`export_wire_list`・`undo`・`redo`。
+`open_project`・`save_project`(`.mdkproj`を開く・保存する。チャット履歴も一緒に扱う。開くと図面が置き換わり、エージェントの応答中は断る。アプリ内エージェントからは開けない)・`get_project`・`list_symbols`(同梱**と**ユーザーシンボル。同梱の補助記号は `connector_contact`・`power_rail`・`transistor_npn`・`transistor_pnp`・`photocoupler`・`opamp`・`tvs_diode`。`power_rail` は**値**がネット名になり、同じ値の印・同名のネットラベル・固定のネット名の印とシートを跨いでも1つのネットになる。値が空だと `erc.empty_net_name` の警告。`connector_contact` は配線の途中に置く素通しで、左右のピンは1つの節点、参照記号がコネクタ名・値が極の番号 (極の番号はピンの鍵でもある: 値が `5` の接点は、ネットリスト・`get_pins`・`connect_pins`・電線リストで `J7:5`、左のピンは `J7.5#1`・右は `J7.5#2`。値が空なら鍵は `1` のまま。同じコネクタの同じ極がプロジェクトのネットリストで別々のネットにあると(ラベルでシートを跨いでつながったネットは1つと数える)`erc.contact_pole_repeated` のエラーで、プロジェクトの検証が1件だけ出す。同じネットなら許す)。部品表は同じ参照記号を1つのコネクタと数え、SPICEでは0Ωの橋。半導体の記号はシミュレーションの模型を持たない。シンボルの定義は `net_from_value`・`through` も持て、ユーザーシンボルのファイルにも書ける)・`place_symbol`(置いた部品のピンを返す。属性`hide_reference: "true"`で参照記号を印字しない。記号自体は残る)・`draw_wire`・`get_pins`(配置済み部品のピン: 番号・名前・用紙座標・向き)・`connect_pins`(ピン名どうしを直角配線でつなぐ。例 `U1.SDA` から `J1.2`。`connections` で複数をundo一発の1編集で引く)・`place_mate`(プラグとソケットの組を1回で置く。`mates` で複数。任意の`pole`は両方の部品に入り、From-To電線リストが`参照記号:1`の代わりに`参照記号:極番号`と書く。`mates`で極番号なしに同じ参照記号を並べると並び順に1, 2, 3と振る)・`connect_cable`(多芯ケーブルを片側または両側を1本線で描いて引く。`cores`=芯の名前、`a`/`b`=端ごとに`pins`か`part`と`style: multi`(ピンから分岐点まで芯ごとに配線)/`single`(1本線を部品に着ける)。`multi`の端は`pins`/`part`の代わりに`labels`(芯ごとのネットラベル名。`breakout_at`必須)も書け、芯ごとに区間と反対向きへ10mmの配線を引いてその名前のネットラベルで終える。分岐の配線は線径・線色を持たない。芯はピン順に対応する。`cables`で複数をundo一発の1編集で引く)・`execute_commands`(Command全スキーマ公開)・`get_netlist`・`run_verification`・`get_tidy_metrics`(4つの数値と、数えた問題を1件ずつ種類・エンティティ・文字・場所で並べた`details`。最大50件)・`arrange_sheet`(シートの部品を列と行にそろえて並べ直す。`channel_mm`(既定8mm)の通り道をあけ、`max_gap_mm`(既定20mm)より広い空きは詰め、並び順を保ち、端が動いたかたまりの配線を引き直す(端が動かないかたまりの配線は元のまま)。1つの部品だけにつながる接地・電源の印とラベル、ピンの上に直接置いたラベルや印は、その部品と一緒に動く。`sheet_id`・任意の`options`(`channel_mm`・`max_gap_mm`・`align_mm`・`route`。範囲外はエラーで断り何も変えない)。経路が見つからないかたまりは、まず元の配線の形のまま、動いた列・行に合わせて伸び縮みさせ(端はピンに合わせる。かたまりのピン・ラベル・枝分かれ・ジャンクションが全て線の上に残り、他の線・ピン・ラベルに触れず、他の部品の外形を横切らないときだけ)、`kept_shape`に返す。それができないときは、そのかたまりのラベル名・同じネットの別のかたまりのラベル名・ネット名シンボルの名前・`ARR_<n>`のいずれかを名前にしたネットラベルでつなぎ、`labelled`に返す(接地・電源の印は消さない)。ケーブル・盤面配置・寸法・ポートの接点・他のエンティティやFreeCADが指す配線・長さの出所がまちまちな配線・名前の違うラベル(ネット名シンボルを含む)を持つかたまり・図枠に収まらないか表題欄(改訂欄を含む)に掛かる結果は断り、ネットが理由ならネット名を挙げる。1回の編集=undo一発。返り値: `moved`・`columns`・`rows`・`routed`・`labelled`(`[{net, label}]`)・`kept_shape`(ネット名)・`before`/`after`(`get_tidy_metrics`と同じ数値)・`wire_length_mm`・`size_mm`(前後))・`reroute_wires`(シートの配線を、接続を変えずに自動で引き直す。シンボル・文字・他のネットを避けた直角の配線で、曲がりと交差を少なくする。`sheet_id`・`nets`(ネット名。省略で全ネット)・任意の`options`(`grid_mm`は0.5〜10mm、費用・すき間・余白は0以上の有限の数。それ以外はエラーで断り何も変えない)。引き直しは配線で物理的につながったかたまりごとに行う。ケーブルの芯が使うかたまり・線色/線径/品番/線番や長さの出所(`length_source`)がまちまちなかたまり・他のエンティティ(ケーブルの芯・注記の引き出し線・寸法)やFreeCADとの対応付けが指すかたまり・ピンの引き出し線が他のネットに触れてしまうかたまり・経路が見つからないかたまりは元のまま残し、`unchanged`に理由を付けて返す。配線の属性は引き継ぎ、元の`length_m`の合計は新しい配線のうち一番長い1本だけが持つ。名前の無いネットの自動の名前(N001など)は、新しい配線のidが変わるため引き直しの後に入れ替わることがある。1回の編集なのでundo一発で元の配線がid付きで戻る。返り値は`rerouted`・`unchanged`(`[{net, reason}]`)・整えの数値の`before`/`after`・配線長の`wire_length_mm`の前後)・`draft_function_sheet`と`check_function_sheets`(元の図のファイルから機能シートを描く・下書きしたシートを元の図と照らす。下の「機能シートの下書き」を参照)・`simulate_op`・`search_parts`・`upsert_part`・`delete_part`・`import_kicad`・`import_dxf`(AutoCAD Electrical / EPLANのDXF。`wire_layers`任意)・`list_terminal_blocks`・`get_terminal_chart`・`check_terminal_block`・`list_templates`・`apply_template`・`list_macros`・`save_macro`・`apply_macro`・`duplicate_symbol`・`save_user_symbol`・`delete_user_symbol`・PLC I/O系・`get_sheet_image`(シートをPNG画像で返す。SVG出力と同じ見た目。`px_per_mm`とmmの`region`で拡大)・`export_svg`・`export_pdf`・`export_dxf`(AutoCAD 2000形式DXF)・`export_kicad`(`.kicad_sch`)・`export_report`(帳票7種のいずれかをCSVまたは図枠付きPDFへ)・`export_pdf_book`(表紙+全シート+選択帳票を1つのPDFへ)・`export_bom`・`export_wire_list`・`undo`・`redo`。
 専用ツールが無い編集は`execute_commands`から実行する: `set_revisions`(改訂欄)、`set_sheet_annotation_text`(シートの注記文字高。`height_mm`は1.0〜3.5mm、nullで既定2.0mm。配線注記・線番・ネットタグの大きさが一緒に変わる)、`renumber_wires`(`mode: append | renumber`・`sheet_id`任意・`start`)と`set_wire_numbers`(線番)、ハーネス境界は`add_entity`で`harness`エンティティを追加、端子台のサドルジャンパは`update_entity`で端子台シンボルの`attrs["jumpers"] = "1-2,3-4"`を書き換える。図枠テンプレートは`set_frame_template`、図面の書体は`set_text_font`(`{"text_font": {"id": "kst32b", "latin": "half"}}`で全ての文字を同梱のストロークフォントで描く。`latin: "full"`で英数字を全角の字に、`null`でシステムの書体へ戻す。知らないidは拒否)、盤レイアウトは`add_sheet`の`kind: "panel"`+`panel_outline`/`din_rail`/`duct`/`footprint`/`panel_legend`エンティティ、バルーン採番は`renumber_panel_items`、FreeCAD連携(3D対応付けと計測した電線長)は`set_mech_link`/`remove_mech_link`/`set_wire_lengths`。
 ポートのピン: `place_symbol` の `attrs.block_pins` でピンに `contacts`(`{"no":"U3","name":"USB-A メス","contacts":["VBUS","D-","D+","GND"]}`)を付けると、1本のピンが複数の導体を運ぶ(接点は1ピンに2〜32個、前後の空白は除き、ピンの中で重ならない)。`get_pins` は `contacts` を返し、`get_netlist` はそのネットを `<名前>.<接点>` に分け、ネットとポートのピンに `contact` を付ける。`connect_cable` は `pins: ["39.U3"]` と `style: single` で片側をポートのピン1本に着ける(芯は同じ名前の接点に、名前がどれも合わず数が同じなら並び順に対応する。名前の一部だけの一致と、ポートへの `style: multi` は断る)。
 貫通ピン: `block_pins` のブロックでは、同じピン番号を向かい合う辺に1回ずつ置ける(左と右、または上と下。同じ極の両側に配線がある形)。両側のピン名は前後の空白を除いて同じにし、どちらにも `contacts`・`connector` は付けられない。同じ辺に2回・隣り合う辺・3回以上は `duplicate block pin number` で断る。2つの接続点は1つのノードで、ネットのピン一覧には1回だけ載る。`get_pins` は両方を返し、`U1.1` だけの指定は曖昧なので `U1.1#1` か `U1.1#2` で選ぶ。#1・#2 はブロックのピン表の定義順(左・右・上・下の順。回転・反転の前)で、画面で見た辺ではない。反転したブロックでは `U1.1#1` が画面の右に描かれる。`block_numbers: "inside"` のとき、2本が同じ線上に並ぶ貫通ピンの番号は、その線と交わる辺(左右の組なら上下、上下の組なら左右)にピンが無いときだけ、箱の中央に1つ描く(あるときは各ピンが自分の番号を描く)。ファイル形式23。
@@ -33,7 +33,7 @@ Claude Codeはリポジトリの`.mcp.json`で自動接続。
 - ローカルオリジンガード(外部Webオリジンからのアクセスを拒否)
 
 ### madake CLI
-Link APIの薄いターミナルクライアント: `status`・`project`・`netlist`・`verify`・`sim`・`reroute`(`--sheet <ID>`・繰り返せる`--net <NAME>`。`--json`で返事をそのまま出す)・`arrange`(`--sheet <ID>`・`--channel <MM>`。20mmを超える幅なら`max_gap_mm`もその幅に上げる。`--json`で返事をそのまま出す)・`parts`・`terminals`(端子台一覧)・`export`・`save`/`open`(`.kicad_sch`・`.dxf`対応。DXFは`--wire-layer`)・`renumber`(線番採番: `--sheet`・`--mode append|renumber`・`--start`)・`exec`(JSONのCommand配列)・`undo`/`redo`。`--json`で機械可読出力。
+Link APIの薄いターミナルクライアント: `status`・`project`・`netlist`・`verify`・`sim`・`reroute`(`--sheet <ID>`・繰り返せる`--net <NAME>`。`--json`で返事をそのまま出す)・`arrange`(`--sheet <ID>`・`--channel <MM>`。20mmを超える幅なら`max_gap_mm`もその幅に上げる。`--json`で返事をそのまま出す)・`draft <request.json>`(機能シートの下書き。下の節を参照。`--json`で返事をそのまま出す)・`draft-check <source.mdkproj>`(繰り返せる`--ignore <REF>`。シートが元の図と合わないとき終了コード0以外)・`parts`・`terminals`(端子台一覧)・`export`・`save`/`open`(`.kicad_sch`・`.dxf`対応。DXFは`--wire-layer`)・`renumber`(線番採番: `--sheet`・`--mode append|renumber`・`--start`)・`exec`(JSONのCommand配列)・`undo`/`redo`。`--json`で機械可読出力。
 
 `madake export <種別> <path>`は回路図と帳票の両方を扱う:
 
@@ -44,6 +44,55 @@ Link APIの薄いターミナルクライアント: `status`・`project`・`netl
 | `bom`・`wire-list`・`terminal-chart`・`terminal-diagram`・`xref-table`・`plc-io`・`panel-placement` | `--format csv\|pdf`(省略時は出力先の拡張子から判定。`.pdf`なら図枠付き図面シート)・端子台の2帳票は`--terminal <参照記号\|ID>` |
 
 帳票は常に図面全体が対象で、絞り込めるのは`--terminal TB1`だけ(同じ参照記号が複数シートにある場合は`--sheet <ID>`を併用)。候補は`madake terminals`で調べる。
+
+## 機能シートの下書き
+
+大きな配線図は、機能ごとに1枚へ分けると紙で読みやすい。下書きは、全ての配線を持つ**元の図**のファイルから、開いているプロジェクトへ機能シートを1枚作る。**何を**載せるか(どの機器を、左から何列目に置くか)は呼び出し側が決め、**どう**描くか(箱の中身・ピンの辺と順・配線・札・電源と接地の印・間隔)は MadakeCAD が決める。元のファイルは読むだけで書き換えず、開いているプロジェクトであってはならない。
+
+入口: MCPツール`draft_function_sheet`・`check_function_sheets`、Link API `POST /api/v1/draft/function-sheet`・`POST /api/v1/draft/check`、CLI `madake draft <request.json>`・`madake draft-check <source.mdkproj> [--ignore REF]...`。下書きは1回の編集で、undo一発でシートごと消える。
+
+依頼(Link APIの本文とMCPの入力。CLIは同じ形のJSONファイルを読み、相対の`source_path`はそのファイルの場所から探す):
+
+```json
+{
+  "source_path": "/path/to/source.mdkproj",
+  "name": "2 Control",
+  "columns": [["U1", "U2"], ["TB1"]],
+  "pins": {"U1": ["1", "2", "5"]},
+  "power_nets": ["P24X"],
+  "ground_nets": ["GND"],
+  "destinations": {"J7.2": "cabinet B"},
+  "paper": "A3",
+  "pitch_mm": 5.0
+}
+```
+
+- `columns`(必須): 1〜8列。各列は機器(元の図で参照記号が同じ全てのシンボル)の参照記号の並びで、上から下。参照記号は1回だけ。
+- `pins`: 機器ごとに載せるピンの鍵を限る。1つの機器を何枚かのシートに分けるときに使う。書かない機器は、使用中のピン(元のネットが2ピン以上)を全て載せる。
+- `power_nets`・`ground_nets`: 元の図のネット名。これらのピンは配線せず、5mmの足の先に印を付ける。`ground_nets`を省くと、ネットの印を持つ全てのネットになる。
+- `destinations`: 図の外へ続くネットの、ネット名と自由な文字(札の行き先の文字になる)。
+- ブロックの機器は`block_view`=`1`のブロックになる(1つの機器が複数シートにあっても、参照記号の重複検査・部品表・ネットリストでは1つの部品)。ライブラリのシンボル(抵抗・リレーのコイルなど)はそのまま置き、載せられるのは1枚のシートだけ。
+- ネットの全ピンがこのシートにあれば配線でつなぐ(直角・シンボルと文字を避ける)。他のシートにもピンがあるネットは、載せたピンを配線し、札を1つ付ける。札の名前はネットのラベル名で、無ければ元のネット全体の最初のピンの`<参照記号>.<ピン>`なので、どのシートでも同じ名前になる。新しいシートは`xref_style`=`sheet_name`で、札の中に他のシートの名前が出る。経路が見つからないネットは同名のラベル2つでつなぎ、`labelled`に載せる。
+
+返り値: `sheet_id`・`units`・`pins`・`wired`(ネット名)・`tagged`(`[{net, pins}]`)・`marked`(`{power, ground}`)・`labelled`・`skipped_pins`(`[{reference, pin, reason}]`)・`metrics`(新しいシートの`get_tidy_metrics`と同じ数値)。
+
+断って何も変えないもの: 元のファイルが読めない・元の図に無い参照記号や2回書いた参照記号・機器に無いピンの鍵・元の図に無いネット名(`power_nets`・`ground_nets`・`destinations`)や電源と接地の両方にあるネット・使用中のシート名・他のシートのビューが既に出しているピン・載せるピンが1つも無い・ケーブルの芯や接点付きポートを通るネット・用紙に収まらない列(列と超過量mmをメッセージに入れる)・計画中に開いた図面が変わり続けた(3回まで計画し直す)。
+
+検算: `check_function_sheets { source_path, ignore_references? }`は元の図と開いているプロジェクトを比べ、何も変えない。両側とも、ネットごとの`(参照記号, ピン)`の集まりにして比べる(2ピン未満のネット・ネットの印・素通しのシンボルは除き、ネット名は比べない)。`ignore_references`の機器は両側から外す。
+
+```json
+{
+  "ok": false,
+  "source_nets": 12,
+  "matched": 10,
+  "missing_pins": [{"reference": "U3", "pin": "4", "source_net": "P24X"}],
+  "extra_pins": [],
+  "split": [{"source_net": "SIG_A", "parts": [["U1:3"], ["U2:3", "U4:1"]]}],
+  "merged": []
+}
+```
+
+`missing_pins`は元の図にあってどのシートにも無いピン、`extra_pins`はシートにあって元の図に無いピン、`split`は元の1つのネットのピンが開いたプロジェクトで1つのネットにならないもの(シートごとに札の名前が違うとここに出る)、`merged`は元の別々のネットのピンが開いたプロジェクトで1つのネットになっているもの。`madake draft-check`は同じ内容を表示し、`ok`が false のとき終了コード0以外で終わる。
 
 ## 計画中
 

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3848 specification clauses** across 6 areas.
+**3865 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1992,6 +1992,22 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - When the drawing changes once between planning and applying, the arrange plans again and applies on the new drawing as one edit. <sub>`arrange_plans_again_after_one_concurrent_edit`</sub>
 - When the drawing keeps changing, the arrange gives up after three tries with a message and applies nothing of its own. <sub>`arrange_gives_up_when_the_drawing_keeps_changing`</sub>
 
+### draft_api
+
+- Both draft tools are advertised, and the draft description says that it is one edit with one undo, and both say that the source file is only read. <sub>`the_draft_tools_are_advertised`</sub>
+- A draft adds exactly one sheet in one edit, and one undo removes it again. <sub>`a_draft_adds_one_sheet_and_one_undo_removes_it`</sub>
+- After one undo the project is byte for byte what it was before the draft. <sub>`undo_after_a_draft_restores_the_project_bytes`</sub>
+- Drafting the same request twice is refused the second time (the sheet name is in use) and changes nothing. <sub>`drafting_the_same_request_twice_is_refused`</sub>
+- A source file that does not exist is refused with its path in the message, and nothing changes. <sub>`a_missing_source_file_is_refused_and_nothing_changes`</sub>
+- Drafting and checking only read the source file: its bytes and its modification time stay the same. <sub>`the_source_file_is_not_modified`</sub>
+- A request the planner refuses (a unit the source does not have) is an error and changes nothing. <sub>`a_refused_plan_changes_nothing`</sub>
+- When the drawing changes once between planning and applying, the draft plans again and still adds one sheet in one edit. <sub>`a_draft_plans_again_after_one_concurrent_edit`</sub>
+- When the drawing keeps changing, the draft gives up after three tries with a message and adds no sheet. <sub>`a_draft_gives_up_when_the_drawing_keeps_changing`</sub>
+- Over MCP the draft tool adds the sheet and the check tool reports a half-drawn set as not ok, then ok once both sheets exist. <sub>`the_mcp_tools_draft_and_check`</sub>
+- The Link API draft endpoint returns the plan summary with the new sheet id, and refuses bad bodies with 400 and no change. <sub>`the_link_api_drafts_and_refuses_bad_bodies`</sub>
+- Two draft requests that together cover the source, then the check, all through the Link API: the check says ok. <sub>`two_drafts_and_a_check_through_the_link_api`</sub>
+- Writes both drafted sheets as SVG for a look with a renderer (run by hand: `cargo test -p madake-mcp --test draft_api -- --ignored`). <sub>`export_the_drafted_sheets_as_svg`</sub>
+
 ### drawing_tools
 
 - place_symbol returns the new part's pins with paper positions, so the agent can wire it without computing coordinates. <sub>`place_symbol_returns_the_pins_of_the_new_part`</sub>
@@ -2595,6 +2611,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - madake reroute passes the sheet and every repeated --net through, in order. <sub>`reroute_forwards_the_sheet_and_repeated_nets`</sub>
 - madake reroute --json prints the reply as it came, and the human output lists the nets left unchanged with their reasons. <sub>`reroute_prints_json_or_a_human_summary`</sub>
 - madake arrange sends the sheet and the channel width only when given. <sub>`arrange_sends_only_what_was_given`</sub>
+- madake draft reads the request file, turns a relative source_path into an absolute one next to the file, and prints a summary or the raw reply. <sub>`draft_sends_the_request_with_an_absolute_source_path`</sub>
+- madake draft refuses a request file that is missing, is not JSON, or has no source_path, without calling the app. <sub>`draft_refuses_a_bad_request_file`</sub>
+- madake draft-check sends an absolute path and the repeated --ignore references, and succeeds when the sheets match. <sub>`draft_check_sends_the_path_and_the_ignored_references`</sub>
+- madake draft-check fails (non-zero exit) when the sheets do not match, and the error carries the report with the problem pins. <sub>`draft_check_fails_when_the_sheets_do_not_match`</sub>
 - madake undo tells the user when there is nothing to undo. <sub>`undo_reports_empty_history`</sub>
 - madake redo reports the new document revision on success. <sub>`redo_reports_revision`</sub>
 - madake save/open report the file path they acted on. <sub>`save_and_open_report_path`</sub>

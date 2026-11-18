@@ -427,6 +427,107 @@ pub fn renumbered(patches: &Value) -> String {
     }
 }
 
+/// `madake draft` (Link APIの返り値)
+pub fn draft(result: &Value) -> String {
+    let count = |key: &str| result[key].as_u64().unwrap_or(0);
+    let names = |key: &str| -> Vec<String> {
+        result[key].as_array().cloned().unwrap_or_default().iter().filter_map(|n| n.as_str().map(String::from)).collect()
+    };
+    let mut out = format!(
+        "機能シートを作りました (シートID {})。機器 {} 個・ピン {} 本\n",
+        text(result, "sheet_id"),
+        count("units"),
+        count("pins")
+    );
+    let wired = names("wired");
+    out.push_str(&format!("配線したネット: {}\n", wired.len()));
+    let tagged = result["tagged"].as_array().cloned().unwrap_or_default();
+    if !tagged.is_empty() {
+        let list: Vec<String> = tagged.iter().map(|t| format!("{} ({} ピン)", text(t, "net"), t["pins"].as_u64().unwrap_or(0))).collect();
+        out.push_str(&format!("札を付けたネット: {}\n", list.join(", ")));
+    }
+    out.push_str(&format!(
+        "電源の印 {} 個・接地の印 {} 個\n",
+        result["marked"]["power"].as_u64().unwrap_or(0),
+        result["marked"]["ground"].as_u64().unwrap_or(0)
+    ));
+    let labelled = names("labelled");
+    if !labelled.is_empty() {
+        out.push_str(&format!("ラベルでつないだネット: {}\n", labelled.join(", ")));
+    }
+    let skipped = result["skipped_pins"].as_array().cloned().unwrap_or_default();
+    if !skipped.is_empty() {
+        out.push_str("載せなかったピン:\n");
+        for s in &skipped {
+            out.push_str(&format!("  {}.{} ({})\n", text(s, "reference"), text(s, "pin"), text(s, "reason")));
+        }
+    }
+    let metric = |key: &str| result["metrics"][key].as_u64().unwrap_or(0);
+    if result["metrics"].is_object() {
+        out.push_str(&format!(
+            "整い具合: 交差 {} / 文字の重なり {} / シンボルの重なり {} / グリッド外 {}\n",
+            metric("crossings"),
+            metric("label_overlaps"),
+            metric("symbol_overlaps"),
+            metric("off_grid")
+        ));
+    }
+    out.trim_end().to_string()
+}
+
+/// `madake draft-check` (Link APIの返り値)
+pub fn draft_check(result: &Value) -> String {
+    let count = |key: &str| result[key].as_u64().unwrap_or(0);
+    let ok = result["ok"].as_bool().unwrap_or(false);
+    let mut out = format!(
+        "{}: 元のネット {} 本のうち {} 本が一致\n",
+        if ok { "合っています" } else { "合っていません" },
+        count("source_nets"),
+        count("matched")
+    );
+    let pins = |key: &str, label: &str, out: &mut String| {
+        let list = result[key].as_array().cloned().unwrap_or_default();
+        if !list.is_empty() {
+            out.push_str(&format!("{label}:\n"));
+            for p in &list {
+                let net = text(p, "source_net");
+                let net = if net.is_empty() { String::new() } else { format!(" (元のネット {net})") };
+                out.push_str(&format!("  {}.{}{}\n", text(p, "reference"), text(p, "pin"), net));
+            }
+        }
+    };
+    pins("missing_pins", "どのシートにも無いピン", &mut out);
+    pins("extra_pins", "元の図に無いピン", &mut out);
+    let split = result["split"].as_array().cloned().unwrap_or_default();
+    if !split.is_empty() {
+        out.push_str("つながりが分かれたネット:\n");
+        for s in &split {
+            let parts: Vec<String> = s["parts"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .iter()
+                .map(|p| {
+                    let pins: Vec<String> = p.as_array().cloned().unwrap_or_default().iter().filter_map(|x| x.as_str().map(String::from)).collect();
+                    format!("[{}]", pins.join(" "))
+                })
+                .collect();
+            out.push_str(&format!("  {}: {}\n", text(s, "source_net"), parts.join(" / ")));
+        }
+    }
+    let merged = result["merged"].as_array().cloned().unwrap_or_default();
+    if !merged.is_empty() {
+        out.push_str("つながってしまったネット:\n");
+        for m in &merged {
+            let join = |key: &str| -> String {
+                m[key].as_array().cloned().unwrap_or_default().iter().filter_map(|x| x.as_str().map(String::from)).collect::<Vec<_>>().join(", ")
+            };
+            out.push_str(&format!("  {} (ピン {})\n", join("source_nets"), join("pins")));
+        }
+    }
+    out.trim_end().to_string()
+}
+
 /// `madake arrange` (Link APIの返り値)
 pub fn arrange(result: &Value) -> String {
     let count = |key: &str| result[key].as_u64().unwrap_or(0);

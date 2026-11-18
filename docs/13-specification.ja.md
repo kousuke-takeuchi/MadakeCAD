@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3848仕様項目**。
+全6領域・**3865仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1992,6 +1992,22 @@
 - 計画と適用の間に図面が1度変わると、並べ直しは計画を作り直し、新しい図面に1回の編集として当てる。 <sub>`arrange_plans_again_after_one_concurrent_edit`</sub>
 - 図面が変わり続けると、並べ直しは3回で諦めてメッセージを返し、自分の変更は何も当てない。 <sub>`arrange_gives_up_when_the_drawing_keeps_changing`</sub>
 
+### draft_api
+
+- 下書きの2つのツールが公開され、下書きの説明にはundo一発、両方の説明に元のファイルは読むだけと書いてある。 <sub>`the_draft_tools_are_advertised`</sub>
+- 下書きは1回の編集でシートを1枚だけ足し、undo一発でそのシートが消える。 <sub>`a_draft_adds_one_sheet_and_one_undo_removes_it`</sub>
+- 下書きの後にundoを1回すると、プロジェクトは下書きの前とバイト単位で同じに戻る。 <sub>`undo_after_a_draft_restores_the_project_bytes`</sub>
+- 同じ依頼を2回続けると、2回目はシート名が使用中で断られ、何も変わらない。 <sub>`drafting_the_same_request_twice_is_refused`</sub>
+- 元のファイルが無いと、メッセージに場所を入れて断り、何も変わらない。 <sub>`a_missing_source_file_is_refused_and_nothing_changes`</sub>
+- 下書きと検算は元のファイルを読むだけで、中身も更新時刻も変わらない。 <sub>`the_source_file_is_not_modified`</sub>
+- 計画が断る依頼 (元の図にない機器) はエラーになり、何も変わらない。 <sub>`a_refused_plan_changes_nothing`</sub>
+- 計画と適用の間に図面が1度変わると、下書きは計画を作り直し、1回の編集でシートを1枚足す。 <sub>`a_draft_plans_again_after_one_concurrent_edit`</sub>
+- 図面が変わり続けると、下書きは3回で諦めてメッセージを返し、シートを足さない。 <sub>`a_draft_gives_up_when_the_drawing_keeps_changing`</sub>
+- MCPで下書きすると、検算は1枚だけの間は「合っていない」、2枚そろうと「合っている」と返す。 <sub>`the_mcp_tools_draft_and_check`</sub>
+- Link APIの下書きは、計画の要約と新しいシートのidを返し、使えない本文は400で断って何も変えない。 <sub>`the_link_api_drafts_and_refuses_bad_bodies`</sub>
+- 元の図を2枚で覆う下書きの依頼を2つ送り、続けて検算を送ると、すべてLink API経由で「合っている」と返る。 <sub>`two_drafts_and_a_check_through_the_link_api`</sub>
+- 下書きした2枚をSVGに書き出す (目で見るための手動の試験。--ignored を付けて実行する)。 <sub>`export_the_drafted_sheets_as_svg`</sub>
+
 ### drawing_tools
 
 - place_symbol は置いた部品のピンを用紙上の位置つきで返すので、エージェントは座標を計算せずに配線できる。 <sub>`place_symbol_returns_the_pins_of_the_new_part`</sub>
@@ -2595,6 +2611,10 @@
 - madake rerouteは--sheetと、繰り返し指定した--netを順番どおりに送る。 <sub>`reroute_forwards_the_sheet_and_repeated_nets`</sub>
 - madake reroute --json は返事をそのまま出し、通常の出力は引き直さなかったネットを理由つきで並べる。 <sub>`reroute_prints_json_or_a_human_summary`</sub>
 - madake arrangeは、シートと通り道の幅を指定されたときだけ送る。 <sub>`arrange_sends_only_what_was_given`</sub>
+- madake draftは依頼のJSONを読み、相対の元の図の場所を依頼のファイルの隣からの絶対パスにして送り、要約か生の返り値を出す。 <sub>`draft_sends_the_request_with_an_absolute_source_path`</sub>
+- madake draftは、依頼のファイルが無い・JSONでない・元の図の場所が無いときは、アプリを呼ばずに断る。 <sub>`draft_refuses_a_bad_request_file`</sub>
+- madake draft-checkは絶対パスと繰り返した--ignoreの参照記号を送り、合っていれば成功で終わる。 <sub>`draft_check_sends_the_path_and_the_ignored_references`</sub>
+- madake draft-checkは、合っていないと失敗 (終了コード0以外) になり、エラーに問題のピンを書いた結果を持つ。 <sub>`draft_check_fails_when_the_sheets_do_not_match`</sub>
 - madake undoは戻す操作が無いことをユーザーに伝える。 <sub>`undo_reports_empty_history`</sub>
 - madake redoは成功時に新しいドキュメントrevisionを報告する。 <sub>`redo_reports_revision`</sub>
 - madake save/openは対象のファイルパスを報告する。 <sub>`save_and_open_report_path`</sub>
