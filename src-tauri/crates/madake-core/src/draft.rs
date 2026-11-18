@@ -61,13 +61,16 @@ pub struct DraftRequest {
     /// 呼び出し側が下書きするつもりの全ての機能シート (順不同。この依頼自身や、すでにあるシートを含んでよい)。
     /// 各項目は名前の文字列か、`{name, units, pins?}` (そのシートが載せる機器とピン)。札の行き先の文字のために
     /// 確保する幅は、札ごとに、その札が将来持ちうる行き先だけで決まる。空なら従来どおり。
-    #[serde(default)]
+    #[serde(default, deserialize_with = "planned_sheets_from")]
     pub planned_sheets: Vec<PlannedSheet>,
 }
 
 /// 計画した機能シート1枚。名前だけなら中身は不明 (どの札の行き先にもなりうる)。
 /// `{name, units, pins?}` なら、そのシートが載せるピンを持つネットの札だけの行き先になる。
-#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
+///
+/// 読み取りは手書き ([`PlannedSheet::from_value`]): 形が違えば、serde の untagged の一般的な文ではなく、
+/// 何が足りないかを言う。`planned_sheets` の一覧としては [`planned_sheets_from`] が何番目の項目かを添える。
+#[derive(Debug, Clone, schemars::JsonSchema)]
 #[serde(untagged)]
 pub enum PlannedSheet {
     /// 名前だけ。
@@ -94,6 +97,46 @@ impl PlannedSheet {
             PlannedSheet::Detailed(d) => &d.name,
         }
     }
+}
+
+impl PlannedSheet {
+    /// JSON の1項目を読む。文字列なら名前だけ、オブジェクトなら `{name, units, pins?}` (知らない項目は断る)。
+    pub fn from_value(value: serde_json::Value) -> Result<Self, String> {
+        match value {
+            serde_json::Value::String(name) => Ok(PlannedSheet::Name(name)),
+            serde_json::Value::Object(_) => serde_json::from_value::<PlannedSheetDetail>(value)
+                .map(PlannedSheet::Detailed)
+                .map_err(|e| format!("expected {{\"name\", \"units\", \"pins\"?}}: {e}")),
+            other => Err(format!("expected a sheet name or an object {{\"name\", \"units\", \"pins\"?}}, got {other}")),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for PlannedSheet {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(d)?;
+        PlannedSheet::from_value(value).map_err(serde::de::Error::custom)
+    }
+}
+
+/// `planned_sheets` を読む。一覧でない・形の違う項目があれば、`planned_sheets[i] (entry i+1)` を挙げて断る
+/// (Link API の400、MCP のエラー、CLI の表示にそのまま出る)。
+fn planned_sheets_from<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<PlannedSheet>, D::Error> {
+    use serde::de::Error;
+    let value = serde_json::Value::deserialize(d)?;
+    let serde_json::Value::Array(items) = value else {
+        return Err(D::Error::custom(format!(
+            "planned_sheets must be a list of sheet names or {{\"name\", \"units\", \"pins\"?}} objects, got {value}"
+        )));
+    };
+    items
+        .into_iter()
+        .enumerate()
+        .map(|(i, item)| {
+            PlannedSheet::from_value(item)
+                .map_err(|e| D::Error::custom(format!("planned_sheets[{i}] (entry {}): {e}", i + 1)))
+        })
+        .collect()
 }
 
 impl From<&str> for PlannedSheet {
@@ -3180,6 +3223,25 @@ mod layout_tests {
         assert!(msg.contains("Alpha cabinet") && msg.contains("77"), "{msg}");
         r.planned_sheets = vec![detailed("Alpha cabinet", &["U2"], &[("TB1", &["1"])])];
         assert!(build_model(&fixture_source(), &bare(), &r).unwrap_err().contains("TB1"));
+    }
+
+    /// A planned_sheets entry that is neither a name nor a {name, units, pins?} object (a number, an object without units, an object with an unknown field) is refused with a message that names planned_sheets and the entry's position; a list that is not a list is refused naming planned_sheets.
+    /// planned_sheets の項目が名前でも {name, units, pins?} でもない (数、units の無い項目、知らない項目のある項目) と、planned_sheets と何番目の項目かを挙げた文で断られる。一覧でないものも planned_sheets を挙げて断られる。
+    #[test]
+    fn a_malformed_planned_entry_is_refused_naming_its_position() {
+        let err = |planned: &str| {
+            serde_json::from_str::<DraftRequest>(&format!(r#"{{"name":"A","columns":[["U1"]],"planned_sheets":{planned}}}"#))
+                .expect_err("refused")
+                .to_string()
+        };
+        let msg = err(r#"["B", 7]"#);
+        assert!(msg.contains("planned_sheets[1]") && msg.contains("entry 2"), "{msg}");
+        let msg = err(r#"["B", "C", {"name": "D"}]"#);
+        assert!(msg.contains("planned_sheets[2]") && msg.contains("units"), "{msg}");
+        let msg = err(r#"[{"name": "D", "units": [], "bogus": 1}]"#);
+        assert!(msg.contains("planned_sheets[0]") && msg.contains("bogus"), "{msg}");
+        let msg = err(r#""B""#);
+        assert!(msg.contains("planned_sheets") && msg.contains("list"), "{msg}");
     }
 
     /// A planned sheet may be written as a string or as an object, in one list, and an object with an unknown field is refused.

@@ -45,6 +45,12 @@ async fn call(bridge: &McpToolBridge, name: &str, input: Value) -> Value {
 }
 
 async fn post(router: &Router, uri: &str, body: Value) -> (StatusCode, Value) {
+    let (status, text) = post_text(router, uri, body).await;
+    (status, serde_json::from_str(&text).unwrap_or(Value::Null))
+}
+
+/// The reply body as text (an error body of the Link API is plain text).
+async fn post_text(router: &Router, uri: &str, body: Value) -> (StatusCode, String) {
     let request = Request::builder()
         .method("POST")
         .uri(uri)
@@ -54,7 +60,7 @@ async fn post(router: &Router, uri: &str, body: Value) -> (StatusCode, Value) {
     let response = router.clone().oneshot(request).await.unwrap();
     let status = response.status();
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    (status, String::from_utf8_lossy(&bytes).into_owned())
 }
 
 fn first_request() -> Value {
@@ -487,6 +493,22 @@ fn planned_objects_round_trip_through_the_mcp_params() {
         }
         other => panic!("{other:?}"),
     }
+}
+
+/// A malformed planned_sheets entry is refused through the Link API (400) and through the MCP tool with a message that names planned_sheets and the entry's position, and nothing changes.
+/// planned_sheets の形の違う項目は、Link API (400) でも MCP のツールでも、planned_sheets と何番目の項目かを挙げた文で断られ、何も変わらない。
+#[tokio::test]
+async fn a_malformed_planned_entry_is_refused_naming_its_position() {
+    let (doc, bridge, router) = fixture();
+    let mut bad = first_request();
+    bad["planned_sheets"] = json!(["Sheet B", {"name": "Sheet C"}]);
+    let (status, text) = post_text(&router, "/api/v1/draft/function-sheet", bad.clone()).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{text}");
+    assert!(text.contains("planned_sheets[1]") && text.contains("entry 2"), "{text}");
+    let outcome = bridge.call("draft_function_sheet", bad).await;
+    assert!(outcome.is_error, "{}", outcome.content);
+    assert!(outcome.content.contains("planned_sheets[1]") && outcome.content.contains("entry 2"), "{}", outcome.content);
+    assert_eq!(sheet_count(&doc), 0);
 }
 
 /// Through the Link API an object entry reaches the planner: a unit the source does not have is refused naming the entry, a good entry drafts the sheet.

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3951仕様項目**。
+全6領域・**3953仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -499,6 +499,7 @@
 - すでにあるシートと同じ名前の計画の項目は、計画ではなく、そのシートのラベルがあるかで数える。 <sub>`an_entry_that_already_exists_counts_by_its_labels`</sub>
 - A4で、計画のシートを名前だけで渡すと、どの札も全部の名前の場所を空けるので幅が足りず断られる。同じシートを機器つきで渡すと、そのシートが載せるネットの札だけが場所を空けるので収まる。 <sub>`per_tag_room_lets_a_sheet_fit_that_the_worst_case_refuses`</sub>
 - 計画のシートに書いた機器が元の図に無い、またはピンがその機器に無いときは、項目を挙げて断られる。 <sub>`planned_objects_with_unknown_units_or_pins_are_refused`</sub>
+- planned_sheets の項目が名前でも {name, units, pins?} でもない (数、units の無い項目、知らない項目のある項目) と、planned_sheets と何番目の項目かを挙げた文で断られる。一覧でないものも planned_sheets を挙げて断られる。 <sub>`a_malformed_planned_entry_is_refused_naming_its_position`</sub>
 - 計画のシートは、文字列でも、機器つきの項目でも書け、1つの一覧に混ぜてよい。知らない項目のある項目は断られる。 <sub>`planned_sheets_read_both_forms_from_json`</sub>
 - 計画した名前を渡すと、いちばん広い旗が収まるように、渡さないときより1列目の位置が右になる。 <sub>`planned_names_push_the_first_column_right`</sub>
 - planned_sheets の無い依頼は空の一覧として読まれ、空の一覧を明示した依頼とまったく同じ配置になる。 <sub>`a_request_without_planned_sheets_lays_out_as_before`</sub>
@@ -2090,6 +2091,7 @@
 - Link API経由で planned_sheets は計画まで届く。空白の項目は、項目名を挙げた400で断られ、何も変わらない。 <sub>`the_link_api_reads_planned_sheets`</sub>
 - Link API経由で、planned_sheets を付けて3枚を下書きすると枠からはみ出す札は無く、付けないと検算がその札を挙げて layout_ok が false になるが ok は true のまま。 <sub>`the_check_reports_tags_outside_the_frame_through_the_link_api`</sub>
 - 計画のシートの機器つきの形 (name・units・pins) も文字列の形も、MCPの引数の型を通り、計画は機器つきの項目の機器を読む。 <sub>`planned_objects_round_trip_through_the_mcp_params`</sub>
+- planned_sheets の形の違う項目は、Link API (400) でも MCP のツールでも、planned_sheets と何番目の項目かを挙げた文で断られ、何も変わらない。 <sub>`a_malformed_planned_entry_is_refused_naming_its_position`</sub>
 - Link API経由で、機器つきの項目は計画まで届く。元の図に無い機器は項目を挙げて断られ、正しい項目ならシートが作られる。 <sub>`the_link_api_reads_planned_objects`</sub>
 
 ### drawing_tools

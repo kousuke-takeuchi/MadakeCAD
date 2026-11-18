@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3951 specification clauses** across 6 areas.
+**3953 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -499,6 +499,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - An entry that has the same name as a sheet of the open project counts through that sheet's labels, not through the plan. <sub>`an_entry_that_already_exists_counts_by_its_labels`</sub>
 - On A4, a request whose planned sheets are only names is refused because every tag reserves room for all of them, while the same sheets given with their units fit: only the nets they carry reserve room. <sub>`per_tag_room_lets_a_sheet_fit_that_the_worst_case_refuses`</sub>
 - The names of planned sheets with units that the source does not have, or pins that a unit does not have, are refused with the entry named. <sub>`planned_objects_with_unknown_units_or_pins_are_refused`</sub>
+- A planned_sheets entry that is neither a name nor a {name, units, pins?} object (a number, an object without units, an object with an unknown field) is refused with a message that names planned_sheets and the entry's position; a list that is not a list is refused naming planned_sheets. <sub>`a_malformed_planned_entry_is_refused_naming_its_position`</sub>
 - A planned sheet may be written as a string or as an object, in one list, and an object with an unknown field is refused. <sub>`planned_sheets_read_both_forms_from_json`</sub>
 - With planned names the layout is wider than with none: the first column starts further right so that the widest flag fits. <sub>`planned_names_push_the_first_column_right`</sub>
 - A request without planned_sheets reads as an empty list and lays out exactly as one that names an empty list. <sub>`a_request_without_planned_sheets_lays_out_as_before`</sub>
@@ -2090,6 +2091,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Through the Link API, planned_sheets reaches the planner: a blank entry is refused (400, and the planner's message names the field), and nothing changes. <sub>`the_link_api_reads_planned_sheets`</sub>
 - Through the Link API, drafting three sheets with planned_sheets leaves no tag outside the frame, and without it the check lists the tag and says layout_ok is false while ok stays true. <sub>`the_check_reports_tags_outside_the_frame_through_the_link_api`</sub>
 - The object form of a planned sheet (name, units, pins) and the string form both go through the MCP parameter type, and the planner reads the units of an object. <sub>`planned_objects_round_trip_through_the_mcp_params`</sub>
+- A malformed planned_sheets entry is refused through the Link API (400) and through the MCP tool with a message that names planned_sheets and the entry's position, and nothing changes. <sub>`a_malformed_planned_entry_is_refused_naming_its_position`</sub>
 - Through the Link API an object entry reaches the planner: a unit the source does not have is refused naming the entry, a good entry drafts the sheet. <sub>`the_link_api_reads_planned_objects`</sub>
 
 ### drawing_tools
