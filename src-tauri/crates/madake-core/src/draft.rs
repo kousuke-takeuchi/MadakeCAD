@@ -6,13 +6,10 @@
 //! この節は model: 入力の形 [`DraftRequest`]・その検査・元のネットリストの読み取り [`build_model`]。
 //!
 //! 仕様: `docs/superpowers/specs/2026-11-18-function-sheet-draft-design.md` §3。
-// 次のタスク (layout・wires) が使うまで、model の項目は外から使われない。使われたらこの許可を外す。
-#![allow(dead_code)]
-
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::block::{self, BLOCK_SYMBOL_ID};
 use crate::model::{Entity, Project, SymbolInstance};
@@ -94,6 +91,7 @@ pub(crate) struct DraftUnit {
     /// 列の番号 (0始まり)。
     pub column: usize,
     /// 列の中の行 (0始まり。ピンを持たず外した機器を除いた順)。
+    #[allow(dead_code)] // 行番号は model の記録として残す (今のところ読む段は無い)
     pub row: usize,
     /// 元の最初のシンボル (シート順、id順)。回転・値などの元になる。
     pub source: SymbolInstance,
@@ -1524,10 +1522,10 @@ struct Deco {
     ground: usize,
 }
 
-fn stub_wire(from: Point, to: Point) -> Entity {
-    Entity::Wire(Wire {
+fn default_wire(points: Vec<Point>) -> Wire {
+    Wire {
         id: uuid::Uuid::new_v4(),
-        points: vec![from, to],
+        points,
         color: "black".into(),
         sq: 0.75,
         length_m: None,
@@ -1536,7 +1534,11 @@ fn stub_wire(from: Point, to: Point) -> Entity {
         net: None,
         dashed: false,
         weight_mm: None,
-    })
+    }
+}
+
+fn stub_wire(from: Point, to: Point) -> Entity {
+    Entity::Wire(default_wire(vec![from, to]))
 }
 
 /// 置いた機器のピンから、印・タグ・スタブ・配線の端を作る。
@@ -2359,5 +2361,515 @@ mod layout_tests {
         r.destinations.insert("SIG_A".into(), "cabinet B".into());
         let l = layout(&r);
         std::fs::write(format!("{path}.tags.svg"), crate::svg::sheet_to_svg(&l.sheet, &defs_of(&l), &[])).unwrap();
+    }
+}
+
+// --- wires
+//
+// 第3段: layout が置いたシートに、内部ネットと出ていくネットの配線を引く。既存の経路探索 (`route.rs`) を
+// そのまま使い、引けないネットは同じ名前のネットラベルでつなぐ (一部だけ引いた配線は残さない)。
+
+use crate::arrange::{route_rounds, stub_entities_in, Fallback, TextRoom};
+use crate::route::{emit, RouteGrid, RouteOptions, RouteUnit};
+
+/// 出ていくネットのタグ (ネット名と、このシートが持つピンの数)。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DraftTagged {
+    pub net: String,
+    pub pins: usize,
+}
+
+/// 置いた電源・接地の印の数。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+pub struct DraftMarked {
+    pub power: usize,
+    pub ground: usize,
+}
+
+/// 運ばなかったピンと、その理由。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DraftSkipped {
+    pub reference: String,
+    pub pin: String,
+    pub reason: String,
+}
+
+/// 下書きの計画。図面は書き換えない。`sheet` が新しいシートの中身 (適用は呼び出し側)。
+#[derive(Debug, Clone, Serialize)]
+pub struct DraftPlan {
+    #[serde(skip)]
+    pub sheet: Sheet,
+    /// 置いた機器の数。
+    pub units: usize,
+    /// 運んだピンの数。
+    pub pins: usize,
+    /// 配線を引いたネット名 (自然順)。
+    pub wired: Vec<String>,
+    pub tagged: Vec<DraftTagged>,
+    pub marked: DraftMarked,
+    /// 配線を引けず、ネットラベルでつないだネット名 (自然順)。
+    pub labelled: Vec<String>,
+    pub skipped_pins: Vec<DraftSkipped>,
+}
+
+/// 小数3桁までの整数にした位置 (端子を並べるときの鍵)。
+fn quantised(p: Point) -> (i64, i64) {
+    ((p.x * 1000.0).round() as i64, (p.y * 1000.0).round() as i64)
+}
+
+/// 元の図と開いているプロジェクトから、新しい機能シートの計画を作る。
+pub fn plan_function_sheet(source: &Project, open: &Project, req: &DraftRequest) -> Result<DraftPlan, String> {
+    plan_with_options(source, open, req, &RouteOptions::default())
+}
+
+/// [`plan_function_sheet`] の、経路探索の設定を渡せる版 (引けないネットのテストが使う)。
+/// 図枠の余白と表題欄の大きさは、`SharedDoc::reroute_wires` と同じく設定の既定値をそのまま使う。
+pub(crate) fn plan_with_options(source: &Project, open: &Project, req: &DraftRequest, opts: &RouteOptions) -> Result<DraftPlan, String> {
+    opts.validate()?;
+    let model = build_model(source, open, req)?;
+    let layout = lay_out(&model, open, req)?;
+    let (sheet, wired, labelled) = route_wires(&model, &layout, opts);
+    Ok(DraftPlan {
+        sheet,
+        units: model.units.len(),
+        pins: model.units.iter().map(|u| u.pins.len()).sum(),
+        wired,
+        tagged: layout.tagged.iter().map(|(net, pins)| DraftTagged { net: net.clone(), pins: *pins }).collect(),
+        marked: DraftMarked { power: layout.power_marks, ground: layout.ground_marks },
+        labelled,
+        skipped_pins: model
+            .skipped
+            .iter()
+            .map(|(reference, pin, reason)| DraftSkipped { reference: reference.clone(), pin: pin.clone(), reason: reason.clone() })
+            .collect(),
+    })
+}
+
+/// 配線を引き、引けないネットはネットラベルでつなぐ。返り値は完成したシートと、配線したネット名・ラベルでつないだネット名 (どちらも自然順)。
+fn route_wires(model: &DraftModel, layout: &DraftLayout, opts: &RouteOptions) -> (Sheet, Vec<String>, Vec<String>) {
+    let mut sheet = layout.sheet.clone();
+    let defs = sheet_symbol_defs(&sheet);
+
+    // 端子が2つ以上あるネットごとに1つの単位。名前の自然順 (同名なら添字順) に引く
+    let mut by_net: BTreeMap<usize, Vec<&Terminal>> = BTreeMap::new();
+    for t in &layout.terminals {
+        by_net.entry(t.net).or_default().push(t);
+    }
+    let mut order: Vec<usize> = by_net.iter().filter(|(_, t)| t.len() >= 2).map(|(&n, _)| n).collect();
+    order.sort_by(|&a, &b| natural_cmp(&model.nets[a].name, &model.nets[b].name).then(a.cmp(&b)));
+    // 端子がすでにタグのスタブ (ラベル付き) の先にあるなら、そのまま使う。ピンの上にある端子には、箱から5mmの
+    // 短い線を足し、その先を配線の端にする (縦に走る配線がピン番号の文字を横切らないための間隔)
+    let label_points: Vec<Point> = sheet.entities.values().filter_map(|e| if let Entity::NetLabel(l) = e { Some(l.at) } else { None }).collect();
+    let at_label = |p: Point| label_points.iter().any(|q| q.distance_to(&p) < 1e-6);
+    // 単位ごとの端子: (配線の端, 向き, ピンの上の端なら短い線の根元のピン)
+    let mut terms_of: Vec<Vec<(Point, Dir, Option<Point>)>> = Vec::new();
+    let units: Vec<RouteUnit> = order
+        .iter()
+        .map(|&n| {
+            let mut terms: Vec<(Point, Dir, Option<Point>)> = by_net[&n]
+                .iter()
+                .map(|t| {
+                    if at_label(t.at) {
+                        (t.at, t.dir, None)
+                    } else {
+                        let (dx, dy) = unit_vec(t.dir);
+                        (Point::new(t.at.x + dx * STUB_MM, t.at.y + dy * STUB_MM), t.dir, Some(t.at))
+                    }
+                })
+                .collect();
+            terms.sort_by_key(|t| quantised(t.0));
+            let unit = RouteUnit {
+                net: model.nets[n].name.clone(),
+                wires: Vec::new(),
+                junctions: Vec::new(),
+                template: default_wire(Vec::new()),
+                old_lines: Vec::new(),
+                old_junctions: Vec::new(),
+                terms: terms.iter().map(|t| (t.0, Some(t.1))).collect(),
+                leads: Vec::new(),
+            };
+            terms_of.push(terms);
+            unit
+        })
+        .collect();
+    let stubs_of = |i: usize| -> Vec<Vec<Point>> { terms_of[i].iter().filter_map(|t| t.2.map(|root| vec![root, t.0])).collect() };
+
+    // 動かない線: 印・タグのスタブと、配線する端子の短い線
+    let base_lines: Vec<Vec<Point>> =
+        sheet.entities.values().filter_map(|e| if let Entity::Wire(w) = e { Some(w.points.clone()) } else { None }).collect();
+    let mut fixed_lines = base_lines.clone();
+    fixed_lines.extend((0..units.len()).flat_map(stubs_of));
+    fixed_lines.sort_by_key(|l| l.iter().map(|&p| quantised(p)).collect::<Vec<_>>());
+    let fixed_spots: Vec<Point> = sheet.entities.values().filter_map(|e| if let Entity::Junction(j) = e { Some(j.at) } else { None }).collect();
+
+    let grid = RouteGrid::build(&sheet, &defs, opts);
+    // ラベルでつなぐときの短い線が避けるもの: 動かない線・ピン・ラベル・ジャンクション (置いた分も足していく)
+    let mut stub_lines = base_lines;
+    let mut stub_spots: Vec<Point> =
+        pin_points(&sheet, &defs).iter().map(|q| q.pos).chain(label_points.iter().copied()).chain(fixed_spots.iter().copied()).collect();
+    let mut room = TextRoom::build_with(&sheet, &defs, &BTreeSet::new(), BTreeMap::new());
+    let mut label_stubs: BTreeMap<usize, Vec<Entity>> = BTreeMap::new();
+    let (outcome, _rounds) = route_rounds(&grid, &units, &fixed_lines, &fixed_spots, |i| {
+        // 自分以外の単位の短い線は避ける。自分のピンには、ラベルの短い線を新しく伸ばす
+        let others: Vec<Vec<Point>> = (0..units.len()).filter(|&j| j != i).flat_map(stubs_of).collect();
+        let before = stub_lines.len();
+        let mut lines = stub_lines.clone();
+        lines.extend(others);
+        let (l0, s0) = (lines.len(), stub_spots.len());
+        let terms = terms_of[i]
+            .iter()
+            .filter(|t| t.2.is_some() || !at_label(t.0))
+            .map(|t| (t.2.unwrap_or(t.0), Some(t.1), default_wire(Vec::new())))
+            .collect();
+        let fb = Fallback { net: units[i].net.clone(), name: units[i].net.clone(), terms, template: None };
+        let (es, _) = stub_entities_in(&grid, &fb, &mut lines, &mut stub_spots, Some(&mut room));
+        let added = lines[l0..].to_vec();
+        stub_lines.truncate(before);
+        stub_lines.extend(added.iter().cloned());
+        label_stubs.insert(i, es);
+        (added, stub_spots[s0..].to_vec())
+    });
+
+    let mut wired = Vec::new();
+    let mut labelled = Vec::new();
+    for (i, u) in units.iter().enumerate() {
+        match &outcome[i] {
+            Some(route) => {
+                wired.push(u.net.clone());
+                for line in stubs_of(i) {
+                    let e = Entity::Wire(default_wire(line));
+                    sheet.entities.insert(e.id(), e);
+                }
+                for e in emit(u, route) {
+                    sheet.entities.insert(e.id(), e);
+                }
+            }
+            None => {
+                labelled.push(u.net.clone());
+                for e in label_stubs.remove(&i).unwrap_or_default() {
+                    sheet.entities.insert(e.id(), e);
+                }
+            }
+        }
+    }
+    wired.sort_by(|a, b| natural_cmp(a, b));
+    labelled.sort_by(|a, b| natural_cmp(a, b));
+    (sheet, wired, labelled)
+}
+
+#[cfg(test)]
+mod wire_tests {
+    use super::*;
+    use crate::netlist::extract_netlist;
+
+    fn open() -> Project {
+        Project::new("open")
+    }
+
+    /// The request the golden file is made from: three columns, P24X as power, GND as ground (the default).
+    fn request() -> DraftRequest {
+        DraftRequest {
+            name: "Function".into(),
+            columns: vec![vec!["U1".into(), "M1".into()], vec!["U2".into()], vec!["TB1".into(), "R1".into()]],
+            pins: BTreeMap::new(),
+            power_nets: vec!["P24X".into()],
+            ground_nets: None,
+            destinations: BTreeMap::new(),
+            paper: DraftPaper::A3,
+            pitch_mm: 5.0,
+        }
+    }
+
+    fn plan() -> DraftPlan {
+        plan_function_sheet(&fixture_source(), &open(), &request()).expect("the fixture request is valid")
+    }
+
+    /// Device pin groups (reference, pin key) of a sheet, only the references in `refs`, only groups of two or more pins.
+    fn groups(sheet: &Sheet, refs: &[&str]) -> BTreeSet<BTreeSet<(String, String)>> {
+        let defs = sheet_symbol_defs(sheet);
+        extract_netlist(sheet, &defs)
+            .into_iter()
+            .map(|n| {
+                n.pins
+                    .into_iter()
+                    .filter(|p| refs.contains(&p.reference.as_str()))
+                    .map(|p| (p.reference, p.pin))
+                    .collect::<BTreeSet<_>>()
+            })
+            .filter(|g| g.len() >= 2)
+            .collect()
+    }
+
+    fn source_groups(refs: &[&str]) -> BTreeSet<BTreeSet<(String, String)>> {
+        groups(&fixture_source().sheets[0], refs)
+    }
+
+    const REFS: [&str; 5] = ["U1", "M1", "U2", "TB1", "R1"];
+
+    fn wires(sheet: &Sheet) -> Vec<Wire> {
+        sheet.entities.values().filter_map(|e| if let Entity::Wire(w) = e { Some(w.clone()) } else { None }).collect()
+    }
+
+    fn junctions(sheet: &Sheet) -> Vec<Point> {
+        sheet.entities.values().filter_map(|e| if let Entity::Junction(j) = e { Some(j.at) } else { None }).collect()
+    }
+
+    /// Replaces every distinct UUID in the text by `#<n>`, n = order of first appearance.
+    fn normalise_ids(text: &str) -> String {
+        let bytes = text.as_bytes();
+        let is_uuid_at = |i: usize| -> bool {
+            if i + 36 > bytes.len() {
+                return false;
+            }
+            bytes[i..i + 36].iter().enumerate().all(|(k, &b)| if [8, 13, 18, 23].contains(&k) { b == b'-' } else { b.is_ascii_hexdigit() })
+        };
+        let mut seen: Vec<&str> = Vec::new();
+        let mut out = String::new();
+        let mut i = 0;
+        while i < bytes.len() {
+            if is_uuid_at(i) {
+                let id = &text[i..i + 36];
+                let n = seen.iter().position(|s| *s == id).unwrap_or_else(|| {
+                    seen.push(id);
+                    seen.len() - 1
+                });
+                out.push_str(&format!("#{n}"));
+                i += 36;
+            } else {
+                let ch = text[i..].chars().next().unwrap();
+                out.push(ch);
+                i += ch.len_utf8();
+            }
+        }
+        out
+    }
+
+    /// The sheet with its entities in an order that does not depend on the random ids: sorted by what they draw, ids counted up from 1.
+    fn canonical(sheet: &Sheet) -> Sheet {
+        let mut items: Vec<(String, Entity)> = sheet
+            .entities
+            .values()
+            .map(|e| {
+                let key = match e {
+                    Entity::Symbol(s) => format!("S {} {} {} {:?} {} {:?}", s.symbol_id, s.reference, s.value, s.at, s.rotation, s.attrs),
+                    Entity::Wire(w) => format!("W {:?}", w.points),
+                    Entity::NetLabel(n) => format!("L {} {:?} {:?}", n.name, n.at, n.attrs),
+                    Entity::Junction(j) => format!("J {:?}", j.at),
+                    other => panic!("the planner emits no {other:?}"),
+                };
+                (key, e.clone())
+            })
+            .collect();
+        items.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut out = sheet.clone();
+        out.entities.clear();
+        for (n, (_, mut e)) in items.into_iter().enumerate() {
+            let id = uuid::Uuid::from_u128(n as u128 + 1);
+            match &mut e {
+                Entity::Symbol(s) => s.id = id,
+                Entity::Wire(w) => w.id = id,
+                Entity::NetLabel(l) => l.id = id,
+                Entity::Junction(j) => j.id = id,
+                _ => {}
+            }
+            out.entities.insert(id, e);
+        }
+        out
+    }
+
+    fn svg_of(sheet: &Sheet) -> String {
+        let sheet = &canonical(sheet);
+        let mut project = Project::new("draft");
+        project.sheets.clear();
+        project.sheets.push(sheet.clone());
+        let svg = crate::svg::project_sheet_to_svg(&project, sheet.id, &crate::symbol::builtin_symbols()).expect("the sheet renders");
+        normalise_ids(&svg)
+    }
+
+    /// The pins of every segment of every wire strictly inside a unit's body (not the edge) are wires through a symbol.
+    fn wires_through_bodies(sheet: &Sheet) -> usize {
+        let defs = sheet_symbol_defs(sheet);
+        let bodies: Vec<Rect> = crate::tidy::symbol_boxes(sheet, &defs)
+            .into_iter()
+            .filter(|(id, _)| matches!(sheet.entities.get(id), Some(Entity::Symbol(s)) if !s.reference.is_empty()))
+            .map(|(_, r)| r)
+            .collect();
+        // 箱の外形は、ピンの線の太さぶん (0.25 mm) ピンの側へはみ出している
+        let e = 0.3;
+        let mut n = 0;
+        for w in wires(sheet) {
+            for s in w.points.windows(2) {
+                let (x0, x1, y0, y1) = (s[0].x.min(s[1].x), s[0].x.max(s[1].x), s[0].y.min(s[1].y), s[0].y.max(s[1].y));
+                n += bodies.iter().filter(|r| x0 < r.max.x - e && x1 > r.min.x + e && y0 < r.max.y - e && y1 > r.min.y + e).count();
+            }
+        }
+        n
+    }
+
+    /// Pairs of segments of different wires that lie on one line and share a stretch of positive length.
+    fn overlapping_wires(sheet: &Sheet) -> usize {
+        let ws = wires(sheet);
+        let mut n = 0;
+        for (a, wa) in ws.iter().enumerate() {
+            for wb in ws.iter().skip(a + 1) {
+                for sa in wa.points.windows(2) {
+                    for sb in wb.points.windows(2) {
+                        let vertical = |s: &[Point]| (s[0].x - s[1].x).abs() < 1e-9;
+                        if vertical(sa) && vertical(sb) && (sa[0].x - sb[0].x).abs() < 1e-9 {
+                            let lo = sa[0].y.min(sa[1].y).max(sb[0].y.min(sb[1].y));
+                            let hi = sa[0].y.max(sa[1].y).min(sb[0].y.max(sb[1].y));
+                            n += usize::from(hi - lo > 1e-6);
+                        } else if !vertical(sa) && !vertical(sb) && (sa[0].y - sb[0].y).abs() < 1e-9 {
+                            let lo = sa[0].x.min(sa[1].x).max(sb[0].x.min(sb[1].x));
+                            let hi = sa[0].x.max(sa[1].x).min(sb[0].x.max(sb[1].x));
+                            n += usize::from(hi - lo > 1e-6);
+                        }
+                    }
+                }
+            }
+        }
+        n
+    }
+
+    /// The internal nets of the drafted sheet are joined by wires, and the device pins of the sheet fall into exactly the groups the source has.
+    /// 下書きのシートの内部のネットは配線でつながり、機器のピンのまとまりは元の図と全く同じになる。
+    #[test]
+    fn an_internal_net_is_wired_and_the_sheet_netlist_matches_the_source() {
+        let p = plan();
+        assert!(p.labelled.is_empty(), "labelled: {:?}", p.labelled);
+        assert_eq!(groups(&p.sheet, &REFS), source_groups(&REFS));
+        assert!(!wires(&p.sheet).is_empty());
+    }
+
+    /// A net of three pins is drawn as a tree with a junction dot where the branches meet.
+    /// 3本のピンをつなぐネットは、枝分かれのところに接点の丸がある木として描かれる。
+    #[test]
+    fn a_three_pin_net_gets_a_junction() {
+        let p = plan();
+        assert!(p.wired.iter().any(|n| n == "SIG_A"));
+        let dots = junctions(&p.sheet);
+        assert!(!dots.is_empty(), "SIG_A has three pins and needs a junction");
+        for d in dots {
+            let ends = wires(&p.sheet).iter().filter(|w| w.points.iter().any(|q| q.distance_to(&d) < 1e-6)).count();
+            assert!(ends >= 3 || wires(&p.sheet).iter().any(|w| w.points.windows(2).any(|s| {
+                (s[0].x == s[1].x && (s[0].x - d.x).abs() < 1e-6 && d.y > s[0].y.min(s[1].y) && d.y < s[0].y.max(s[1].y))
+                    || (s[0].y == s[1].y && (s[0].y - d.y).abs() < 1e-6 && d.x > s[0].x.min(s[1].x) && d.x < s[0].x.max(s[1].x))
+            })));
+        }
+    }
+
+    /// The drafted sheet has no wire that ends in the air and no pin that is in use but unconnected.
+    /// 下書きのシートには、途中で宙に浮く配線も、使うはずなのに未接続のピンも無い。
+    #[test]
+    fn no_wire_is_dangling_and_no_pin_in_use_is_unconnected() {
+        let p = plan();
+        let defs = sheet_symbol_defs(&p.sheet);
+        let diags = crate::verify::verify_sheet(&p.sheet, &defs);
+        assert!(!diags.iter().any(|d| d.code == "erc.dangling_wire"), "{diags:?}");
+        let unconnected: Vec<_> = diags.iter().filter(|d| d.code == "erc.unconnected_pin").collect();
+        assert!(unconnected.is_empty(), "{unconnected:?}");
+    }
+
+    /// Wires cross each other only at right angles, never run along one another, and never cross a unit's body.
+    /// 配線どうしは直角にしか交わらず、並んで重なることも、機器の本体を横切ることも無い。
+    #[test]
+    fn wires_cross_only_at_right_angles_and_stay_off_boxes() {
+        let p = plan();
+        for w in wires(&p.sheet) {
+            assert!(w.points.windows(2).all(|s| (s[0].x - s[1].x).abs() < 1e-9 || (s[0].y - s[1].y).abs() < 1e-9), "slanted wire {:?}", w.points);
+        }
+        assert_eq!(overlapping_wires(&p.sheet), 0);
+        assert_eq!(wires_through_bodies(&p.sheet), 0);
+        let m = crate::tidy::tidy_metrics(&p.sheet, &sheet_symbol_defs(&p.sheet));
+        // 配線の頂点は経路探索の格子 (1.25 mm) の上にある。2.5 mm の格子から外れる数 (off_grid) は数えない
+        assert_eq!((m.label_overlaps, m.symbol_overlaps), (0, 0), "{m:?}");
+    }
+
+    /// When the router cannot place a net, its pins get short stubs with same-named labels, no half-drawn wire is left, and the connections stay the same.
+    /// 配線を引けないネットは、各ピンに短い線と同じ名前のラベルを付けてつなぐ。引きかけの線は残らず、つながりは変わらない。
+    #[test]
+    fn a_net_the_router_cannot_place_is_joined_by_labels() {
+        let opts = RouteOptions { frame_margin_mm: 100.0, ..RouteOptions::default() };
+        let p = plan_with_options(&fixture_source(), &open(), &request(), &opts).expect("valid");
+        assert!(!p.labelled.is_empty(), "a frame margin of 100 mm leaves no room for the wires");
+        for net in &p.labelled {
+            assert!(!p.wired.contains(net), "{net} is both wired and labelled");
+        }
+        assert_eq!(groups(&p.sheet, &REFS), source_groups(&REFS));
+        let names: Vec<String> =
+            p.sheet.entities.values().filter_map(|e| if let Entity::NetLabel(l) = e { Some(l.name.clone()) } else { None }).collect();
+        for net in &p.labelled {
+            assert!(names.iter().filter(|n| *n == net).count() >= 2, "{net} needs a label at each end: {names:?}");
+        }
+        let defs = sheet_symbol_defs(&p.sheet);
+        let diags = crate::verify::verify_sheet(&p.sheet, &defs);
+        assert!(!diags.iter().any(|d| d.code == "erc.dangling_wire"), "{diags:?}");
+    }
+
+    /// The counts in the plan are the counts on the sheet.
+    /// 計画の数 (機器・ピン・配線したネット・印・タグ) は、シートの中身と一致する。
+    #[test]
+    fn the_plan_counts_match_the_sheet() {
+        let p = plan();
+        let units: usize = p.sheet.entities.values().filter(|e| matches!(e, Entity::Symbol(s) if !s.reference.is_empty())).count();
+        assert_eq!(p.units, units);
+        assert_eq!(p.units, 5);
+        assert_eq!(p.pins, 17);
+        assert_eq!(p.marked, DraftMarked { power: 3, ground: 4 });
+        let marks = p.sheet.entities.values().filter(|e| matches!(e, Entity::Symbol(s) if s.reference.is_empty())).count();
+        assert_eq!(marks, 7);
+        assert_eq!(p.wired, vec!["M1.1".to_string(), "SIG_A".into(), "SIG_B".into(), "U2.9".into()]);
+        assert!(p.tagged.is_empty());
+        assert_eq!(p.skipped_pins.len(), 2);
+    }
+
+    /// Planning the same request twice gives the same sheet once the random entity ids are replaced by their order of appearance.
+    /// 同じ依頼を2回計画すると、ランダムな id を出てくる順の番号に置き換えれば、全く同じシートになる。
+    #[test]
+    fn planning_twice_gives_the_same_sheet() {
+        let (a, b) = (plan(), plan());
+        assert_eq!(svg_of(&a.sheet), svg_of(&b.sheet));
+        assert_eq!((a.wired, a.labelled, a.marked), (b.wired, b.labelled, b.marked));
+    }
+
+    /// A net that leaves the sheet keeps its tag, and the wire to the tag ends exactly on the tag's stub, so the pins and the tag are one net.
+    /// シートの外へ出るネットはタグを持ち、そこへ行く配線はタグの短い線の先でちょうど止まるので、ピンとタグは1つのネットになる。
+    #[test]
+    fn a_leaving_net_with_two_pins_is_wired_to_its_tag() {
+        let mut req = request();
+        req.columns = vec![vec!["U1".into()], vec!["U2".into()]];
+        req.pins.insert("U1".into(), vec!["4".into(), "5".into()]);
+        req.pins.insert("U2".into(), vec!["3".into(), "4".into()]);
+        let p = plan_function_sheet(&fixture_source(), &open(), &req).expect("valid");
+        assert_eq!(p.tagged.len(), 2, "{:?}", p.tagged);
+        assert!(p.labelled.is_empty());
+        let got = groups(&p.sheet, &["U1", "U2"]);
+        let want: BTreeSet<BTreeSet<(String, String)>> = [
+            [("U1", "4"), ("U2", "4")].iter().map(|(a, b)| (a.to_string(), b.to_string())).collect(),
+            [("U1", "5"), ("U2", "3")].iter().map(|(a, b)| (a.to_string(), b.to_string())).collect(),
+        ]
+        .into_iter()
+        .collect();
+        // U1.4 and U2.4 are SIG_B (TB1.2 is elsewhere), U1.5 and U2.3 are SIG_A (R1.1 is elsewhere)
+        assert_eq!(got, want);
+        let defs = sheet_symbol_defs(&p.sheet);
+        let nets = extract_netlist(&p.sheet, &defs);
+        for (net, _) in p.tagged.iter().map(|t| (t.net.clone(), ())) {
+            let n = nets.iter().find(|n| n.label.as_deref() == Some(net.as_str())).expect("the tag names a net");
+            assert!(n.pins.len() >= 2, "{net}: {:?}", n.pins);
+        }
+    }
+
+    /// A drafted sheet draws exactly like the golden file (entity ids replaced by their order of appearance). Set MADAKE_UPDATE_DRAFT_GOLDEN=1 to rewrite the file.
+    /// 下書きのシートは、ゴールデンファイル (id は出てくる順の番号に置き換え) と全く同じ絵になる。ファイルを作り直すときは MADAKE_UPDATE_DRAFT_GOLDEN=1 を付ける。
+    #[test]
+    fn a_drafted_sheet_renders_like_the_golden_file() {
+        let svg = svg_of(&plan().sheet);
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/draft-sheet.svg");
+        if std::env::var_os("MADAKE_UPDATE_DRAFT_GOLDEN").is_some() {
+            std::fs::write(&path, &svg).expect("write the golden file");
+        }
+        let want = std::fs::read_to_string(&path).expect("the golden file exists");
+        assert!(svg == want, "the drafted sheet differs from tests/golden/draft-sheet.svg");
     }
 }

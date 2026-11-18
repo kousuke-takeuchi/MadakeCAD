@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3828仕様項目**。
+全6領域・**3837仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -489,6 +489,15 @@
 - 描画範囲より背の高い列は断られ、メッセージに列の番号と超えた量 (mm) が入る。 <sub>`a_column_taller_than_the_area_is_refused_with_the_excess`</sub>
 - 列のあいだに配線の通り道をあけられないときは断られ、入りきらない列の番号と超えた量 (mm) が入る。 <sub>`columns_that_leave_no_channel_are_refused`</sub>
 - 見て確かめるために、配置した見本のシートを MADAKE_DRAFT_SVG の場所へSVGで書き出す (--ignored で実行する)。 <sub>`write_the_laid_out_sheet_as_svg`</sub>
+- 下書きのシートの内部のネットは配線でつながり、機器のピンのまとまりは元の図と全く同じになる。 <sub>`an_internal_net_is_wired_and_the_sheet_netlist_matches_the_source`</sub>
+- 3本のピンをつなぐネットは、枝分かれのところに接点の丸がある木として描かれる。 <sub>`a_three_pin_net_gets_a_junction`</sub>
+- 下書きのシートには、途中で宙に浮く配線も、使うはずなのに未接続のピンも無い。 <sub>`no_wire_is_dangling_and_no_pin_in_use_is_unconnected`</sub>
+- 配線どうしは直角にしか交わらず、並んで重なることも、機器の本体を横切ることも無い。 <sub>`wires_cross_only_at_right_angles_and_stay_off_boxes`</sub>
+- 配線を引けないネットは、各ピンに短い線と同じ名前のラベルを付けてつなぐ。引きかけの線は残らず、つながりは変わらない。 <sub>`a_net_the_router_cannot_place_is_joined_by_labels`</sub>
+- 計画の数 (機器・ピン・配線したネット・印・タグ) は、シートの中身と一致する。 <sub>`the_plan_counts_match_the_sheet`</sub>
+- 同じ依頼を2回計画すると、ランダムな id を出てくる順の番号に置き換えれば、全く同じシートになる。 <sub>`planning_twice_gives_the_same_sheet`</sub>
+- シートの外へ出るネットはタグを持ち、そこへ行く配線はタグの短い線の先でちょうど止まるので、ピンとタグは1つのネットになる。 <sub>`a_leaving_net_with_two_pins_is_wired_to_its_tag`</sub>
+- 下書きのシートは、ゴールデンファイル (id は出てくる順の番号に置き換え) と全く同じ絵になる。ファイルを作り直すときは MADAKE_UPDATE_DRAFT_GOLDEN=1 を付ける。 <sub>`a_drafted_sheet_renders_like_the_golden_file`</sub>
 
 ### DXF連携 (AutoCAD Electrical / EPLAN)
 

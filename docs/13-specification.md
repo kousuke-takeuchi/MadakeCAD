@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3828 specification clauses** across 6 areas.
+**3837 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -489,6 +489,15 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A column taller than the drawing area is refused, and the message names the column and the excess in mm. <sub>`a_column_taller_than_the_area_is_refused_with_the_excess`</sub>
 - Columns that leave no routing channel between them are refused, naming the column that does not fit and the excess in mm. <sub>`columns_that_leave_no_channel_are_refused`</sub>
 - Writes the laid-out fixture sheet as SVG to the path in MADAKE_DRAFT_SVG so that it can be looked at (run with --ignored). <sub>`write_the_laid_out_sheet_as_svg`</sub>
+- The internal nets of the drafted sheet are joined by wires, and the device pins of the sheet fall into exactly the groups the source has. <sub>`an_internal_net_is_wired_and_the_sheet_netlist_matches_the_source`</sub>
+- A net of three pins is drawn as a tree with a junction dot where the branches meet. <sub>`a_three_pin_net_gets_a_junction`</sub>
+- The drafted sheet has no wire that ends in the air and no pin that is in use but unconnected. <sub>`no_wire_is_dangling_and_no_pin_in_use_is_unconnected`</sub>
+- Wires cross each other only at right angles, never run along one another, and never cross a unit's body. <sub>`wires_cross_only_at_right_angles_and_stay_off_boxes`</sub>
+- When the router cannot place a net, its pins get short stubs with same-named labels, no half-drawn wire is left, and the connections stay the same. <sub>`a_net_the_router_cannot_place_is_joined_by_labels`</sub>
+- The counts in the plan are the counts on the sheet. <sub>`the_plan_counts_match_the_sheet`</sub>
+- Planning the same request twice gives the same sheet once the random entity ids are replaced by their order of appearance. <sub>`planning_twice_gives_the_same_sheet`</sub>
+- A net that leaves the sheet keeps its tag, and the wire to the tag ends exactly on the tag's stub, so the pins and the tag are one net. <sub>`a_leaving_net_with_two_pins_is_wired_to_its_tag`</sub>
+- A drafted sheet draws exactly like the golden file (entity ids replaced by their order of appearance). Set MADAKE_UPDATE_DRAFT_GOLDEN=1 to rewrite the file. <sub>`a_drafted_sheet_renders_like_the_golden_file`</sub>
 
 ### DXF interop (AutoCAD Electrical / EPLAN)
 

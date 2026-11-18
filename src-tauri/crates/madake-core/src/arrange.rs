@@ -550,12 +550,12 @@ enum Fate {
 }
 
 /// ラベルでつなぐかたまり1つ分: ラベル名と、端子 (移動後の位置・向き・引き出しの配線の属性)。
-struct Fallback {
-    net: String,
-    name: String,
-    terms: Vec<(Point, Option<Dir>, Wire)>,
+pub(crate) struct Fallback {
+    pub(crate) net: String,
+    pub(crate) name: String,
+    pub(crate) terms: Vec<(Point, Option<Dir>, Wire)>,
     /// 新しいラベルの向きと属性の手本。
-    template: Option<NetLabel>,
+    pub(crate) template: Option<NetLabel>,
 }
 
 fn near(a: Point, b: Point) -> bool {
@@ -1112,12 +1112,12 @@ fn dir_step(d: Dir) -> (f64, f64) {
 
 /// ラベルでつなぐ短い線1本と、その先のラベル (検算で、他の物に触れていないかを調べる)。
 #[derive(Debug, Clone)]
-struct Stub {
-    wire: EntityId,
-    label: EntityId,
-    name: String,
+pub(crate) struct Stub {
+    pub(crate) wire: EntityId,
+    pub(crate) label: EntityId,
+    pub(crate) name: String,
     /// 検算でこの線自身の接触を調べるか (残した電源マークの線は調べず、同じ名前の仲間としてだけ数える)。
-    check: bool,
+    pub(crate) check: bool,
 }
 
 /// 点と線分の距離。
@@ -1339,7 +1339,7 @@ fn stretch_wires(
 }
 
 /// 短い線の先のラベルの文字が読める場所を調べる道具: 動かした後の図面の部品の外形・文字と、置いたラベルの文字の矩形。
-struct TextRoom {
+pub(crate) struct TextRoom {
     /// (持ち主のid・置いたラベルはNone, 矩形)。
     rects: Vec<(Option<EntityId>, crate::tidy::Rect)>,
     /// 部品の外形 (伸ばした短い線が突き抜けてはいけないもの)。
@@ -1389,7 +1389,7 @@ impl TextRoom {
     }
 
     /// [`Self::build`]に、旗の中の自動の行き先 (ラベル名 → 行き先) を渡す版。
-    fn build_with(sheet: &Sheet, defs: &[SymbolDef], gone: &BTreeSet<EntityId>, dests: BTreeMap<String, String>) -> Self {
+    pub(crate) fn build_with(sheet: &Sheet, defs: &[SymbolDef], gone: &BTreeSet<EntityId>, dests: BTreeMap<String, String>) -> Self {
         let bodies: Vec<(EntityId, crate::tidy::Rect)> =
             crate::tidy::symbol_boxes(sheet, defs).into_iter().filter(|(id, _)| !gone.contains(id)).collect();
         let mut rects: Vec<(Option<EntityId>, crate::tidy::Rect)> = bodies.iter().map(|(id, r)| (Some(*id), *r)).collect();
@@ -1441,7 +1441,7 @@ fn stub_entities(grid: &RouteGrid, fb: &Fallback, lines: &mut Vec<Vec<Point>>, s
 /// まっすぐな線も候補に足し、タグ付きのラベルは旗の本体がピンと反対を向くように向きを決める。
 /// そういう候補が無ければ上の選び方のまま。選んだラベルの文字の矩形は `room` に足し、次のラベルが避ける。
 /// 置いた線と端は `lines`・`spots` に足し、次の短い線が避ける。ラベルの向きと属性は、消したラベルがあればその先頭に倣う。
-fn stub_entities_in(
+pub(crate) fn stub_entities_in(
     grid: &RouteGrid,
     fb: &Fallback,
     lines: &mut Vec<Vec<Point>>,
@@ -1827,7 +1827,7 @@ fn route_touches(lines: &[Vec<Point>], dots: &[Point], new_lines: &[Vec<Point>],
 /// 配線を置く)、置いた線と点を返してもらう。次の回は、その回に置いた線・点に触れる経路の単位だけを、置いたもの全てと
 /// 残した経路を避けて引き直す。新しく引けない単位が出なくなったら終わる。引けない単位は回ごとに1つ以上減るので、
 /// 回数は単位の数 + 1 以下。返り値は単位ごとの経路 (引けなければ None) と、回ごとに引いた単位の番号。
-fn route_rounds(
+pub(crate) fn route_rounds(
     grid: &RouteGrid,
     route: &[RouteUnit],
     fixed_lines: &[Vec<Point>],
