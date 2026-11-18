@@ -1113,3 +1113,1251 @@ mod model_tests {
         assert!(e.contains("W1") && e.contains("cable"), "{e}");
     }
 }
+
+// --- layout
+//
+// 第2段: model から、新しいシートを組み立てる。箱 (ブロック) とライブラリのシンボル、電源・接地の印、
+// 出ていくネットのタグ、5mm の短い線 (スタブ)、配線の端 (Terminal)。内部の配線はまだ引かない (次の段)。
+// ピンの座標は自分で計算せず、組んだシートから `route::pin_points` で読む。
+
+use crate::geometry::Point;
+use crate::model::{NetLabel, Orientation, PaperSize, Sheet, Wire, XrefStyle};
+use crate::netlist::pin_positions;
+use crate::pin_wiring::world_dir;
+use crate::route::{pin_points, Dir};
+use crate::symbol::PinDir;
+use crate::tidy::{symbol_bounds, text_width, Rect};
+
+/// 印・タグを置くための、ピンから伸ばす短い線の長さ (mm)。
+pub(crate) const STUB_MM: f64 = 5.0;
+/// 隣り合う列のあいだに最低限あける、配線の通り道の幅 (mm)。
+pub(crate) const MIN_CHANNEL_MM: f64 = 15.0;
+/// 描画範囲 (図枠の内側) の縁から空ける余白 (mm)。
+const AREA_MARGIN_MM: f64 = 10.0;
+/// 箱の上に書く参照記号・型番のために、箱の上へ確保する高さ (mm)。
+const CAPTION_MM: f64 = 7.5;
+/// 列の中で機器と機器のあいだにあける最小のすき間 (ピン間隔の何倍か)。
+const GAP_PITCHES: f64 = 4.0;
+const GRID_MM: f64 = 2.5;
+/// 電源の印のシンボル。
+const POWER_SYMBOL: &str = "power_rail";
+/// 印の値 (ネット名) の文字高さ (mm)。幅の見積りに使う。
+const MARK_TEXT_MM: f64 = 2.5;
+/// 箱のピン名の文字高さ (mm): ピン間隔5mmなら2.5、2.5mmなら2.2 (どちらも2.2mm以上)。
+fn pin_text_mm(pitch: f64) -> f64 {
+    if pitch >= 5.0 { 2.5 } else { 2.2 }
+}
+
+/// 配線の端: 配線を引く相手のピン (またはタグの線の先) と、箱から離れる向き。
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Terminal {
+    /// [`DraftModel::nets`] の添字。
+    pub net: usize,
+    pub at: Point,
+    pub dir: Dir,
+}
+
+/// layout 段の結果。
+#[derive(Debug, Clone)]
+pub(crate) struct DraftLayout {
+    /// 箱・シンボル・印・タグ・スタブを置いたシート (内部の配線はまだ無い)。
+    pub sheet: Sheet,
+    /// 配線の端 (このシートで2本以上のピンを持つ、内部または出ていくネットのピンごとに1つ)。
+    pub terminals: Vec<Terminal>,
+    /// タグを付けたネット (ネット名, このシートが持つピンの数)。
+    pub tagged: Vec<(String, usize)>,
+    pub power_marks: usize,
+    pub ground_marks: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Side {
+    Left,
+    Right,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Row {
+    Pin(usize),
+    Gap,
+}
+
+/// 機器1つの、ピンの辺・並び (箱の機器だけが並びを持つ)。
+#[derive(Debug, Clone)]
+struct UnitPlan {
+    /// ピンごとの辺。
+    side: Vec<Side>,
+    /// ピンごとの、箱から離れる向き (スタブの向き)。
+    stub: Vec<Dir>,
+    /// 電源のピン (左辺の先頭)・信号のピン・接地のピン (左辺の末尾)。ピンの添字。箱の機器だけ。
+    power: Vec<usize>,
+    left: Vec<usize>,
+    right: Vec<usize>,
+    ground: Vec<usize>,
+}
+
+impl UnitPlan {
+    /// 辺の行 (ピンとすき間)。電源・信号・接地のうち空でない組のあいだに1行のすき間を入れる。
+    fn rows(&self, side: Side) -> Vec<Row> {
+        let groups: Vec<&Vec<usize>> = match side {
+            Side::Left => [&self.power, &self.left, &self.ground].into_iter().filter(|g| !g.is_empty()).collect(),
+            Side::Right => [&self.right].into_iter().filter(|g| !g.is_empty()).collect(),
+        };
+        let mut out = Vec::new();
+        for (i, g) in groups.iter().enumerate() {
+            if i > 0 {
+                out.push(Row::Gap);
+            }
+            out.extend(g.iter().map(|&p| Row::Pin(p)));
+        }
+        out
+    }
+
+    /// 箱の中のピンの並び (左辺の上から下、次に右辺)。
+    fn box_order(&self) -> Vec<usize> {
+        [Side::Left, Side::Right]
+            .into_iter()
+            .flat_map(|s| self.rows(s))
+            .filter_map(|r| if let Row::Pin(p) = r { Some(p) } else { None })
+            .collect()
+    }
+
+    /// ピンが辺の何行目にあるか (電源・接地・信号とも)。
+    fn row_index(&self, pin: usize) -> Option<usize> {
+        [Side::Left, Side::Right].into_iter().find_map(|s| self.rows(s).iter().position(|r| *r == Row::Pin(pin)))
+    }
+}
+
+fn dir_of_pin(d: PinDir) -> Dir {
+    match d {
+        PinDir::Up => Dir::N,
+        PinDir::Down => Dir::S,
+        PinDir::Left => Dir::W,
+        PinDir::Right => Dir::E,
+    }
+}
+
+fn unit_vec(d: Dir) -> (f64, f64) {
+    match d {
+        Dir::N => (0.0, -1.0),
+        Dir::E => (1.0, 0.0),
+        Dir::S => (0.0, 1.0),
+        Dir::W => (-1.0, 0.0),
+    }
+}
+
+fn grid_up(v: f64) -> f64 {
+    (v / GRID_MM - 1e-9).ceil() * GRID_MM
+}
+
+fn grid_down(v: f64) -> f64 {
+    (v / GRID_MM + 1e-9).floor() * GRID_MM
+}
+
+fn origin() -> Point {
+    Point::new(0.0, 0.0)
+}
+
+/// ライブラリのシンボルのピンの (辺, 箱から離れる向き)。置き場所は原点で、元の回転・反転のまま。
+fn library_pin_geometry(unit: &DraftUnit, defs: &[SymbolDef]) -> Result<Vec<(Side, Dir)>, String> {
+    let index = DefIndex::new(defs);
+    let mut inst = unit.source.clone();
+    inst.at = origin();
+    let def = index
+        .get(&inst)
+        .ok_or_else(|| format!("The symbol of {} has no definition", unit.reference))?;
+    let positions = pin_positions(&inst, &def);
+    unit.pins
+        .iter()
+        .map(|p| {
+            let i = positions
+                .iter()
+                .position(|(k, _)| *k == p.key)
+                .ok_or_else(|| format!("The symbol {} has no pin {}", unit.reference, p.key))?;
+            let dir = world_dir(def.pins[i].dir, &inst);
+            let x = positions[i].1.x;
+            let side = if x < -1e-9 {
+                Side::Left
+            } else if x > 1e-9 {
+                Side::Right
+            } else if matches!(dir, PinDir::Left | PinDir::Up) {
+                Side::Left
+            } else {
+                Side::Right
+            };
+            Ok((side, dir_of_pin(dir)))
+        })
+        .collect()
+}
+
+/// 機器ごとに、ピンの辺を決める (並びは自然順のまま)。
+fn plan_units(model: &DraftModel, defs: &[SymbolDef]) -> Result<Vec<UnitPlan>, String> {
+    let last_column = model.units.iter().map(|u| u.column).max().unwrap_or(0);
+    // ネットごとの、このシートのピン (機器の添字, ピンの添字)
+    let mut by_net: BTreeMap<usize, Vec<(usize, usize)>> = BTreeMap::new();
+    for (u, unit) in model.units.iter().enumerate() {
+        for (p, pin) in unit.pins.iter().enumerate() {
+            by_net.entry(pin.net).or_default().push((u, p));
+        }
+    }
+    let mut plans = Vec::new();
+    for unit in model.units.iter() {
+        let mut plan = UnitPlan {
+            side: vec![Side::Left; unit.pins.len()],
+            stub: vec![Dir::W; unit.pins.len()],
+            power: Vec::new(),
+            left: Vec::new(),
+            right: Vec::new(),
+            ground: Vec::new(),
+        };
+        if !unit.is_block {
+            for (p, (side, dir)) in library_pin_geometry(unit, defs)?.into_iter().enumerate() {
+                plan.side[p] = side;
+                plan.stub[p] = dir;
+            }
+            plans.push(plan);
+            continue;
+        }
+        for (p, pin) in unit.pins.iter().enumerate() {
+            let net = &model.nets[pin.net];
+            let side = match net.class {
+                NetClass::Power => {
+                    plan.power.push(p);
+                    Side::Left
+                }
+                NetClass::Ground => {
+                    plan.ground.push(p);
+                    Side::Left
+                }
+                NetClass::Internal | NetClass::Leaving => {
+                    let (mut to_left, mut to_right) = (0usize, 0usize);
+                    for &(u2, _) in by_net.get(&pin.net).into_iter().flatten() {
+                        match model.units[u2].column.cmp(&unit.column) {
+                            Ordering::Less => to_left += 1,
+                            Ordering::Greater => to_right += 1,
+                            Ordering::Equal => {}
+                        }
+                    }
+                    let side = match (to_left, to_right) {
+                        (0, 0) => {
+                            if unit.column == last_column { Side::Right } else { Side::Left }
+                        }
+                        (_, 0) => Side::Left,
+                        (0, _) => Side::Right,
+                        (l, r) => {
+                            if r > l { Side::Right } else { Side::Left }
+                        }
+                    };
+                    match side {
+                        Side::Left => plan.left.push(p),
+                        Side::Right => plan.right.push(p),
+                    }
+                    side
+                }
+            };
+            plan.side[p] = side;
+            plan.stub[p] = if side == Side::Left { Dir::W } else { Dir::E };
+        }
+        let by_key = |a: &usize, b: &usize| natural_cmp(&unit.pins[*a].key, &unit.pins[*b].key);
+        plan.power.sort_by(by_key);
+        plan.left.sort_by(by_key);
+        plan.right.sort_by(by_key);
+        plan.ground.sort_by(by_key);
+        plans.push(plan);
+    }
+    Ok(plans)
+}
+
+/// 重心法で信号のピンの並びを決める。左から右、右から左の2回の掃引。決定的 (同じ重心は自然順)。
+fn order_pins(model: &DraftModel, plans: &mut [UnitPlan], tops: &[f64], mids: &[f64], pitch: f64) {
+    let last_column = model.units.iter().map(|u| u.column).max().unwrap_or(0);
+    // 信号のネットの、相手のピン (自分の機器の外)
+    let mut by_net: BTreeMap<usize, Vec<(usize, usize)>> = BTreeMap::new();
+    for (u, unit) in model.units.iter().enumerate() {
+        for (p, pin) in unit.pins.iter().enumerate() {
+            if matches!(model.nets[pin.net].class, NetClass::Internal | NetClass::Leaving) {
+                by_net.entry(pin.net).or_default().push((u, p));
+            }
+        }
+    }
+    for pass in 0..2 {
+        let mut columns: Vec<usize> = (0..=last_column).collect();
+        if pass == 1 {
+            columns.reverse();
+        }
+        for column in columns {
+            for u in (0..model.units.len()).filter(|&u| model.units[u].column == column && model.units[u].is_block) {
+                for side in [Side::Left, Side::Right] {
+                    let list = if side == Side::Left { plans[u].left.clone() } else { plans[u].right.clone() };
+                    if list.len() < 2 {
+                        continue;
+                    }
+                    let bary: Vec<Option<f64>> = list
+                        .iter()
+                        .map(|&p| {
+                            let ys: Vec<f64> = by_net[&model.units[u].pins[p].net]
+                                .iter()
+                                .filter(|(u2, _)| *u2 != u)
+                                .map(|&(u2, p2)| {
+                                    if model.units[u2].is_block {
+                                        tops[u2] + plans[u2].row_index(p2).unwrap_or(0) as f64 * pitch
+                                    } else {
+                                        mids[u2]
+                                    }
+                                })
+                                .collect();
+                            if ys.is_empty() { None } else { Some(ys.iter().sum::<f64>() / ys.len() as f64) }
+                        })
+                        .collect();
+                    let slots: Vec<usize> = (0..list.len()).filter(|&i| bary[i].is_some()).collect();
+                    let mut movable: Vec<(f64, usize)> = slots.iter().map(|&i| (bary[i].unwrap(), list[i])).collect();
+                    movable.sort_by(|a, b| {
+                        if (a.0 - b.0).abs() < 1e-9 {
+                            natural_cmp(&model.units[u].pins[a.1].key, &model.units[u].pins[b.1].key)
+                        } else {
+                            a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal)
+                        }
+                    });
+                    let mut next = list.clone();
+                    for (slot, (_, p)) in slots.iter().zip(movable) {
+                        next[*slot] = p;
+                    }
+                    if side == Side::Left {
+                        plans[u].left = next;
+                    } else {
+                        plans[u].right = next;
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn row_json(unit: &DraftUnit, rows: &[Row]) -> serde_json::Value {
+    rows.iter()
+        .map(|r| match r {
+            Row::Gap => serde_json::json!({"gap": 1}),
+            Row::Pin(p) => {
+                let pin = &unit.pins[*p];
+                if pin.key == pin.name {
+                    serde_json::json!({"name": pin.name})
+                } else if pin.name.is_empty() {
+                    serde_json::json!({"no": pin.key})
+                } else {
+                    serde_json::json!({"no": pin.key, "name": pin.name})
+                }
+            }
+        })
+        .collect::<Vec<_>>()
+        .into()
+}
+
+/// 箱の属性と外形 (幅, 高さ)。大きさは既存のブロックの規則 ([`block::block_box`]) の最小値。
+fn block_attrs(unit: &DraftUnit, plan: &UnitPlan, pitch: f64) -> Result<(BTreeMap<String, String>, (f64, f64)), String> {
+    let mut attrs: BTreeMap<String, String> = unit
+        .source
+        .attrs
+        .iter()
+        .filter(|(k, _)| !k.starts_with("block_") && k.as_str() != crate::pin_groups::PIN_GROUPS_ATTR)
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    let pins = serde_json::json!({
+        "left": row_json(unit, &plan.rows(Side::Left)),
+        "right": row_json(unit, &plan.rows(Side::Right)),
+    });
+    attrs.insert(block::BLOCK_PINS_ATTR.into(), pins.to_string());
+    attrs.insert(block::BLOCK_VIEW_ATTR.into(), "1".into());
+    attrs.insert(block::BLOCK_PITCH_ATTR.into(), if pitch >= 5.0 { "5" } else { "2.5" }.into());
+    attrs.insert(block::BLOCK_PIN_TEXT_ATTR.into(), pin_text_mm(pitch).to_string());
+    let spec = block::parse_block_spec(&attrs)?;
+    let (w, h) = block::block_box(&spec);
+    attrs.insert(block::BLOCK_SIZE_ATTR.into(), serde_json::json!({"w": w, "h": h}).to_string());
+    Ok((attrs, (w, h)))
+}
+
+/// 機器の実体 (箱かライブラリのシンボル) を `at` に置く。
+fn unit_instance(unit: &DraftUnit, plan: &UnitPlan, pitch: f64, at: Point) -> Result<SymbolInstance, String> {
+    let mut inst = unit.source.clone();
+    inst.id = uuid::Uuid::new_v4();
+    inst.at = at;
+    if unit.is_block {
+        inst.symbol_id = BLOCK_SYMBOL_ID.into();
+        inst.rotation = 0;
+        inst.mirror = false;
+        inst.attrs = block_attrs(unit, plan, pitch)?.0;
+    }
+    Ok(inst)
+}
+
+/// 印の向き: ピンの接続方向が `want` を向く回転。
+fn mark_rotation(def: &SymbolDef, want: PinDir) -> u16 {
+    let Some(pin) = def.pins.first() else { return 0 };
+    for rotation in [0u16, 90, 180, 270] {
+        let probe = SymbolInstance {
+            id: uuid::Uuid::nil(),
+            symbol_id: def.id.clone(),
+            at: origin(),
+            rotation,
+            mirror: false,
+            reference: String::new(),
+            value: String::new(),
+            attrs: BTreeMap::new(),
+        };
+        if world_dir(pin.dir, &probe) == want {
+            return rotation;
+        }
+    }
+    0
+}
+
+/// 印・タグ・スタブの1つ (どの機器のものか付き)。
+struct DecoItem {
+    unit: usize,
+    entity: Entity,
+}
+
+struct Deco {
+    items: Vec<DecoItem>,
+    terminals: Vec<Terminal>,
+    tagged: Vec<(String, usize)>,
+    power: usize,
+    ground: usize,
+}
+
+fn stub_wire(from: Point, to: Point) -> Entity {
+    Entity::Wire(Wire {
+        id: uuid::Uuid::new_v4(),
+        points: vec![from, to],
+        color: "black".into(),
+        sq: 0.75,
+        length_m: None,
+        length_source: Default::default(),
+        part_no: None,
+        net: None,
+        dashed: false,
+        weight_mm: None,
+    })
+}
+
+/// 置いた機器のピンから、印・タグ・スタブ・配線の端を作る。
+fn decorate(
+    model: &DraftModel,
+    plans: &[UnitPlan],
+    sheet: &Sheet,
+    ids: &[crate::model::EntityId],
+    defs: &[SymbolDef],
+) -> Result<Deco, String> {
+    let points: BTreeMap<(crate::model::EntityId, String), Point> = pin_points(sheet, defs)
+        .into_iter()
+        .map(|p| ((p.entity, p.number), p.pos))
+        .collect();
+    let index = DefIndex::new(defs);
+    // ネットごとのこのシートのピン数
+    let mut count = vec![0usize; model.nets.len()];
+    for unit in &model.units {
+        for pin in &unit.pins {
+            count[pin.net] += 1;
+        }
+    }
+    // 出ていくネットのタグは、列 → 列の中の行 → 箱の中のピンの並びで最初のピンに付ける
+    let mut tag_pin: BTreeMap<usize, (usize, usize)> = BTreeMap::new();
+    for (u, unit) in model.units.iter().enumerate() {
+        let order: Vec<usize> = if unit.is_block { plans[u].box_order() } else { (0..unit.pins.len()).collect() };
+        for p in order {
+            let net = unit.pins[p].net;
+            if model.nets[net].class == NetClass::Leaving {
+                tag_pin.entry(net).or_insert((u, p));
+            }
+        }
+    }
+    let mut out = Deco { items: Vec::new(), terminals: Vec::new(), tagged: Vec::new(), power: 0, ground: 0 };
+    for (u, unit) in model.units.iter().enumerate() {
+        let order: Vec<usize> = if unit.is_block { plans[u].box_order() } else { (0..unit.pins.len()).collect() };
+        for p in order {
+            let pin = &unit.pins[p];
+            let net = &model.nets[pin.net];
+            let at = *points
+                .get(&(ids[u], pin.key.clone()))
+                .ok_or_else(|| format!("The unit {} has no pin {} on the new sheet", unit.reference, pin.key))?;
+            let dir = plans[u].stub[p];
+            let (dx, dy) = unit_vec(dir);
+            let end = Point::new(at.x + dx * STUB_MM, at.y + dy * STUB_MM);
+            let mut item = |entity: Entity| out.items.push(DecoItem { unit: u, entity });
+            match net.class {
+                NetClass::Power | NetClass::Ground => {
+                    let ground = net.class == NetClass::Ground;
+                    let symbol_id = if ground { net.ground_symbol.as_deref().unwrap_or(POWER_SYMBOL) } else { POWER_SYMBOL };
+                    let def = index
+                        .by_id(symbol_id)
+                        .or_else(|| index.by_id(POWER_SYMBOL))
+                        .ok_or_else(|| format!("The mark symbol {symbol_id} is not available"))?;
+                    // 電源の印は上へ、接地の印は下へ伸びる (ピンの接続方向が下・上を向く)
+                    let rotation = mark_rotation(def, if ground { PinDir::Up } else { PinDir::Down });
+                    let value = if def.net_from_value { net.name.clone() } else { String::new() };
+                    item(stub_wire(at, end));
+                    item(Entity::Symbol(SymbolInstance {
+                        id: uuid::Uuid::new_v4(),
+                        symbol_id: def.id.clone(),
+                        at: end,
+                        rotation,
+                        mirror: false,
+                        reference: String::new(),
+                        value,
+                        attrs: BTreeMap::new(),
+                    }));
+                    if ground {
+                        out.ground += 1;
+                    } else {
+                        out.power += 1;
+                    }
+                }
+                NetClass::Internal | NetClass::Leaving => {
+                    let is_tag = tag_pin.get(&pin.net) == Some(&(u, p));
+                    if is_tag {
+                        let mut attrs = BTreeMap::new();
+                        // 旗の本体は箱から離れる側へ伸びる: 左辺のピンは「右」(本体が基準点の左)、右辺のピンは「左」+外向き
+                        let right_side = plans[u].side[p] == Side::Right;
+                        attrs.insert(crate::net_tag::TAG_ATTR.to_string(), if right_side { "left" } else { "right" }.to_string());
+                        if right_side {
+                            attrs.insert(crate::net_tag::FLOW_ATTR.to_string(), "out".to_string());
+                        }
+                        if let Some(dest) = &net.dest {
+                            attrs.insert(crate::net_tag::DEST_ATTR.to_string(), dest.clone());
+                        }
+                        item(stub_wire(at, end));
+                        item(Entity::NetLabel(NetLabel {
+                            id: uuid::Uuid::new_v4(),
+                            at: end,
+                            name: net.name.clone(),
+                            rotation: 0,
+                            attrs,
+                        }));
+                        out.tagged.push((net.name.clone(), count[pin.net]));
+                    }
+                    if count[pin.net] >= 2 {
+                        out.terminals.push(Terminal { net: pin.net, at: if is_tag { end } else { at }, dir });
+                    }
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// 置いたものが占める矩形。
+fn item_rect(entity: &Entity, defs: &[SymbolDef], sheet: &Sheet, label_font: f64) -> Option<Rect> {
+    match entity {
+        Entity::Wire(w) => {
+            let mut it = w.points.iter();
+            let first = *it.next()?;
+            let mut r = Rect::from_corners(first, first);
+            it.for_each(|p| r.extend(*p));
+            Some(r)
+        }
+        Entity::NetLabel(l) => {
+            let dest = crate::net_tag::tag_dest(l);
+            match crate::net_tag::net_tag_with(l, label_font, sheet.xref_style, dest) {
+                Some(tag) => {
+                    let mut it = tag.points.iter();
+                    let first = *it.next()?;
+                    let mut r = Rect::from_corners(first, first);
+                    it.for_each(|p| r.extend(*p));
+                    Some(r)
+                }
+                None => Some(Rect::from_corners(l.at, l.at)),
+            }
+        }
+        Entity::Symbol(s) => {
+            let index = DefIndex::new(defs);
+            let def = index.get(s)?;
+            let mut r = symbol_bounds(s, &def).unwrap_or_else(|| Rect::from_corners(s.at, s.at));
+            // 印の値 (ネット名) は印の外形の上下に書かれる
+            let half = text_width(&s.value, MARK_TEXT_MM) / 2.0;
+            r.extend(Point::new(s.at.x - half, r.min.y - MARK_TEXT_MM));
+            r.extend(Point::new(s.at.x + half, r.max.y + MARK_TEXT_MM));
+            Some(r)
+        }
+        _ => None,
+    }
+}
+
+fn union(a: Option<Rect>, b: Rect) -> Option<Rect> {
+    Some(match a {
+        None => b,
+        Some(mut r) => {
+            r.extend(b.min);
+            r.extend(b.max);
+            r
+        }
+    })
+}
+
+/// モデルから新しいシートの配置を作る。何も変えない。
+pub(crate) fn lay_out(model: &DraftModel, open: &Project, req: &DraftRequest) -> Result<DraftLayout, String> {
+    let pitch = req.pitch_mm;
+    let units = &model.units;
+    if units.is_empty() {
+        return Err("No unit carries a pin: nothing to draw".to_string());
+    }
+    let size = match req.paper {
+        DraftPaper::A3 => PaperSize::A3,
+        DraftPaper::A4 => PaperSize::A4,
+    };
+    let new_sheet = |annotation: Option<f64>| {
+        let mut s = Sheet::new(req.name.trim(), size, Orientation::Landscape);
+        s.xref_style = XrefStyle::SheetName;
+        s.annotation_text_mm = annotation;
+        // 短い線に「0.75sq 黒」の注記が付くと印・タグの文字に重なる。下書きでは配線注記を描かない
+        s.hide_wire_notes = true;
+        s
+    };
+    // 旗の高さがピン間隔より1mm以上小さくなる注記文字高 (ただし下限は注記文字高の下限)
+    let tag_font = (pitch - 1.0) / (1.0 + 2.0 * crate::net_tag::TAG_PAD / crate::svg::LABEL_FONT);
+    let annotation = (tag_font * crate::model::DEFAULT_ANNOTATION_TEXT_MM / crate::svg::LABEL_FONT)
+        .clamp(crate::model::MIN_ANNOTATION_TEXT_MM, crate::model::DEFAULT_ANNOTATION_TEXT_MM);
+    let annotation = (annotation * 10.0).floor() / 10.0;
+    let probe = new_sheet(Some(annotation));
+    let label_font = crate::svg::LABEL_FONT * probe.annotation_scale();
+
+    // 定義: 同梱+ライブラリのシンボルと、印のシンボル
+    let mut defs_sheet = new_sheet(Some(annotation));
+    let mut wanted_marks: BTreeSet<&str> = BTreeSet::new();
+    wanted_marks.insert(POWER_SYMBOL);
+    for n in &model.nets {
+        if let Some(id) = &n.ground_symbol {
+            wanted_marks.insert(id.as_str());
+        }
+    }
+    for id in wanted_marks {
+        defs_sheet.entities.insert(
+            uuid::Uuid::new_v4(),
+            Entity::Symbol(SymbolInstance {
+                id: uuid::Uuid::new_v4(),
+                symbol_id: id.to_string(),
+                at: origin(),
+                rotation: 0,
+                mirror: false,
+                reference: String::new(),
+                value: String::new(),
+                attrs: BTreeMap::new(),
+            }),
+        );
+    }
+    for u in units.iter().filter(|u| !u.is_block) {
+        let e = Entity::Symbol(u.source.clone());
+        defs_sheet.entities.insert(e.id(), e);
+    }
+    let defs = sheet_symbol_defs(&defs_sheet);
+
+    let mut plans = plan_units(model, &defs)?;
+
+    // 機器の高さ (箱の高さ、またはシンボルの外形) と、列ごとに積んだときの上端 (並べ替えの目安)
+    let heights: Vec<f64> = units
+        .iter()
+        .zip(&plans)
+        .map(|(u, plan)| {
+            if u.is_block {
+                Ok(block_attrs(u, plan, pitch)?.1 .1)
+            } else {
+                let inst = unit_instance(u, plan, pitch, origin())?;
+                let index = DefIndex::new(&defs);
+                let def = index.get(&inst).ok_or_else(|| format!("The symbol of {} has no definition", u.reference))?;
+                Ok(symbol_bounds(&inst, &def).map_or(0.0, |r| r.max.y - r.min.y))
+            }
+        })
+        .collect::<Result<_, String>>()?;
+    let gap = grid_up(GAP_PITCHES * pitch);
+    let mut cursor: BTreeMap<usize, f64> = BTreeMap::new();
+    let mut tops = vec![0.0; units.len()];
+    let mut mids = vec![0.0; units.len()];
+    for (u, unit) in units.iter().enumerate() {
+        let c = cursor.entry(unit.column).or_insert(0.0);
+        tops[u] = *c + CAPTION_MM;
+        mids[u] = tops[u] + heights[u] / 2.0;
+        *c = tops[u] + heights[u] + gap;
+    }
+    order_pins(model, &mut plans, &tops, &mids, pitch);
+
+    // 原点に置いて、印・タグまで含めた各機器の占める矩形を測る
+    let origin_instances: Vec<SymbolInstance> = units
+        .iter()
+        .zip(&plans)
+        .map(|(u, plan)| unit_instance(u, plan, pitch, origin()))
+        .collect::<Result<_, String>>()?;
+    let mut scratch = new_sheet(Some(annotation));
+    for inst in &origin_instances {
+        scratch.entities.insert(inst.id, Entity::Symbol(inst.clone()));
+    }
+    let scratch_ids: Vec<_> = origin_instances.iter().map(|i| i.id).collect();
+    let probe_deco = decorate(model, &plans, &scratch, &scratch_ids, &defs)?;
+    let mut extent: Vec<Option<Rect>> = vec![None; units.len()];
+    for (u, inst) in origin_instances.iter().enumerate() {
+        let index = DefIndex::new(&defs);
+        let def = index.get(inst).ok_or_else(|| format!("The symbol of {} has no definition", units[u].reference))?;
+        if let Some(mut r) = symbol_bounds(inst, &def) {
+            r.extend(Point::new(r.min.x, r.min.y - CAPTION_MM));
+            extent[u] = union(extent[u], r);
+        }
+    }
+    for item in &probe_deco.items {
+        if let Some(r) = item_rect(&item.entity, &defs, &scratch, label_font) {
+            extent[item.unit] = union(extent[item.unit], r);
+        }
+    }
+    let extent: Vec<Rect> = extent
+        .into_iter()
+        .map(|r| r.unwrap_or_else(|| Rect::from_corners(origin(), origin())))
+        .collect();
+
+    // 描画範囲 (図枠の内側から余白を引いたもの) と表題欄
+    let template = crate::frame_template::for_project(open);
+    let (frame, title) = crate::arrange::frame_areas(&template, &probe);
+    let area_x0 = grid_up(frame.0 + AREA_MARGIN_MM);
+    let area_x1 = grid_down(frame.2 - AREA_MARGIN_MM);
+    let area_y0 = grid_up(frame.1 + AREA_MARGIN_MM);
+    let area_bottom = grid_down(frame.3 - AREA_MARGIN_MM);
+
+    // 列: 機器のある列だけ、左から右へ。列の左右の張り出し (機器の原点を列の中心線に揃える)
+    let columns: Vec<usize> = {
+        let mut c: Vec<usize> = units.iter().map(|u| u.column).collect();
+        c.sort_unstable();
+        c.dedup();
+        c
+    };
+    let members = |c: usize| -> Vec<usize> { (0..units.len()).filter(|&u| units[u].column == c).collect() };
+    let left_of: Vec<f64> = columns.iter().map(|&c| grid_up(members(c).iter().map(|&u| -extent[u].min.x).fold(0.0, f64::max))).collect();
+    let right_of: Vec<f64> = columns.iter().map(|&c| grid_up(members(c).iter().map(|&u| extent[u].max.x).fold(0.0, f64::max))).collect();
+    let widths: Vec<f64> = left_of.iter().zip(&right_of).map(|(l, r)| l + r).collect();
+    let avail = area_x1 - area_x0;
+    let mut need = 0.0;
+    for (k, w) in widths.iter().enumerate() {
+        need += w + if k > 0 { MIN_CHANNEL_MM } else { 0.0 };
+        if need > avail + 1e-9 {
+            return Err(format!(
+                "Column {} does not fit the width: the columns need {:.1} mm more than the drawing area gives (with a channel of at least {} mm between columns)",
+                columns[k] + 1,
+                need - avail,
+                MIN_CHANNEL_MM
+            ));
+        }
+    }
+    let total: f64 = widths.iter().sum();
+    let (first_x, channel) = if columns.len() == 1 {
+        (grid_up(area_x0 + (avail - total) / 2.0), 0.0)
+    } else {
+        (area_x0, grid_down((avail - total) / (columns.len() - 1) as f64))
+    };
+    let mut column_x = Vec::new(); // 列の左端
+    let mut x = first_x;
+    for w in &widths {
+        column_x.push(x);
+        x += w + channel;
+    }
+
+    // 縦: 列ごとに上から積む。表題欄に重なる列は表題欄の上までしか使えない
+    let mut positions = vec![origin(); units.len()];
+    for (k, &c) in columns.iter().enumerate() {
+        let (xl, xr) = (column_x[k], column_x[k] + widths[k]);
+        let end = if xr > title.0 - GRID_MM && xl < title.2 + GRID_MM { grid_down(title.1 - GRID_MM) } else { area_bottom };
+        let cx = column_x[k] + left_of[k];
+        let mut cursor = area_y0;
+        for u in members(c) {
+            let top = grid_up(-extent[u].min.y);
+            let bottom = grid_up(extent[u].max.y);
+            positions[u] = Point::new(cx, cursor + top);
+            cursor += top + bottom + gap;
+        }
+        let used = cursor - gap - area_y0;
+        if used > end - area_y0 + 1e-9 {
+            return Err(format!(
+                "Column {} is {:.1} mm taller than the drawing area: move a unit to another sheet",
+                c + 1,
+                used - (end - area_y0)
+            ));
+        }
+    }
+
+    // 置いて、印・タグ・スタブを作る
+    let mut sheet = new_sheet(Some(annotation));
+    let mut ids = Vec::new();
+    for (u, unit) in units.iter().enumerate() {
+        let inst = unit_instance(unit, &plans[u], pitch, positions[u])?;
+        ids.push(inst.id);
+        sheet.entities.insert(inst.id, Entity::Symbol(inst));
+    }
+    let deco = decorate(model, &plans, &sheet, &ids, &defs)?;
+    for item in deco.items {
+        sheet.entities.insert(item.entity.id(), item.entity);
+    }
+    Ok(DraftLayout { sheet, terminals: deco.terminals, tagged: deco.tagged, power_marks: deco.power, ground_marks: deco.ground })
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+    use crate::model::Wire;
+
+    fn open() -> Project {
+        Project::new("open")
+    }
+
+    fn request(columns: &[&[&str]]) -> DraftRequest {
+        DraftRequest {
+            name: "Function".into(),
+            columns: columns.iter().map(|c| c.iter().map(|r| r.to_string()).collect()).collect(),
+            pins: BTreeMap::new(),
+            power_nets: Vec::new(),
+            ground_nets: None,
+            destinations: BTreeMap::new(),
+            paper: DraftPaper::A3,
+            pitch_mm: 5.0,
+        }
+    }
+
+    fn model_of(req: &DraftRequest) -> DraftModel {
+        build_model(&fixture_source(), &open(), req).expect("the request is valid")
+    }
+
+    fn layout(req: &DraftRequest) -> DraftLayout {
+        lay_out(&model_of(req), &open(), req).expect("the layout fits")
+    }
+
+    fn refusal(req: &DraftRequest) -> String {
+        lay_out(&model_of(req), &open(), req).expect_err("the layout is refused")
+    }
+
+    fn defs_of(l: &DraftLayout) -> Vec<SymbolDef> {
+        sheet_symbol_defs(&l.sheet)
+    }
+
+    fn symbols(l: &DraftLayout) -> Vec<SymbolInstance> {
+        l.sheet.entities.values().filter_map(|e| if let Entity::Symbol(s) = e { Some(s.clone()) } else { None }).collect()
+    }
+
+    fn unit_symbol(l: &DraftLayout, reference: &str) -> SymbolInstance {
+        symbols(l).into_iter().find(|s| s.reference == reference).expect("the unit is on the sheet")
+    }
+
+    fn marks(l: &DraftLayout) -> Vec<SymbolInstance> {
+        symbols(l).into_iter().filter(|s| s.reference.is_empty()).collect()
+    }
+
+    fn labels(l: &DraftLayout) -> Vec<NetLabel> {
+        l.sheet.entities.values().filter_map(|e| if let Entity::NetLabel(n) = e { Some(n.clone()) } else { None }).collect()
+    }
+
+    fn wires(l: &DraftLayout) -> Vec<Wire> {
+        l.sheet.entities.values().filter_map(|e| if let Entity::Wire(w) = e { Some(w.clone()) } else { None }).collect()
+    }
+
+    fn pin(l: &DraftLayout, reference: &str, key: &str) -> crate::route::PinPt {
+        pin_points(&l.sheet, &defs_of(l))
+            .into_iter()
+            .find(|p| p.reference == reference && p.number == key)
+            .unwrap_or_else(|| panic!("{reference}.{key} is on the sheet"))
+    }
+
+    fn is_left(l: &DraftLayout, reference: &str, key: &str) -> bool {
+        pin(l, reference, key).pos.x < unit_symbol(l, reference).at.x
+    }
+
+    /// Everything that depends on the layout but not on the random entity ids, as sorted text.
+    fn fingerprint(l: &DraftLayout) -> Vec<String> {
+        let mut out: Vec<String> = l
+            .sheet
+            .entities
+            .values()
+            .map(|e| match e {
+                Entity::Symbol(s) => format!("S {} {} {} {:?} {} {} {:?}", s.symbol_id, s.reference, s.value, s.at, s.rotation, s.mirror, s.attrs),
+                Entity::Wire(w) => format!("W {:?}", w.points),
+                Entity::NetLabel(n) => format!("L {} {:?} {:?}", n.name, n.at, n.attrs),
+                other => format!("? {other:?}"),
+            })
+            .collect();
+        out.sort();
+        out.extend(l.terminals.iter().map(|t| format!("T {} {:?} {:?}", t.net, t.at, t.dir)));
+        out.extend(l.tagged.iter().map(|t| format!("G {t:?}")));
+        out
+    }
+
+    fn block_rows(l: &DraftLayout, reference: &str, side: &str) -> Vec<String> {
+        let inst = unit_symbol(l, reference);
+        let pins: serde_json::Value = serde_json::from_str(&inst.attrs[block::BLOCK_PINS_ATTR]).unwrap();
+        pins[side]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| if r.get("gap").is_some() { "gap".to_string() } else { r["no"].as_str().unwrap_or_else(|| r["name"].as_str().unwrap()).to_string() })
+            .collect()
+    }
+
+    fn on_grid(v: f64) -> bool {
+        let k = v / GRID_MM;
+        (k - k.round()).abs() < 1e-6
+    }
+
+    // ---- boxes
+
+    /// A box shows only the pins the model carries, is marked as a view, and has pin text at least 2.2 mm high.
+    /// 箱は、運ぶことになったピンだけを持ち、部分表示の印が付き、ピンの文字は2.2mm以上の高さになる。
+    #[test]
+    fn a_box_carries_only_its_pins_and_is_a_view() {
+        let l = layout(&request(&[&["U1"], &["U2"]]));
+        let u1 = unit_symbol(&l, "U1");
+        assert_eq!(u1.symbol_id, BLOCK_SYMBOL_ID);
+        assert!(block::is_view(&u1));
+        let all: Vec<String> = ["left", "right"].iter().flat_map(|s| block_rows(&l, "U1", s)).filter(|r| r != "gap").collect();
+        assert_eq!(all.len(), 5, "pin 6 is on a one-pin net and is not carried: {all:?}");
+        assert!(!all.contains(&"6".to_string()));
+        for pitch in [5.0, 2.5] {
+            let mut r = request(&[&["U1"], &["U2"]]);
+            r.pitch_mm = pitch;
+            let u1 = unit_symbol(&layout(&r), "U1");
+            assert!(u1.attrs[block::BLOCK_PIN_TEXT_ATTR].parse::<f64>().unwrap() >= 2.2);
+            assert_eq!(u1.attrs[block::BLOCK_PITCH_ATTR], if pitch == 5.0 { "5" } else { "2.5" });
+        }
+    }
+
+    /// A library symbol is not turned into a box: it is placed again with its own reference, value and rotation.
+    /// 抵抗のようなライブラリのシンボルは箱にせず、元の参照記号・値・向きのまま同じシンボルを置く。
+    #[test]
+    fn a_library_symbol_is_placed_as_it_is() {
+        let l = layout(&request(&[&["U1"], &["R1"]]));
+        let r1 = unit_symbol(&l, "R1");
+        assert_eq!(r1.symbol_id, "resistor");
+        assert_eq!(r1.value, "10k");
+        assert_eq!(r1.rotation, 0);
+    }
+
+    // ---- sides
+
+    /// A pin whose peers on the sheet are all in columns to the left goes on the left side of its box.
+    /// 相手のピンがすべて左の列にあるピンは、箱の左側に出る。
+    #[test]
+    fn a_pin_with_peers_on_the_left_goes_left() {
+        let l = layout(&request(&[&["U1"], &["U2"]]));
+        assert!(is_left(&l, "U2", "3"), "U2.3 meets U1.5 on its left");
+    }
+
+    /// A pin whose peers are all in columns to the right goes on the right side of its box.
+    /// 相手のピンがすべて右の列にあるピンは、箱の右側に出る。
+    #[test]
+    fn a_pin_with_peers_on_the_right_goes_right() {
+        let l = layout(&request(&[&["U1"], &["U2"]]));
+        assert!(!is_left(&l, "U1", "5"), "U1.5 meets U2.3 on its right");
+    }
+
+    /// With the same number of peers on both sides, the pin goes to the left.
+    /// 相手が左右に同じ数あるときは、左側に出る。
+    #[test]
+    fn a_tie_goes_left() {
+        let l = layout(&request(&[&["U1"], &["U2"], &["TB1"]]));
+        assert!(is_left(&l, "U2", "4"), "U2.4 has one peer on each side");
+    }
+
+    /// A pin with no peer on the sheet goes to the right side only for a unit in the last column; otherwise to the left.
+    /// このシートに相手のいないピンは、最後の列の機器なら右側、それ以外は左側に出る。
+    #[test]
+    fn a_pin_with_no_peer_goes_right_only_in_the_last_column() {
+        let alone = layout(&request(&[&["U1"]]));
+        assert!(!is_left(&alone, "U1", "5"), "the only column is the last column");
+        let first = layout(&request(&[&["U1"], &["M1"]]));
+        assert!(is_left(&first, "U1", "5"), "U1 is not in the last column");
+    }
+
+    /// Power pins are the first rows of the left side and ground pins the last rows, each group set off by one spacer row.
+    /// 電源のピンは左側の最初の行、接地のピンは左側の最後の行に並び、信号のピンとは1行のすき間で区切られる。
+    #[test]
+    fn power_pins_come_first_and_ground_pins_last_on_the_left_side() {
+        let mut r = request(&[&["U1"], &["U2"]]);
+        r.power_nets = vec!["P24X".into()];
+        let l = layout(&r);
+        assert_eq!(block_rows(&l, "U1", "left"), ["1", "gap", "3", "gap", "2"]);
+    }
+
+    /// A unit that has only power and ground pins on the sheet is still drawn, with the marks and nothing else.
+    /// 電源・接地のピンしか持たない機器も、印だけを付けた箱として描かれる。
+    #[test]
+    fn a_unit_with_only_power_pins_is_drawn_with_marks() {
+        let mut r = request(&[&["TB1"]]);
+        r.pins.insert("TB1".into(), vec!["1".into()]);
+        r.power_nets = vec!["P24X".into()];
+        let l = layout(&r);
+        assert_eq!(unit_symbol(&l, "TB1").symbol_id, BLOCK_SYMBOL_ID);
+        assert_eq!(l.power_marks, 1);
+        assert!(l.terminals.is_empty() && labels(&l).is_empty());
+    }
+
+    // ---- order
+
+    /// Pins are ordered so that the wires between two boxes do not cross, even when the source order is reversed.
+    /// 2つの箱のあいだの線が交差しないように、元の順序が逆でもピンの並びを入れ替える。
+    #[test]
+    fn straight_connections_do_not_cross() {
+        let l = layout(&request(&[&["U1"], &["U2"]]));
+        // U1.4 - U2.4 (SIG_B) and U1.5 - U2.3 (SIG_A): in key order they would cross
+        let (a4, a5) = (pin(&l, "U1", "4").pos.y, pin(&l, "U1", "5").pos.y);
+        let (b3, b4) = (pin(&l, "U2", "3").pos.y, pin(&l, "U2", "4").pos.y);
+        assert_eq!(a5 < a4, b3 < b4, "the order of the two wires is the same at both ends");
+    }
+
+    /// The same request always gives the same layout.
+    /// 同じ入力からは、いつも同じ配置ができる。
+    #[test]
+    fn the_same_request_gives_the_same_layout() {
+        let mut r = request(&[&["U1", "M1"], &["U2"], &["TB1", "R1"]]);
+        r.power_nets = vec!["P24X".into()];
+        assert_eq!(fingerprint(&layout(&r)), fingerprint(&layout(&r)));
+    }
+
+    // ---- marks
+
+    /// Every power pin gets its own rail mark on a 5 mm stub, and the mark is named after the net.
+    /// 電源のピンには1本ずつ、5mmの短い線の先に、ネット名を値にした電源の印が付く。
+    #[test]
+    fn each_power_pin_gets_its_own_rail_mark_named_after_the_net() {
+        let mut r = request(&[&["U1"], &["U2"], &["TB1"]]);
+        r.power_nets = vec!["P24X".into()];
+        let l = layout(&r);
+        let rails: Vec<_> = marks(&l).into_iter().filter(|m| m.value == "P24X").collect();
+        assert_eq!(rails.len(), 3);
+        assert_eq!(l.power_marks, 3);
+        for (reference, key) in [("U1", "1"), ("U2", "1"), ("TB1", "1")] {
+            let p = pin(&l, reference, key).pos;
+            let end = Point::new(p.x - STUB_MM, p.y);
+            assert!(rails.iter().any(|m| m.symbol_id == "power_rail" && m.rotation == 0 && m.at == end), "{reference}.{key}");
+            assert!(wires(&l).iter().any(|w| w.points == vec![p, end]), "the stub is a real wire");
+        }
+    }
+
+    /// A ground mark uses the mark symbol the model names for that net, with the net name as its value when the symbol takes it from the value.
+    /// 接地の印は、モデルが示す元の図の印のシンボルを使う。値からネット名を取るシンボルなら、値にネット名を入れる。
+    #[test]
+    fn ground_uses_the_marks_symbol_of_the_source() {
+        let r = request(&[&["M1"]]);
+        let mut m = model_of(&r);
+        for n in m.nets.iter_mut().filter(|n| n.class == NetClass::Ground) {
+            n.ground_symbol = Some("earth_protective".into());
+        }
+        let l = lay_out(&m, &open(), &r).unwrap();
+        let mark = marks(&l).into_iter().next().expect("M1.2 is a ground pin");
+        assert_eq!(mark.symbol_id, "earth_protective");
+        assert_eq!(l.ground_marks, 1);
+        let fixture = layout(&r);
+        assert_eq!(marks(&fixture)[0].value, "GND", "the fixture marks are value-named rails");
+    }
+
+    /// When the source has no ground mark, the library rail mark is used, pointing down, with the net name as its value.
+    /// 元の図に接地の印が無いときは、ライブラリの電源の印を下向き (180度回転) にして、ネット名を値にして置く。
+    #[test]
+    fn ground_falls_back_to_the_library_mark() {
+        let r = request(&[&["M1"]]);
+        let mut m = model_of(&r);
+        for n in m.nets.iter_mut() {
+            n.ground_symbol = None;
+        }
+        let l = lay_out(&m, &open(), &r).unwrap();
+        let mark = marks(&l).into_iter().next().unwrap();
+        assert_eq!((mark.symbol_id.as_str(), mark.rotation, mark.value.as_str()), ("power_rail", 180, "GND"));
+    }
+
+    // ---- tags
+
+    /// A leaving net gets one tag, on the first pin in column order; all its carried pins are terminals, and that pin's terminal is the end of the tag stub.
+    /// 出ていくネットにはタグが1つだけ付き、列の順で最初のピンに置かれる。持っているピンはすべて配線の端になり、タグのピンの端は線の先になる。
+    #[test]
+    fn a_leaving_net_gets_one_tag_at_the_first_pin_in_column_order() {
+        let l = layout(&request(&[&["U1"], &["U2"]]));
+        let tags: Vec<_> = labels(&l).into_iter().filter(|n| n.name == "SIG_A").collect();
+        assert_eq!(tags.len(), 1, "R1 is not on the sheet, so SIG_A leaves it");
+        let p = pin(&l, "U1", "5").pos;
+        assert_eq!(tags[0].at, Point::new(p.x + STUB_MM, p.y), "U1 is in the first column");
+        assert!(l.tagged.contains(&("SIG_A".to_string(), 2)));
+        let net = l.terminals.iter().find(|t| t.at == tags[0].at).map(|t| t.net).expect("the tag stub end is a terminal");
+        let ends: Vec<Point> = l.terminals.iter().filter(|t| t.net == net).map(|t| t.at).collect();
+        assert_eq!(ends.len(), 2);
+        assert!(ends.contains(&pin(&l, "U2", "3").pos), "the other pin is a terminal at the pin itself");
+    }
+
+    /// A leaving net with one carried pin has a tag but no terminal.
+    /// 持っているピンが1本だけの出ていくネットには、タグが付くが、配線の端は作らない。
+    #[test]
+    fn a_leaving_net_with_one_pin_has_no_terminal() {
+        let l = layout(&request(&[&["U1"]]));
+        assert!(!labels(&l).is_empty());
+        assert!(l.terminals.is_empty());
+    }
+
+    /// A tag on a right-side pin points outward (tag_flow = out); a tag on a left-side pin has its body on the outer side too, and no flow.
+    /// 右側のピンのタグは外向き (tag_flow = out)、左側のピンのタグは本体が外側 (左) に伸びる向きで、out は付かない。
+    #[test]
+    fn a_tag_on_a_right_side_pin_points_outward() {
+        let right = layout(&request(&[&["U1"], &["U2"]]));
+        let tag = labels(&right).into_iter().find(|n| n.name == "SIG_B").unwrap();
+        assert_eq!(tag.attrs.get("tag").map(String::as_str), Some("left"), "the body grows to the right, away from the box");
+        assert_eq!(tag.attrs.get("tag_flow").map(String::as_str), Some("out"));
+        let left = layout(&request(&[&["U2"], &["TB1"]]));
+        let tag = labels(&left).into_iter().find(|n| n.name == "SIG_A").unwrap();
+        assert_eq!(tag.attrs.get("tag").map(String::as_str), Some("right"), "the body grows to the left, away from the box");
+        assert!(!tag.attrs.contains_key("tag_flow"));
+    }
+
+    /// The destinations option becomes the destination text of the tag.
+    /// destinations に書いた行き先は、タグの行き先の文字になる。
+    #[test]
+    fn a_destination_option_becomes_the_tags_destination() {
+        let mut r = request(&[&["U1"], &["U2"]]);
+        r.destinations.insert("SIG_A".into(), "cabinet B".into());
+        let l = layout(&r);
+        let tag = labels(&l).into_iter().find(|n| n.name == "SIG_A").unwrap();
+        assert_eq!(tag.attrs.get("tag_dest").map(String::as_str), Some("cabinet B"));
+        let other = labels(&l).into_iter().find(|n| n.name == "SIG_B").unwrap();
+        assert!(!other.attrs.contains_key("tag_dest"));
+    }
+
+    /// Tags on adjacent pins do not touch, at 5 mm and at 2.5 mm pitch.
+    /// 隣り合うピンのタグは、ピン間隔が5mmでも2.5mmでも、互いに触れない。
+    #[test]
+    fn tags_on_adjacent_pins_do_not_touch() {
+        for pitch in [5.0, 2.5] {
+            let mut r = request(&[&["U1"]]);
+            r.pitch_mm = pitch;
+            r.destinations.insert("SIG_A".into(), "cabinet B".into());
+            let l = layout(&r);
+            let font = crate::svg::LABEL_FONT * l.sheet.annotation_scale();
+            let rects: Vec<Rect> = labels(&l)
+                .iter()
+                .map(|n| {
+                    let tag = crate::net_tag::net_tag_with(n, font, l.sheet.xref_style, crate::net_tag::tag_dest(n)).unwrap();
+                    let mut it = tag.points.iter();
+                    let first = *it.next().unwrap();
+                    let mut r = Rect::from_corners(first, first);
+                    it.for_each(|p| r.extend(*p));
+                    r
+                })
+                .collect();
+            assert!(rects.len() >= 3, "U1 has three adjacent tagged pins");
+            for (i, a) in rects.iter().enumerate() {
+                for b in &rects[i + 1..] {
+                    assert!(!a.overlaps(b), "pitch {pitch}: {a:?} {b:?}");
+                }
+            }
+        }
+    }
+
+    // ---- placement
+
+    /// Every box origin, pin, stub end and tag lies on the 2.5 mm grid, at both pitches.
+    /// 箱の原点・ピン・短い線の先・タグは、どちらのピン間隔でも2.5mmの格子の上にある。
+    #[test]
+    fn every_pin_and_origin_is_on_the_grid() {
+        for pitch in [5.0, 2.5] {
+            let mut r = request(&[&["U1", "M1"], &["U2"], &["TB1", "R1"]]);
+            r.pitch_mm = pitch;
+            r.power_nets = vec!["P24X".into()];
+            let l = layout(&r);
+            for s in symbols(&l) {
+                assert!(on_grid(s.at.x) && on_grid(s.at.y), "{} at {:?}", s.symbol_id, s.at);
+            }
+            for p in pin_points(&l.sheet, &defs_of(&l)) {
+                assert!(on_grid(p.pos.x) && on_grid(p.pos.y), "{}.{} at {:?} (pitch {pitch})", p.reference, p.number, p.pos);
+            }
+            for n in labels(&l) {
+                assert!(on_grid(n.at.x) && on_grid(n.at.y));
+            }
+        }
+    }
+
+    fn unit_rect(l: &DraftLayout, reference: &str) -> Rect {
+        let s = unit_symbol(l, reference);
+        let defs = defs_of(l);
+        let index = DefIndex::new(&defs);
+        symbol_bounds(&s, &index.get(&s).unwrap()).unwrap()
+    }
+
+    /// Columns are spread over the drawing area, from its left side to its right side, in the given order.
+    /// 列は描画範囲の左から右へ、指定した順に、全体に広がって並ぶ。
+    #[test]
+    fn columns_are_spread_over_the_drawing_area() {
+        let l = layout(&request(&[&["U1"], &["U2"], &["TB1"]]));
+        let (a, b, c) = (unit_rect(&l, "U1"), unit_rect(&l, "U2"), unit_rect(&l, "TB1"));
+        assert!(a.max.x < b.min.x && b.max.x < c.min.x);
+        assert!(b.min.x - a.max.x >= MIN_CHANNEL_MM && c.min.x - b.max.x >= MIN_CHANNEL_MM);
+        let template = crate::frame_template::for_project(&open());
+        let (frame, _) = crate::arrange::frame_areas(&template, &l.sheet);
+        assert!(a.min.x >= frame.0 + AREA_MARGIN_MM - 1e-6);
+        assert!(c.max.x <= frame.2 - AREA_MARGIN_MM + 1e-6);
+        assert!(frame.2 - c.max.x < 60.0 && a.min.x - frame.0 < 60.0, "the columns use the width");
+    }
+
+    /// Nothing on the new sheet enters the title block.
+    /// 新しいシートの上のものは、何も表題欄に入らない。
+    #[test]
+    fn nothing_enters_the_title_block() {
+        for paper in [DraftPaper::A3, DraftPaper::A4] {
+            let mut r = request(&[&["U1"], &["U2"], &["TB1"]]);
+            r.paper = paper;
+            let l = layout(&r);
+            let template = crate::frame_template::for_project(&open());
+            let (_, tb) = crate::arrange::frame_areas(&template, &l.sheet);
+            let title = Rect::from_corners(Point::new(tb.0, tb.1), Point::new(tb.2, tb.3));
+            let defs = defs_of(&l);
+            let font = crate::svg::LABEL_FONT * l.sheet.annotation_scale();
+            for e in l.sheet.entities.values() {
+                if let Some(r) = item_rect(e, &defs, &l.sheet, font) {
+                    assert!(!r.overlaps(&title), "{r:?} enters the title block {title:?}");
+                }
+            }
+        }
+    }
+
+    // ---- refusals
+
+    /// A column taller than the drawing area is refused, and the message names the column and the excess in mm.
+    /// 描画範囲より背の高い列は断られ、メッセージに列の番号と超えた量 (mm) が入る。
+    #[test]
+    fn a_column_taller_than_the_area_is_refused_with_the_excess() {
+        let mut r = request(&[&["U1", "U2", "TB1", "M1"]]);
+        r.paper = DraftPaper::A4;
+        let e = refusal(&r);
+        assert!(e.starts_with("Column 1 is ") && e.contains(" mm taller"), "{e}");
+        let excess: f64 = e["Column 1 is ".len()..].split(' ').next().unwrap().parse().unwrap();
+        assert!(excess > 0.0);
+    }
+
+    /// Columns that leave no routing channel between them are refused, naming the column that does not fit and the excess in mm.
+    /// 列のあいだに配線の通り道をあけられないときは断られ、入りきらない列の番号と超えた量 (mm) が入る。
+    #[test]
+    fn columns_that_leave_no_channel_are_refused() {
+        let mut r = request(&[&["U1"], &["U2"], &["TB1"]]);
+        r.paper = DraftPaper::A4;
+        let far = "a destination written out in a very long sentence so that the tag grows wide ".repeat(2);
+        r.destinations.insert("SIG_A".into(), far.clone());
+        r.destinations.insert("SIG_B".into(), far);
+        let e = refusal(&r);
+        assert!(e.starts_with("Column ") && e.contains("does not fit the width"), "{e}");
+        assert!(e.contains(" mm more"), "{e}");
+    }
+
+    // ---- look
+
+    /// Writes the laid-out fixture sheet as SVG to the path in MADAKE_DRAFT_SVG so that it can be looked at (run with --ignored).
+    /// 見て確かめるために、配置した見本のシートを MADAKE_DRAFT_SVG の場所へSVGで書き出す (--ignored で実行する)。
+    #[test]
+    #[ignore]
+    fn write_the_laid_out_sheet_as_svg() {
+        let Ok(path) = std::env::var("MADAKE_DRAFT_SVG") else { return };
+        let mut r = request(&[&["U1", "M1"], &["U2"], &["TB1", "R1"]]);
+        r.power_nets = vec!["P24X".into()];
+        r.destinations.insert("SIG_A".into(), "cabinet B".into());
+        let l = layout(&r);
+        let svg = crate::svg::sheet_to_svg(&l.sheet, &defs_of(&l), &[]);
+        std::fs::write(&path, svg).unwrap();
+        // tags: only two columns, so that SIG_A and SIG_B leave the sheet
+        let mut r = request(&[&["U1"], &["U2"]]);
+        r.power_nets = vec!["P24X".into()];
+        r.destinations.insert("SIG_A".into(), "cabinet B".into());
+        let l = layout(&r);
+        std::fs::write(format!("{path}.tags.svg"), crate::svg::sheet_to_svg(&l.sheet, &defs_of(&l), &[])).unwrap();
+    }
+}

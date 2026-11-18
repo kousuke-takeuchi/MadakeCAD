@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3804 specification clauses** across 6 areas.
+**3828 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -465,6 +465,30 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - When no unit has a pin to carry, the draft is refused. <sub>`no_carried_pin_is_refused`</sub>
 - A carried pin that is a port with contacts is refused. <sub>`a_port_with_contacts_is_refused`</sub>
 - A carried pin whose net runs through a cable core is refused. <sub>`a_net_through_a_cable_core_is_refused`</sub>
+- A box shows only the pins the model carries, is marked as a view, and has pin text at least 2.2 mm high. <sub>`a_box_carries_only_its_pins_and_is_a_view`</sub>
+- A library symbol is not turned into a box: it is placed again with its own reference, value and rotation. <sub>`a_library_symbol_is_placed_as_it_is`</sub>
+- A pin whose peers on the sheet are all in columns to the left goes on the left side of its box. <sub>`a_pin_with_peers_on_the_left_goes_left`</sub>
+- A pin whose peers are all in columns to the right goes on the right side of its box. <sub>`a_pin_with_peers_on_the_right_goes_right`</sub>
+- With the same number of peers on both sides, the pin goes to the left. <sub>`a_tie_goes_left`</sub>
+- A pin with no peer on the sheet goes to the right side only for a unit in the last column; otherwise to the left. <sub>`a_pin_with_no_peer_goes_right_only_in_the_last_column`</sub>
+- Power pins are the first rows of the left side and ground pins the last rows, each group set off by one spacer row. <sub>`power_pins_come_first_and_ground_pins_last_on_the_left_side`</sub>
+- A unit that has only power and ground pins on the sheet is still drawn, with the marks and nothing else. <sub>`a_unit_with_only_power_pins_is_drawn_with_marks`</sub>
+- Pins are ordered so that the wires between two boxes do not cross, even when the source order is reversed. <sub>`straight_connections_do_not_cross`</sub>
+- The same request always gives the same layout. <sub>`the_same_request_gives_the_same_layout`</sub>
+- Every power pin gets its own rail mark on a 5 mm stub, and the mark is named after the net. <sub>`each_power_pin_gets_its_own_rail_mark_named_after_the_net`</sub>
+- A ground mark uses the mark symbol the model names for that net, with the net name as its value when the symbol takes it from the value. <sub>`ground_uses_the_marks_symbol_of_the_source`</sub>
+- When the source has no ground mark, the library rail mark is used, pointing down, with the net name as its value. <sub>`ground_falls_back_to_the_library_mark`</sub>
+- A leaving net gets one tag, on the first pin in column order; all its carried pins are terminals, and that pin's terminal is the end of the tag stub. <sub>`a_leaving_net_gets_one_tag_at_the_first_pin_in_column_order`</sub>
+- A leaving net with one carried pin has a tag but no terminal. <sub>`a_leaving_net_with_one_pin_has_no_terminal`</sub>
+- A tag on a right-side pin points outward (tag_flow = out); a tag on a left-side pin has its body on the outer side too, and no flow. <sub>`a_tag_on_a_right_side_pin_points_outward`</sub>
+- The destinations option becomes the destination text of the tag. <sub>`a_destination_option_becomes_the_tags_destination`</sub>
+- Tags on adjacent pins do not touch, at 5 mm and at 2.5 mm pitch. <sub>`tags_on_adjacent_pins_do_not_touch`</sub>
+- Every box origin, pin, stub end and tag lies on the 2.5 mm grid, at both pitches. <sub>`every_pin_and_origin_is_on_the_grid`</sub>
+- Columns are spread over the drawing area, from its left side to its right side, in the given order. <sub>`columns_are_spread_over_the_drawing_area`</sub>
+- Nothing on the new sheet enters the title block. <sub>`nothing_enters_the_title_block`</sub>
+- A column taller than the drawing area is refused, and the message names the column and the excess in mm. <sub>`a_column_taller_than_the_area_is_refused_with_the_excess`</sub>
+- Columns that leave no routing channel between them are refused, naming the column that does not fit and the excess in mm. <sub>`columns_that_leave_no_channel_are_refused`</sub>
+- Writes the laid-out fixture sheet as SVG to the path in MADAKE_DRAFT_SVG so that it can be looked at (run with --ignored). <sub>`write_the_laid_out_sheet_as_svg`</sub>
 
 ### DXF interop (AutoCAD Electrical / EPLAN)
 

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3804仕様項目**。
+全6領域・**3828仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -465,6 +465,30 @@
 - 描くピンがどの機器にも1本もないときは断る。 <sub>`no_carried_pin_is_refused`</sub>
 - 描くピンが接点をもつポートのピンだと断る。 <sub>`a_port_with_contacts_is_refused`</sub>
 - 描くピンのネットが多芯ケーブルの芯を通っていると断る。 <sub>`a_net_through_a_cable_core_is_refused`</sub>
+- 箱は、運ぶことになったピンだけを持ち、部分表示の印が付き、ピンの文字は2.2mm以上の高さになる。 <sub>`a_box_carries_only_its_pins_and_is_a_view`</sub>
+- 抵抗のようなライブラリのシンボルは箱にせず、元の参照記号・値・向きのまま同じシンボルを置く。 <sub>`a_library_symbol_is_placed_as_it_is`</sub>
+- 相手のピンがすべて左の列にあるピンは、箱の左側に出る。 <sub>`a_pin_with_peers_on_the_left_goes_left`</sub>
+- 相手のピンがすべて右の列にあるピンは、箱の右側に出る。 <sub>`a_pin_with_peers_on_the_right_goes_right`</sub>
+- 相手が左右に同じ数あるときは、左側に出る。 <sub>`a_tie_goes_left`</sub>
+- このシートに相手のいないピンは、最後の列の機器なら右側、それ以外は左側に出る。 <sub>`a_pin_with_no_peer_goes_right_only_in_the_last_column`</sub>
+- 電源のピンは左側の最初の行、接地のピンは左側の最後の行に並び、信号のピンとは1行のすき間で区切られる。 <sub>`power_pins_come_first_and_ground_pins_last_on_the_left_side`</sub>
+- 電源・接地のピンしか持たない機器も、印だけを付けた箱として描かれる。 <sub>`a_unit_with_only_power_pins_is_drawn_with_marks`</sub>
+- 2つの箱のあいだの線が交差しないように、元の順序が逆でもピンの並びを入れ替える。 <sub>`straight_connections_do_not_cross`</sub>
+- 同じ入力からは、いつも同じ配置ができる。 <sub>`the_same_request_gives_the_same_layout`</sub>
+- 電源のピンには1本ずつ、5mmの短い線の先に、ネット名を値にした電源の印が付く。 <sub>`each_power_pin_gets_its_own_rail_mark_named_after_the_net`</sub>
+- 接地の印は、モデルが示す元の図の印のシンボルを使う。値からネット名を取るシンボルなら、値にネット名を入れる。 <sub>`ground_uses_the_marks_symbol_of_the_source`</sub>
+- 元の図に接地の印が無いときは、ライブラリの電源の印を下向き (180度回転) にして、ネット名を値にして置く。 <sub>`ground_falls_back_to_the_library_mark`</sub>
+- 出ていくネットにはタグが1つだけ付き、列の順で最初のピンに置かれる。持っているピンはすべて配線の端になり、タグのピンの端は線の先になる。 <sub>`a_leaving_net_gets_one_tag_at_the_first_pin_in_column_order`</sub>
+- 持っているピンが1本だけの出ていくネットには、タグが付くが、配線の端は作らない。 <sub>`a_leaving_net_with_one_pin_has_no_terminal`</sub>
+- 右側のピンのタグは外向き (tag_flow = out)、左側のピンのタグは本体が外側 (左) に伸びる向きで、out は付かない。 <sub>`a_tag_on_a_right_side_pin_points_outward`</sub>
+- destinations に書いた行き先は、タグの行き先の文字になる。 <sub>`a_destination_option_becomes_the_tags_destination`</sub>
+- 隣り合うピンのタグは、ピン間隔が5mmでも2.5mmでも、互いに触れない。 <sub>`tags_on_adjacent_pins_do_not_touch`</sub>
+- 箱の原点・ピン・短い線の先・タグは、どちらのピン間隔でも2.5mmの格子の上にある。 <sub>`every_pin_and_origin_is_on_the_grid`</sub>
+- 列は描画範囲の左から右へ、指定した順に、全体に広がって並ぶ。 <sub>`columns_are_spread_over_the_drawing_area`</sub>
+- 新しいシートの上のものは、何も表題欄に入らない。 <sub>`nothing_enters_the_title_block`</sub>
+- 描画範囲より背の高い列は断られ、メッセージに列の番号と超えた量 (mm) が入る。 <sub>`a_column_taller_than_the_area_is_refused_with_the_excess`</sub>
+- 列のあいだに配線の通り道をあけられないときは断られ、入りきらない列の番号と超えた量 (mm) が入る。 <sub>`columns_that_leave_no_channel_are_refused`</sub>
+- 見て確かめるために、配置した見本のシートを MADAKE_DRAFT_SVG の場所へSVGで書き出す (--ignored で実行する)。 <sub>`write_the_laid_out_sheet_as_svg`</sub>
 
 ### DXF連携 (AutoCAD Electrical / EPLAN)
 
