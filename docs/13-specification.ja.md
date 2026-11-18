@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3953仕様項目**。
+全6領域・**3954仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -502,6 +502,7 @@
 - planned_sheets の項目が名前でも {name, units, pins?} でもない (数、units の無い項目、知らない項目のある項目) と、planned_sheets と何番目の項目かを挙げた文で断られる。一覧でないものも planned_sheets を挙げて断られる。 <sub>`a_malformed_planned_entry_is_refused_naming_its_position`</sub>
 - 計画のシートは、文字列でも、機器つきの項目でも書け、1つの一覧に混ぜてよい。知らない項目のある項目は断られる。 <sub>`planned_sheets_read_both_forms_from_json`</sub>
 - 計画した名前を渡すと、いちばん広い旗が収まるように、渡さないときより1列目の位置が右になる。 <sub>`planned_names_push_the_first_column_right`</sub>
+- 変わっていても正しい計画の一覧は受け付け、何度でも同じ幅になる: 50項目、機器の無い項目 (どの札の行き先にもならない)、下書きするシート自身を名前に持つ項目 (数えない)、すでにある名前で別の機器を書いた項目 (そのシートのラベルで数える)。 <sub>`odd_planned_lists_are_accepted_and_deterministic`</sub>
 - planned_sheets の無い依頼は空の一覧として読まれ、空の一覧を明示した依頼とまったく同じ配置になる。 <sub>`a_request_without_planned_sheets_lays_out_as_before`</sub>
 - 箱の原点・ピン・短い線の先・タグは、どちらのピン間隔でも2.5mmの格子の上にある。 <sub>`every_pin_and_origin_is_on_the_grid`</sub>
 - 列は描画範囲の左から、指定した順に、通り道の最小幅以上のすき間をあけて詰めて並び、描画範囲からはみ出さない。 <sub>`columns_are_packed_from_the_left_of_the_drawing_area`</sub>

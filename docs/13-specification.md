@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3953 specification clauses** across 6 areas.
+**3954 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -502,6 +502,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A planned_sheets entry that is neither a name nor a {name, units, pins?} object (a number, an object without units, an object with an unknown field) is refused with a message that names planned_sheets and the entry's position; a list that is not a list is refused naming planned_sheets. <sub>`a_malformed_planned_entry_is_refused_naming_its_position`</sub>
 - A planned sheet may be written as a string or as an object, in one list, and an object with an unknown field is refused. <sub>`planned_sheets_read_both_forms_from_json`</sub>
 - With planned names the layout is wider than with none: the first column starts further right so that the widest flag fits. <sub>`planned_names_push_the_first_column_right`</sub>
+- Odd but valid planned lists are accepted and give the same room every time: fifty entries, an object with no units (a destination of no tag), an object that names the sheet being drafted (left out), and an object whose name already exists with other units (counted by that sheet's labels). <sub>`odd_planned_lists_are_accepted_and_deterministic`</sub>
 - A request without planned_sheets reads as an empty list and lays out exactly as one that names an empty list. <sub>`a_request_without_planned_sheets_lays_out_as_before`</sub>
 - Every box origin, pin, stub end and tag lies on the 2.5 mm grid, at both pitches. <sub>`every_pin_and_origin_is_on_the_grid`</sub>
 - Columns are packed from the left side of the drawing area, in the given order, with at least the minimum channel between them, and stay inside the drawing area. <sub>`columns_are_packed_from_the_left_of_the_drawing_area`</sub>

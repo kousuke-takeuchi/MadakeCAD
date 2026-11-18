@@ -666,7 +666,7 @@ pub(crate) fn build_model(source: &Project, open: &Project, req: &DraftRequest) 
         });
         *row += 1;
     }
-    let planned = planned_carries(&src, open, req, &power, &ground)?;
+    let planned = planned_carries(&src, req, &power, &ground)?;
     Ok(DraftModel { units, nets, skipped, planned })
 }
 
@@ -674,7 +674,6 @@ pub(crate) fn build_model(source: &Project, open: &Project, req: &DraftRequest) 
 /// 載せるピンの決め方は下書きするシートと同じ ([`unit_pin_nets`])。元の図に無い機器・その機器に無いピンは断る。
 fn planned_carries(
     src: &Source,
-    _open: &Project,
     req: &DraftRequest,
     power: &BTreeSet<usize>,
     ground: &BTreeSet<usize>,
@@ -705,7 +704,7 @@ fn planned_carries(
                         d.pins.iter().find(|(k, _)| k.trim() == reference).map(|(_, l)| l.iter().map(|k| k.trim()).collect());
                     let (pins, _) = unit_pin_nets(src, reference, wanted.as_ref(), power, ground)
                         .map_err(|e| format!("planned_sheets entry '{name}': {e}"))?;
-                    set.extend(pins.into_iter().map(|(_, _, net, _)| src.nets[net].name.clone()));
+                    set.extend(pins.into_iter().map(|(_, _, net, _)| src.nets[net].name.trim().to_string()));
                 }
                 Some(set)
             }
@@ -3271,6 +3270,33 @@ mod layout_tests {
         assert!(b.columns[0].right >= a.columns[0].right);
         let wide = |l: &DraftLayout| l.columns[0].right - l.columns[0].left;
         assert!(wide(&b) > wide(&a), "{} vs {}", wide(&b), wide(&a));
+    }
+
+    /// Odd but valid planned lists are accepted and give the same room every time: fifty entries, an object with no units (a destination of no tag), an object that names the sheet being drafted (left out), and an object whose name already exists with other units (counted by that sheet's labels).
+    /// 変わっていても正しい計画の一覧は受け付け、何度でも同じ幅になる: 50項目、機器の無い項目 (どの札の行き先にもならない)、下書きするシート自身を名前に持つ項目 (数えない)、すでにある名前で別の機器を書いた項目 (そのシートのラベルで数える)。
+    #[test]
+    fn odd_planned_lists_are_accepted_and_deterministic() {
+        let mut open = bare();
+        open.sheets.push(Sheet::new("Existing", PaperSize::A3, Orientation::Landscape));
+        let mut r = request(&[&["U1"], &["TB1"]]);
+        let mut planned: Vec<PlannedSheet> = (0..46).map(|i| detailed(&format!("Empty {i}"), &[], &[])).collect();
+        planned.push(detailed("Function", &["U2"], &[]));
+        planned.push(detailed("Existing", &["U2"], &[]));
+        planned.push(detailed("Holder", &["U2"], &[("U2", &["4"])]));
+        planned.push("Loose".into());
+        assert_eq!(planned.len(), 50);
+        r.planned_sheets = planned;
+        let texts = || {
+            let m = build_model(&fixture_source(), &open, &r).unwrap();
+            let reserve = Reserve::of(&open, &m, &r);
+            m.nets.iter().map(|n| (n.name.clone(), reserve.text(&n.name).to_string())).collect::<Vec<_>>()
+        };
+        let first = texts();
+        assert_eq!(first, texts());
+        let sep = crate::xref::DEST_SEPARATOR;
+        let of = |net: &str| first.iter().find(|(n, _)| n == net).unwrap().1.clone();
+        assert_eq!(of("SIG_A"), "Loose");
+        assert_eq!(of("SIG_B"), format!("Holder{sep}Loose"));
     }
 
     /// A request without planned_sheets reads as an empty list and lays out exactly as one that names an empty list.
