@@ -1,0 +1,630 @@
+{
+  "format_version": 29,
+  "name": "draft-source",
+  "sheets": [
+    {
+      "id": "bae44a6d-3ad0-4dbb-beae-34eb6413ff65",
+      "name": "Sheet1",
+      "kind": "schematic",
+      "size": "A3",
+      "orientation": "Landscape",
+      "zone_cols": 4,
+      "zone_rows": 6,
+      "title_block": {
+        "company": "",
+        "title": "",
+        "drawing_no": "",
+        "scale": "",
+        "date": "",
+        "designed": "",
+        "drawn": "",
+        "checked": "",
+        "approved": "",
+        "rev": ""
+      },
+      "revisions": [],
+      "annotation_text_mm": null,
+      "entities": {
+        "00422f4e-024f-461f-9e5d-8a42683cb45c": {
+          "kind": "symbol",
+          "id": "00422f4e-024f-461f-9e5d-8a42683cb45c",
+          "symbol_id": "resistor",
+          "at": {
+            "x": 350.0,
+            "y": 150.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "R1",
+          "value": "10k",
+          "attrs": {}
+        },
+        "04da9bfe-65dd-4565-b659-e640fd51cbf3": {
+          "kind": "net_label",
+          "id": "04da9bfe-65dd-4565-b659-e640fd51cbf3",
+          "at": {
+            "x": 160.0,
+            "y": 67.5
+          },
+          "name": "SIG_B",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "0c52e387-925a-4b6a-85d0-cc455cc16a3e": {
+          "kind": "net_label",
+          "id": "0c52e387-925a-4b6a-85d0-cc455cc16a3e",
+          "at": {
+            "x": 60.0,
+            "y": 65.0
+          },
+          "name": "SPARE",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "1e83ac4b-3e1f-4328-81b4-92f04f8b7a96": {
+          "kind": "wire",
+          "id": "1e83ac4b-3e1f-4328-81b4-92f04f8b7a96",
+          "points": [
+            {
+              "x": 22.5,
+              "y": 60.0
+            },
+            {
+              "x": 20.0,
+              "y": 60.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "436c94dd-80b6-4a58-ae96-e2934f840e92": {
+          "kind": "wire",
+          "id": "436c94dd-80b6-4a58-ae96-e2934f840e92",
+          "points": [
+            {
+              "x": 342.5,
+              "y": 150.0
+            },
+            {
+              "x": 340.0,
+              "y": 150.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "43d9a06a-7b7d-4930-bf5c-0319043f795a": {
+          "kind": "symbol",
+          "id": "43d9a06a-7b7d-4930-bf5c-0319043f795a",
+          "symbol_id": "block",
+          "at": {
+            "x": 40.0,
+            "y": 60.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "U1",
+          "value": "",
+          "attrs": {
+            "block_pins": "{\"left\":[{\"no\":\"1\",\"name\":\"24V\"},{\"no\":\"2\",\"name\":\"GND\"},{\"no\":\"4\",\"name\":\"IN1\"}],\"right\":[{\"no\":\"3\",\"name\":\"OUT\"},{\"no\":\"5\",\"name\":\"TX\"},{\"no\":\"6\",\"name\":\"SPARE\"}]}",
+            "block_size": "{\"w\":30,\"h\":40}"
+          }
+        },
+        "49db75b3-f33a-441b-812a-45ffa94c65c2": {
+          "kind": "net_label",
+          "id": "49db75b3-f33a-441b-812a-45ffa94c65c2",
+          "at": {
+            "x": 340.0,
+            "y": 150.0
+          },
+          "name": "SIG_A",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "4b33dfba-1b69-4732-b45e-6c686de62c4b": {
+          "kind": "net_label",
+          "id": "4b33dfba-1b69-4732-b45e-6c686de62c4b",
+          "at": {
+            "x": 160.0,
+            "y": 62.5
+          },
+          "name": "SIG_A",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "4ba4102d-9d6d-43a7-8dd2-c3e71486c0c9": {
+          "kind": "wire",
+          "id": "4ba4102d-9d6d-43a7-8dd2-c3e71486c0c9",
+          "points": [
+            {
+              "x": 162.5,
+              "y": 67.5
+            },
+            {
+              "x": 160.0,
+              "y": 67.5
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "4e315b5f-501e-47e5-8806-56c07d841d48": {
+          "kind": "wire",
+          "id": "4e315b5f-501e-47e5-8806-56c07d841d48",
+          "points": [
+            {
+              "x": 57.5,
+              "y": 60.0
+            },
+            {
+              "x": 60.0,
+              "y": 60.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "508c5996-cc95-4e4c-8ea1-f606c5c3a5fa": {
+          "kind": "wire",
+          "id": "508c5996-cc95-4e4c-8ea1-f606c5c3a5fa",
+          "points": [
+            {
+              "x": 57.5,
+              "y": 65.0
+            },
+            {
+              "x": 60.0,
+              "y": 65.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "54dedf3e-33d0-4d23-8ee0-ed99f7160956": {
+          "kind": "wire",
+          "id": "54dedf3e-33d0-4d23-8ee0-ed99f7160956",
+          "points": [
+            {
+              "x": 22.5,
+              "y": 55.0
+            },
+            {
+              "x": 20.0,
+              "y": 55.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "5636dfdc-e9bc-4632-a36c-6e4b30aaa1d8": {
+          "kind": "wire",
+          "id": "5636dfdc-e9bc-4632-a36c-6e4b30aaa1d8",
+          "points": [
+            {
+              "x": 282.5,
+              "y": 62.5
+            },
+            {
+              "x": 280.0,
+              "y": 62.5
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "719253a9-4086-42f7-a9d1-a6c5ef8beb2b": {
+          "kind": "symbol",
+          "id": "719253a9-4086-42f7-a9d1-a6c5ef8beb2b",
+          "symbol_id": "power_rail",
+          "at": {
+            "x": 160.0,
+            "y": 52.5
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "",
+          "value": "P24X",
+          "attrs": {}
+        },
+        "73964578-44f3-4da8-b673-61f4b8787d87": {
+          "kind": "symbol",
+          "id": "73964578-44f3-4da8-b673-61f4b8787d87",
+          "symbol_id": "power_rail",
+          "at": {
+            "x": 20.0,
+            "y": 60.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "",
+          "value": "GND",
+          "attrs": {}
+        },
+        "758e963b-2c99-49e3-a178-b7b3dc704e06": {
+          "kind": "wire",
+          "id": "758e963b-2c99-49e3-a178-b7b3dc704e06",
+          "points": [
+            {
+              "x": 22.5,
+              "y": 65.0
+            },
+            {
+              "x": 20.0,
+              "y": 65.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "79177480-a661-468b-b335-f1da8ce4df8d": {
+          "kind": "wire",
+          "id": "79177480-a661-468b-b335-f1da8ce4df8d",
+          "points": [
+            {
+              "x": 162.5,
+              "y": 52.5
+            },
+            {
+              "x": 160.0,
+              "y": 52.5
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "883c76d7-6959-4d37-9774-ea23c74b7011": {
+          "kind": "symbol",
+          "id": "883c76d7-6959-4d37-9774-ea23c74b7011",
+          "symbol_id": "power_rail",
+          "at": {
+            "x": 280.0,
+            "y": 57.5
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "",
+          "value": "P24X",
+          "attrs": {}
+        },
+        "8cfc8b95-e101-49e8-848b-2c35b55ea5b8": {
+          "kind": "symbol",
+          "id": "8cfc8b95-e101-49e8-848b-2c35b55ea5b8",
+          "symbol_id": "power_rail",
+          "at": {
+            "x": 160.0,
+            "y": 57.5
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "",
+          "value": "GND",
+          "attrs": {}
+        },
+        "93b77942-fe33-4f36-8b60-05282f80cb3c": {
+          "kind": "net_label",
+          "id": "93b77942-fe33-4f36-8b60-05282f80cb3c",
+          "at": {
+            "x": 20.0,
+            "y": 65.0
+          },
+          "name": "SIG_B",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "940d1282-0eef-4768-b82e-303031b35594": {
+          "kind": "net_label",
+          "id": "940d1282-0eef-4768-b82e-303031b35594",
+          "at": {
+            "x": 280.0,
+            "y": 62.5
+          },
+          "name": "SIG_B",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "95491176-68ed-45be-b978-f45c64578e62": {
+          "kind": "symbol",
+          "id": "95491176-68ed-45be-b978-f45c64578e62",
+          "symbol_id": "block",
+          "at": {
+            "x": 300.0,
+            "y": 60.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "TB1",
+          "value": "",
+          "attrs": {
+            "block_pins": "{\"left\":[{\"no\":\"1\",\"name\":\"L+\"},{\"no\":\"2\",\"name\":\"S\"}],\"right\":[{\"no\":\"3\",\"name\":\"NC\"}]}",
+            "block_size": "{\"w\":30,\"h\":40}"
+          }
+        },
+        "a4dbfb22-e9d8-47c5-bc29-f790d654b9b4": {
+          "kind": "wire",
+          "id": "a4dbfb22-e9d8-47c5-bc29-f790d654b9b4",
+          "points": [
+            {
+              "x": 282.5,
+              "y": 57.5
+            },
+            {
+              "x": 280.0,
+              "y": 57.5
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "a8336ec6-069a-446a-a81d-e459aba7d379": {
+          "kind": "wire",
+          "id": "a8336ec6-069a-446a-a81d-e459aba7d379",
+          "points": [
+            {
+              "x": 197.5,
+              "y": 57.5
+            },
+            {
+              "x": 205.0,
+              "y": 57.5
+            },
+            {
+              "x": 205.0,
+              "y": 62.5
+            },
+            {
+              "x": 197.5,
+              "y": 62.5
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "a9fc3eba-2879-4225-9a47-010699563671": {
+          "kind": "symbol",
+          "id": "a9fc3eba-2879-4225-9a47-010699563671",
+          "symbol_id": "block",
+          "at": {
+            "x": 110.0,
+            "y": 60.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "M1",
+          "value": "",
+          "attrs": {
+            "block_pins": "{\"left\":[{\"no\":\"1\",\"name\":\"U\"},{\"no\":\"2\",\"name\":\"GND\"}]}",
+            "block_size": "{\"w\":30,\"h\":40}"
+          }
+        },
+        "b0409379-d42d-43df-98e5-1ff2d4e79fc4": {
+          "kind": "symbol",
+          "id": "b0409379-d42d-43df-98e5-1ff2d4e79fc4",
+          "symbol_id": "power_rail",
+          "at": {
+            "x": 360.0,
+            "y": 150.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "",
+          "value": "GND",
+          "attrs": {}
+        },
+        "b185be3c-0dd0-4863-85a8-d3a55a7f2606": {
+          "kind": "wire",
+          "id": "b185be3c-0dd0-4863-85a8-d3a55a7f2606",
+          "points": [
+            {
+              "x": 357.5,
+              "y": 150.0
+            },
+            {
+              "x": 360.0,
+              "y": 150.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "ba48825a-5b7f-40a0-9a20-6f5c6b7e9e84": {
+          "kind": "symbol",
+          "id": "ba48825a-5b7f-40a0-9a20-6f5c6b7e9e84",
+          "symbol_id": "block",
+          "at": {
+            "x": 180.0,
+            "y": 60.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "U2",
+          "value": "",
+          "attrs": {
+            "block_pins": "{\"left\":[{\"no\":\"1\",\"name\":\"VCC\"},{\"no\":\"2\",\"name\":\"GND\"},{\"no\":\"3\",\"name\":\"IN_A\"},{\"no\":\"4\",\"name\":\"IN_B\"}],\"right\":[{\"no\":\"9\",\"name\":\"X1\"},{\"no\":\"10\",\"name\":\"X2\"}]}",
+            "block_size": "{\"w\":30,\"h\":40}"
+          }
+        },
+        "c5bd9fa4-7c14-4975-93c4-314f78addb05": {
+          "kind": "wire",
+          "id": "c5bd9fa4-7c14-4975-93c4-314f78addb05",
+          "points": [
+            {
+              "x": 92.5,
+              "y": 62.5
+            },
+            {
+              "x": 90.0,
+              "y": 62.5
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "c94fbb9c-8848-490b-b0f5-a9ea2f918cab": {
+          "kind": "symbol",
+          "id": "c94fbb9c-8848-490b-b0f5-a9ea2f918cab",
+          "symbol_id": "power_rail",
+          "at": {
+            "x": 90.0,
+            "y": 62.5
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "",
+          "value": "GND",
+          "attrs": {}
+        },
+        "d0dc4e2c-682a-4428-a6fb-68dab07f890d": {
+          "kind": "net_label",
+          "id": "d0dc4e2c-682a-4428-a6fb-68dab07f890d",
+          "at": {
+            "x": 60.0,
+            "y": 60.0
+          },
+          "name": "SIG_A",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "dcf8d526-f17a-499f-a74a-62ec86b21435": {
+          "kind": "wire",
+          "id": "dcf8d526-f17a-499f-a74a-62ec86b21435",
+          "points": [
+            {
+              "x": 162.5,
+              "y": 62.5
+            },
+            {
+              "x": 160.0,
+              "y": 62.5
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "f18b6685-aee1-40cd-a14e-bdc93cb10e69": {
+          "kind": "wire",
+          "id": "f18b6685-aee1-40cd-a14e-bdc93cb10e69",
+          "points": [
+            {
+              "x": 162.5,
+              "y": 57.5
+            },
+            {
+              "x": 160.0,
+              "y": 57.5
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "f9e3a11c-b19d-4f5d-a367-cf86e2878fe2": {
+          "kind": "symbol",
+          "id": "f9e3a11c-b19d-4f5d-a367-cf86e2878fe2",
+          "symbol_id": "power_rail",
+          "at": {
+            "x": 20.0,
+            "y": 55.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "",
+          "value": "P24X",
+          "attrs": {}
+        },
+        "fcf76b16-da44-4dbc-8815-1f6e40cb7ea5": {
+          "kind": "wire",
+          "id": "fcf76b16-da44-4dbc-8815-1f6e40cb7ea5",
+          "points": [
+            {
+              "x": 57.5,
+              "y": 55.0
+            },
+            {
+              "x": 75.0,
+              "y": 55.0
+            },
+            {
+              "x": 75.0,
+              "y": 57.5
+            },
+            {
+              "x": 92.5,
+              "y": 57.5
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        }
+      }
+    }
+  ],
+  "wire_parts": [],
+  "plc_assignments": [],
+  "frame_template": null,
+  "no": null,
+  "mech_links": [],
+  "plc_generate": null
+}

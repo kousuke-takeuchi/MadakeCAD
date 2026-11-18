@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3769 specification clauses** across 6 areas.
+**3804 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -427,6 +427,44 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The picture frame of each side is the right-side frame turned clockwise: a local point lands where the side faces, and an arc keeps its clockwise sweep. <sub>`side_frames_are_turns_of_the_right_side_frame`</sub>
 - No picture ever leaves its envelope (1.5 mm inside to 2.5 mm outside the edge, 2 mm beyond its outer pins along the edge), on any side. <sub>`every_picture_stays_inside_its_envelope`</sub>
 - A USB-C socket's opening stays a closed rounded slot on every side and at every rotation and mirror of the block: each arc ends where a straight edge of the opening ends and bulges outward. <sub>`the_usb_c_opening_stays_closed_at_every_rotation_and_mirror`</sub>
+
+### draft
+
+- Rebuilds the draft fixture file; ignored by default and run by hand only. <sub>`write_the_draft_fixture`</sub>
+- The invented source drawing loads and verification finds no error in it. <sub>`the_draft_fixture_loads_and_verifies_clean`</sub>
+- A unit carries only the pins whose net joins two or more pins (or is a power or ground net). <sub>`a_view_carries_only_the_pins_in_use`</sub>
+- A pin on a net of one pin is left out and the reason is recorded. <sub>`a_pin_on_a_one_pin_net_is_skipped_with_a_reason`</sub>
+- A pin that is on no net at all is left out too, with its own reason. <sub>`a_pin_on_no_net_is_skipped_with_a_reason`</sub>
+- The pins option limits a unit to the listed pins. <sub>`the_pins_option_limits_a_view`</sub>
+- A unit that has no pin to draw is dropped from the sheet, and its pins are listed as skipped. <sub>`a_unit_without_a_drawable_pin_is_dropped`</sub>
+- Units get the column and the row they were listed in. <sub>`units_keep_their_column_and_row`</sub>
+- A block unit is a block, and a library symbol (the resistor) stays a symbol. <sub>`a_library_symbol_stays_a_symbol`</sub>
+- A net whose pins are all on the sheet is internal. <sub>`a_net_with_all_pins_on_the_sheet_is_internal`</sub>
+- A net with pins on other sheets leaves the sheet. <sub>`a_net_with_pins_elsewhere_is_leaving`</sub>
+- Nets listed in power_nets and ground_nets get those classes. <sub>`listed_power_and_ground_nets_get_their_class`</sub>
+- Without ground_nets, every net that carries a net mark is ground, except the ones listed as power; the mark the source uses is remembered. <sub>`ground_nets_default_to_nets_with_a_mark`</sub>
+- A pin that is alone on a net with a mark counts as in use, because the mark is drawn for it. <sub>`a_ground_pin_alone_on_its_net_is_in_use`</sub>
+- The destinations option is kept on the net it names. <sub>`a_destination_is_kept_on_its_net`</sub>
+- A labelled net keeps the name of its label. <sub>`a_labelled_net_keeps_its_label_name`</sub>
+- An unlabelled net is named after its first pin over the whole source net, so every sheet that shows it computes the same name. <sub>`unlabelled_net_name_is_the_same_on_every_sheet`</sub>
+- Pin numbers are ordered by size, not letter by letter: U2.9 comes before U2.10, and U2 before U10. <sub>`natural_order_puts_nine_before_ten`</sub>
+- A request reads from JSON with its defaults, and refuses a field it does not know. <sub>`a_request_reads_with_defaults_and_refuses_unknown_fields`</sub>
+- A reference the source does not have is refused, and the message names it. <sub>`an_unknown_reference_is_refused`</sub>
+- A reference listed twice is refused. <sub>`a_reference_listed_twice_is_refused`</sub>
+- A pin key the unit does not have is refused. <sub>`an_unknown_pin_key_is_refused`</sub>
+- A pins entry for a reference that is not in columns is refused. <sub>`a_pins_entry_for_a_reference_not_in_columns_is_refused`</sub>
+- A net the source does not have is refused in power_nets, in ground_nets and in destinations, naming the option and the net. <sub>`an_unknown_net_is_refused_in_each_option`</sub>
+- A net listed as both power and ground is refused. <sub>`a_net_in_both_power_and_ground_is_refused`</sub>
+- A sheet name that the open project already uses is refused. <sub>`a_sheet_name_in_use_is_refused`</sub>
+- A blank sheet name is refused. <sub>`a_blank_name_is_refused`</sub>
+- No column, or more than eight columns, is refused. <sub>`zero_or_nine_columns_are_refused`</sub>
+- A pin pitch other than 2.5 or 5.0 is refused. <sub>`a_pitch_other_than_two_values_is_refused`</sub>
+- A pin that a view in the open project already shows is refused, naming the pin. <sub>`a_pin_already_shown_by_a_view_is_refused`</sub>
+- A view of the same unit that shows other pins does not stop the draft. <sub>`a_view_of_other_pins_does_not_stop_the_draft`</sub>
+- A library symbol that the open project already has is refused. <sub>`a_library_symbol_already_on_a_function_sheet_is_refused`</sub>
+- When no unit has a pin to carry, the draft is refused. <sub>`no_carried_pin_is_refused`</sub>
+- A carried pin that is a port with contacts is refused. <sub>`a_port_with_contacts_is_refused`</sub>
+- A carried pin whose net runs through a cable core is refused. <sub>`a_net_through_a_cable_core_is_refused`</sub>
 
 ### DXF interop (AutoCAD Electrical / EPLAN)
 

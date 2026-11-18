@@ -10,6 +10,7 @@ pub mod cable_run;
 pub mod caption;
 pub mod command;
 pub mod connector;
+pub mod draft;
 pub mod dxf;
 pub mod frame_template;
 pub mod geometry;

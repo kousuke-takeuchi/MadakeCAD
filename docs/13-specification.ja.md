@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3769仕様項目**。
+全6領域・**3804仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -427,6 +427,44 @@
 - 辺ごとの絵の座標は右辺の座標を時計回りに回したもので、ローカルの点はその辺の向きに写り、弧は時計回りの振れ幅を保つ。 <sub>`side_frames_are_turns_of_the_right_side_frame`</sub>
 - どの辺でも、絵は決まった枠 (辺の内側1.5mmから外側2.5mm、辺に沿って両端のピンから2mm) の外へ出ない。 <sub>`every_picture_stays_inside_its_envelope`</sub>
 - USB-C メスの口は、どの辺でも、ブロックをどう回転・ミラーしても閉じた角丸の穴のまま: 弧の端は口の直線の端に合い、弧は外へふくらむ。 <sub>`the_usb_c_opening_stays_closed_at_every_rotation_and_mirror`</sub>
+
+### draft
+
+- 下書きの見本の元の図のファイルを作り直す。普段は走らせず、手で動かしたときだけ作り直す。 <sub>`write_the_draft_fixture`</sub>
+- 見本として作った元の図は読み込めて、検証しても間違い(エラー)が1件も出ない。 <sub>`the_draft_fixture_loads_and_verifies_clean`</sub>
+- 機器の箱が持つのは、ほかのピンと結ばれているネットのピンだけで、つながりのないピンは持たない。 <sub>`a_view_carries_only_the_pins_in_use`</sub>
+- 相手のいない1本だけのネットのピンは外し、外した理由を残す。 <sub>`a_pin_on_a_one_pin_net_is_skipped_with_a_reason`</sub>
+- どの配線にもつながっていないピンも外し、「つながっていない」という理由を残す。 <sub>`a_pin_on_no_net_is_skipped_with_a_reason`</sub>
+- pins の指定があると、その機器は挙げたピンだけを持つ。 <sub>`the_pins_option_limits_a_view`</sub>
+- 描くピンが1本もない機器はシートに置かず、そのピンは外したものとして残す。 <sub>`a_unit_without_a_drawable_pin_is_dropped`</sub>
+- 機器には、並べて書いたとおりの列と行が付く。 <sub>`units_keep_their_column_and_row`</sub>
+- ブロックの機器は箱にし、ライブラリの部品(抵抗)は部品のまま置く。 <sub>`a_library_symbol_stays_a_symbol`</sub>
+- ネットの全てのピンがこのシートにあるなら、内部のネットになる。 <sub>`a_net_with_all_pins_on_the_sheet_is_internal`</sub>
+- ネットのピンの一部がほかのシートにあるなら、シートから出ていくネットになる。 <sub>`a_net_with_pins_elsewhere_is_leaving`</sub>
+- power_nets と ground_nets に挙げたネットは、電源・接地の種類になる。 <sub>`listed_power_and_ground_nets_get_their_class`</sub>
+- ground_nets を省くと、印のあるネットは全て接地になる(電源に挙げたネットは除く)。元の図が使う印の種類も覚える。 <sub>`ground_nets_default_to_nets_with_a_mark`</sub>
+- 印の付いたネットに自分のピンしかなくても、そのピンには印を描くので「使われている」として持つ。 <sub>`a_ground_pin_alone_on_its_net_is_in_use`</sub>
+- destinations に書いた行き先は、名前を挙げたネットに付く。 <sub>`a_destination_is_kept_on_its_net`</sub>
+- 名前(ネットラベル)のあるネットは、そのラベルの名前を使う。 <sub>`a_labelled_net_keeps_its_label_name`</sub>
+- 名前のないネットは、元の図のネット全体の最初のピンで名前を決めるので、どのシートから下書きしても同じ名前になる。 <sub>`unlabelled_net_name_is_the_same_on_every_sheet`</sub>
+- ピン番号の並びは数の大きさで決める。U2.9 は U2.10 の前、U2 は U10 の前に来る。 <sub>`natural_order_puts_nine_before_ten`</sub>
+- 下書きの依頼はJSONから読め、省いた項目は既定値になり、知らない項目があれば読み込みを断る。 <sub>`a_request_reads_with_defaults_and_refuses_unknown_fields`</sub>
+- 元の図にない参照記号を挙げると断り、その参照記号を文に入れる。 <sub>`an_unknown_reference_is_refused`</sub>
+- 同じ参照記号を2回挙げると断る。 <sub>`a_reference_listed_twice_is_refused`</sub>
+- その機器にないピンの番号を pins に挙げると断る。 <sub>`an_unknown_pin_key_is_refused`</sub>
+- columns にない参照記号を pins に挙げると断る。 <sub>`a_pins_entry_for_a_reference_not_in_columns_is_refused`</sub>
+- 元の図にないネット名は、power_nets・ground_nets・destinations のどれに書いても断り、項目名とネット名を文に入れる。 <sub>`an_unknown_net_is_refused_in_each_option`</sub>
+- 同じネットを電源と接地の両方に挙げると断る。 <sub>`a_net_in_both_power_and_ground_is_refused`</sub>
+- 開いているプロジェクトにすでにあるシート名を付けると断る。 <sub>`a_sheet_name_in_use_is_refused`</sub>
+- シート名が空(空白だけも同じ)だと断る。 <sub>`a_blank_name_is_refused`</sub>
+- 列が0個、または9個以上だと断る。 <sub>`zero_or_nine_columns_are_refused`</sub>
+- ピン間隔が 2.5 でも 5.0 でもないと断る。 <sub>`a_pitch_other_than_two_values_is_refused`</sub>
+- 開いているプロジェクトの部分表示がすでに出しているピンを使うと断り、そのピンを文に入れる。 <sub>`a_pin_already_shown_by_a_view_is_refused`</sub>
+- 同じ機器の部分表示でも、別のピンを出しているだけなら下書きを断らない。 <sub>`a_view_of_other_pins_does_not_stop_the_draft`</sub>
+- 開いているプロジェクトにすでに同じ参照記号のライブラリの部品があると断る。 <sub>`a_library_symbol_already_on_a_function_sheet_is_refused`</sub>
+- 描くピンがどの機器にも1本もないときは断る。 <sub>`no_carried_pin_is_refused`</sub>
+- 描くピンが接点をもつポートのピンだと断る。 <sub>`a_port_with_contacts_is_refused`</sub>
+- 描くピンのネットが多芯ケーブルの芯を通っていると断る。 <sub>`a_net_through_a_cable_core_is_refused`</sub>
 
 ### DXF連携 (AutoCAD Electrical / EPLAN)
 
