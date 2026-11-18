@@ -78,7 +78,7 @@ The draft command sets `block_view` on every block it creates. A person may set 
 
 ### Which pins a view carries
 
-A pin of a unit is **in use** when its source net has two or more pins. The view carries the pins in use, limited by `pins` when given. The pin name printed inside the box is the pin name of the source definition (block pin name or library pin name); the number outside is the source pin key. A block pin without a number keeps its name as key.
+A pin of a unit is **in use** when its source net has two or more pins. The view carries the pins in use, limited by `pins` when given. The pin name printed inside the box is the pin name of the source definition (block pin name or library pin name); the number outside is the source pin key. A block pin without a number keeps its name as key. A pin whose key equals its name is written without a number unless another numbered pin of the unit carries that name (numbered pins may share names with each other and with other pins' numbers; only the keys must be unique), so every block the source holds can be drafted with its names intact. A view that still is not a valid block (two pins with one key) is refused with the unit and the pin named.
 
 A unit whose source symbol is not a block (a library symbol such as a resistor or a relay coil) is not turned into a box: the same symbol is placed with the source rotation, reference and value. Section 2 does not apply to it; it may appear on one function sheet only (a second use is refused).
 

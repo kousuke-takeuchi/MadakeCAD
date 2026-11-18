@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3948 specification clauses** across 6 areas.
+**3951 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -446,6 +446,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Nets listed in power_nets and ground_nets get those classes. <sub>`listed_power_and_ground_nets_get_their_class`</sub>
 - Without ground_nets, every net that carries a net mark is ground, except the ones listed as power; the mark the source uses is remembered. <sub>`ground_nets_default_to_nets_with_a_mark`</sub>
 - A pin that is alone on a net with a mark counts as in use, because the mark is drawn for it. <sub>`a_ground_pin_alone_on_its_net_is_in_use`</sub>
+- A block whose numbered pins repeat each other's names or another pin's number (PX and PX_2 both named PX, GND and GND_2 both named GND, 1 and 2 both named COM) is valid in the source, and the draft makes a view of it that keeps every number and every name. <sub>`numbered_pins_that_share_names_are_drafted_with_their_names`</sub>
+- A pin whose number equals its name is still written without a number when no other pin of the unit is named like it, so the view looks as before. <sub>`a_pin_named_like_its_number_alone_keeps_the_short_form`</sub>
+- Two pins of one unit with the same key cannot be drawn as one view; the refusal names the unit and the pin. <sub>`a_real_key_collision_is_refused_naming_the_unit_and_the_pin`</sub>
 - The destinations option is kept on the net it names. <sub>`a_destination_is_kept_on_its_net`</sub>
 - A labelled net keeps the name of its label. <sub>`a_labelled_net_keeps_its_label_name`</sub>
 - An unlabelled net is named after its first pin over the whole source net, so every sheet that shows it computes the same name. <sub>`unlabelled_net_name_is_the_same_on_every_sheet`</sub>

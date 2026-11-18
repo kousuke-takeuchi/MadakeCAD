@@ -1038,6 +1038,104 @@ mod model_tests {
         assert_eq!(m.nets[0].class, NetClass::Ground);
     }
 
+    /// The (number, name) of every pin of the block `reference` on a drafted sheet; a pin without a number shows ("", name).
+    fn view_pins(sheet: &Sheet, reference: &str) -> BTreeSet<(String, String)> {
+        let s = sheet
+            .entities
+            .values()
+            .find_map(|e| match e {
+                Entity::Symbol(s) if s.reference == reference => Some(s),
+                _ => None,
+            })
+            .expect("the unit is drawn");
+        let pins: serde_json::Value = serde_json::from_str(&s.attrs[crate::block::BLOCK_PINS_ATTR]).unwrap();
+        let text = |v: &serde_json::Value, k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
+        ["left", "right"]
+            .iter()
+            .flat_map(|side| pins[side].as_array().cloned().unwrap_or_default())
+            .filter(|r| r.get("gap").is_none())
+            .map(|r| (text(&r, "no"), text(&r, "name")))
+            .collect()
+    }
+
+    /// A block whose numbered pins repeat each other's names or another pin's number (PX and PX_2 both named PX, GND and GND_2 both named GND, 1 and 2 both named COM) is valid in the source, and the draft makes a view of it that keeps every number and every name.
+    /// 番号付きのピンが互いの名前や別のピンの番号と同じ名前を持つブロック (PX と PX_2 がどちらも名前 PX、GND と GND_2 がどちらも GND、1 と 2 がどちらも COM) は元の図で正しく、下書きはその全ての番号と名前を保ったビューを作る。
+    #[test]
+    fn numbered_pins_that_share_names_are_drafted_with_their_names() {
+        let mut project = fixture_source();
+        let u9 = block(
+            "U9",
+            60.0,
+            200.0,
+            r#"{"left":[{"no":"PX","name":"PX"},{"no":"PX_2","name":"PX"},{"no":"1","name":"COM"},{"no":"2","name":"COM"}],"right":[{"no":"GND","name":"GND"},{"no":"GND_2","name":"GND"}]}"#,
+        );
+        let u8 = block("U8", 160.0, 200.0, r#"{"left":[{"no":"1"},{"no":"2"},{"no":"3"},{"no":"4"},{"no":"5"},{"no":"6"}]}"#);
+        let mut e = Vec::new();
+        for (i, key) in ["PX", "PX_2", "1", "2", "GND", "GND_2"].iter().enumerate() {
+            let net = format!("K{}", i + 1);
+            labelled(&mut e, &u9, key, &net);
+            labelled(&mut e, &u8, &(i + 1).to_string(), &net);
+        }
+        e.push(Entity::Symbol(u9));
+        e.push(Entity::Symbol(u8));
+        for x in e {
+            project.sheets[0].entities.insert(x.id(), x);
+        }
+        crate::block::parse_block_spec(&project.sheets[0].entities.values().find_map(|e| match e {
+            Entity::Symbol(s) if s.reference == "U9" => Some(s.attrs.clone()),
+            _ => None,
+        }).unwrap())
+        .expect("the source holds the block");
+        let plan = plan_function_sheet(&project, &open(), &request(&[&["U9"], &["U8"]])).expect("the block can be drafted");
+        let want: BTreeSet<(String, String)> = [("PX", "PX"), ("PX_2", "PX"), ("1", "COM"), ("2", "COM"), ("GND", "GND"), ("GND_2", "GND")]
+            .iter()
+            .map(|(k, n)| (k.to_string(), n.to_string()))
+            .collect();
+        assert_eq!(view_pins(&plan.sheet, "U9"), want);
+    }
+
+    /// A pin whose number equals its name is still written without a number when no other pin of the unit is named like it, so the view looks as before.
+    /// 番号と名前が同じピンは、同じ名前の別のピンがその機器に無ければ、これまでどおり番号なしで書かれ、ビューの見た目は変わらない。
+    #[test]
+    fn a_pin_named_like_its_number_alone_keeps_the_short_form() {
+        let mut project = fixture_source();
+        let u9 = block("U9", 60.0, 200.0, r#"{"left":[{"name":"EN"},{"no":"OUT","name":"OUT"}]}"#);
+        let u8 = block("U8", 160.0, 200.0, r#"{"left":[{"no":"1"},{"no":"2"}]}"#);
+        let mut e = Vec::new();
+        for (i, key) in ["EN", "OUT"].iter().enumerate() {
+            let net = format!("K{}", i + 1);
+            labelled(&mut e, &u9, key, &net);
+            labelled(&mut e, &u8, &(i + 1).to_string(), &net);
+        }
+        e.push(Entity::Symbol(u9));
+        e.push(Entity::Symbol(u8));
+        for x in e {
+            project.sheets[0].entities.insert(x.id(), x);
+        }
+        let plan = plan_function_sheet(&project, &open(), &request(&[&["U9"], &["U8"]])).unwrap();
+        let want: BTreeSet<(String, String)> = [("", "EN"), ("", "OUT")].iter().map(|(k, n)| (k.to_string(), n.to_string())).collect();
+        assert_eq!(view_pins(&plan.sheet, "U9"), want);
+    }
+
+    /// Two pins of one unit with the same key cannot be drawn as one view; the refusal names the unit and the pin.
+    /// 1つの機器に同じ鍵のピンが2本あるとビューに描けず、断る文は機器とピンを挙げる。
+    #[test]
+    fn a_real_key_collision_is_refused_naming_the_unit_and_the_pin() {
+        let unit = DraftUnit {
+            reference: "U9".into(),
+            column: 0,
+            row: 0,
+            source: block("U9", 60.0, 200.0, r#"{"left":[{"no":"A","name":"X"}]}"#),
+            is_block: true,
+            pins: vec![
+                DraftPin { key: "A".into(), name: "X".into(), net: 0 },
+                DraftPin { key: "A".into(), name: "Y".into(), net: 1 },
+            ],
+        };
+        let msg = view_spec(&unit, &[Row::Pin(0), Row::Pin(1)], &[], 5.0).expect_err("a repeated key is refused");
+        assert!(msg.contains("U9") && msg.contains("A"), "{msg}");
+    }
+
     /// The destinations option is kept on the net it names.
     /// destinations に書いた行き先は、名前を挙げたネットに付く。
     #[test]
@@ -1748,7 +1846,10 @@ fn row_json(unit: &DraftUnit, rows: &[Row]) -> serde_json::Value {
             Row::Gap => serde_json::json!({"gap": 1}),
             Row::Pin(p) => {
                 let pin = &unit.pins[*p];
-                if pin.key == pin.name {
+                // 番号を書かない (鍵 = 名前) のは、番号付きで書く別のピンが同じ名前を持たないときだけ。ブロックの決まりで
+                // 番号の無いピンの名前は番号付きのピンの名前と重なれないので、重なるなら番号も書く (鍵は変わらない)
+                let named_alike = unit.pins.iter().any(|q| q.key != q.name && q.name == pin.key);
+                if pin.key == pin.name && !named_alike {
                     serde_json::json!({"name": pin.name})
                 } else if pin.name.is_empty() {
                     serde_json::json!({"no": pin.key})
@@ -1763,6 +1864,20 @@ fn row_json(unit: &DraftUnit, rows: &[Row]) -> serde_json::Value {
 
 /// 箱の属性と外形 (幅, 高さ)。大きさは既存のブロックの規則 ([`block::block_box`]) の最小値。
 fn block_attrs(unit: &DraftUnit, plan: &UnitPlan, pitch: f64) -> Result<(BTreeMap<String, String>, (f64, f64)), String> {
+    let (mut attrs, spec) = view_spec(unit, &plan.rows(Side::Left), &plan.rows(Side::Right), pitch)?;
+    let (w, h) = block::block_box(&spec);
+    attrs.insert(block::BLOCK_SIZE_ATTR.into(), serde_json::json!({"w": w, "h": h}).to_string());
+    Ok((attrs, (w, h)))
+}
+
+/// ビューの箱の属性 (大きさを除く) と、それを読んだブロックの仕様。左右の行は `left`・`right`。
+/// ブロックとして成り立たない (同じ鍵のピンが2本など) ときは、機器とブロックの決まりの文 (ピンを挙げる) で断る。
+fn view_spec(
+    unit: &DraftUnit,
+    left: &[Row],
+    right: &[Row],
+    pitch: f64,
+) -> Result<(BTreeMap<String, String>, block::BlockSpec), String> {
     let mut attrs: BTreeMap<String, String> = unit
         .source
         .attrs
@@ -1771,8 +1886,8 @@ fn block_attrs(unit: &DraftUnit, plan: &UnitPlan, pitch: f64) -> Result<(BTreeMa
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
     let pins = serde_json::json!({
-        "left": row_json(unit, &plan.rows(Side::Left)),
-        "right": row_json(unit, &plan.rows(Side::Right)),
+        "left": row_json(unit, left),
+        "right": row_json(unit, right),
     });
     attrs.insert(block::BLOCK_PINS_ATTR.into(), pins.to_string());
     attrs.insert(block::BLOCK_VIEW_ATTR.into(), "1".into());
@@ -1780,10 +1895,9 @@ fn block_attrs(unit: &DraftUnit, plan: &UnitPlan, pitch: f64) -> Result<(BTreeMa
     attrs.insert(block::BLOCK_PIN_TEXT_ATTR.into(), pin_text_mm(pitch).to_string());
     // 長い番号が箱の辺やピン名にかからないよう、外の番号は辺から離れる向きへ書く
     attrs.insert(block::BLOCK_NUMBER_ALIGN_ATTR.into(), "edge".into());
-    let spec = block::parse_block_spec(&attrs)?;
-    let (w, h) = block::block_box(&spec);
-    attrs.insert(block::BLOCK_SIZE_ATTR.into(), serde_json::json!({"w": w, "h": h}).to_string());
-    Ok((attrs, (w, h)))
+    let spec = block::parse_block_spec(&attrs)
+        .map_err(|e| format!("The unit {} cannot be drawn as a view: {e}", unit.reference))?;
+    Ok((attrs, spec))
 }
 
 /// 機器の実体 (箱かライブラリのシンボル) を `at` に置く。

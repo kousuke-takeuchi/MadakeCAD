@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3948仕様項目**。
+全6領域・**3951仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -446,6 +446,9 @@
 - power_nets と ground_nets に挙げたネットは、電源・接地の種類になる。 <sub>`listed_power_and_ground_nets_get_their_class`</sub>
 - ground_nets を省くと、印のあるネットは全て接地になる(電源に挙げたネットは除く)。元の図が使う印の種類も覚える。 <sub>`ground_nets_default_to_nets_with_a_mark`</sub>
 - 印の付いたネットに自分のピンしかなくても、そのピンには印を描くので「使われている」として持つ。 <sub>`a_ground_pin_alone_on_its_net_is_in_use`</sub>
+- 番号付きのピンが互いの名前や別のピンの番号と同じ名前を持つブロック (PX と PX_2 がどちらも名前 PX、GND と GND_2 がどちらも GND、1 と 2 がどちらも COM) は元の図で正しく、下書きはその全ての番号と名前を保ったビューを作る。 <sub>`numbered_pins_that_share_names_are_drafted_with_their_names`</sub>
+- 番号と名前が同じピンは、同じ名前の別のピンがその機器に無ければ、これまでどおり番号なしで書かれ、ビューの見た目は変わらない。 <sub>`a_pin_named_like_its_number_alone_keeps_the_short_form`</sub>
+- 1つの機器に同じ鍵のピンが2本あるとビューに描けず、断る文は機器とピンを挙げる。 <sub>`a_real_key_collision_is_refused_naming_the_unit_and_the_pin`</sub>
 - destinations に書いた行き先は、名前を挙げたネットに付く。 <sub>`a_destination_is_kept_on_its_net`</sub>
 - 名前(ネットラベル)のあるネットは、そのラベルの名前を使う。 <sub>`a_labelled_net_keeps_its_label_name`</sub>
 - 名前のないネットは、元の図のネット全体の最初のピンで名前を決めるので、どのシートから下書きしても同じ名前になる。 <sub>`unlabelled_net_name_is_the_same_on_every_sheet`</sub>
