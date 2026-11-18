@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3875 specification clauses** across 6 areas.
+**3878 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -1862,6 +1862,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A repeated pole on one sheet is reported once by the project check, not once by the sheet check and again by the project check. <sub>`a_repeated_pole_on_one_sheet_is_reported_once_by_the_project_check`</sub>
 - Views of one reference on one sheet are one part, so the duplicate reference check stays quiet. <sub>`views_of_one_reference_on_one_sheet_are_not_duplicates`</sub>
 - A view that shares its reference with an ordinary symbol is still a duplicate. <sub>`a_view_and_a_plain_symbol_of_one_reference_are_duplicates`</sub>
+- A view on one sheet and an ordinary symbol of the same reference on another sheet are one duplicate, reported once by the project check with both entities. <sub>`a_view_and_a_plain_symbol_on_two_sheets_are_one_duplicate`</sub>
+- When one sheet already holds a view and an ordinary symbol of one reference, a further view on another sheet does not add a second report. <sub>`a_mixed_reference_is_reported_once_even_across_sheets`</sub>
+- Views of one reference spread over several sheets, with no ordinary symbol of that reference, are not a duplicate. <sub>`views_on_several_sheets_are_not_duplicates`</sub>
 - Two plain blocks of one reference (not views) are still duplicates. <sub>`two_plain_blocks_of_one_reference_are_still_duplicates`</sub>
 - The same pin shown by two views on one sheet is an error that names both views. <sub>`a_pin_shown_by_two_views_on_one_sheet_is_reported`</sub>
 - The same pin shown by views on two different sheets is an error too. <sub>`a_pin_shown_by_two_views_on_two_sheets_is_reported`</sub>

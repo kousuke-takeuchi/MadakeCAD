@@ -64,6 +64,8 @@ pub fn verify_project(project: &crate::model::Project) -> Vec<Diagnostic> {
     diags.extend(project_contact_poles(project));
     // 1つの機器を複数の図に分けて描く部分表示は、ピンの重なりと型番の食い違いをプロジェクト全体で見る
     diags.extend(view_diagnostics(project));
+    // 部分表示と普通のシンボルが別々のシートで同じ参照記号を使う重複も、プロジェクト全体で見る
+    diags.extend(project_view_duplicates(project));
     // コイル⇔接点も1デバイスがシートを跨ぐので、プロジェクト全体で評価する
     diags.extend(crate::relay_xref::relay_diagnostics(project));
     // 盤レイアウト (回路図と盤の突き合わせ) もプロジェクト全体で評価する
@@ -154,6 +156,55 @@ fn project_contact_poles(project: &crate::model::Project) -> Vec<Diagnostic> {
             ),
             sheet_id: members[0].0,
             entity_ids: members.iter().map(|(_, id)| *id).collect(),
+        });
+    }
+    diags
+}
+
+/// 部分表示 ([`crate::block::is_view`]) と普通のシンボルが同じ参照記号を使っている、の指摘をシートを跨いで出す
+/// (`erc.duplicate_reference`)。1枚のシートの中に両方があればシートの検証が既に指摘するので、どのシートにも両方が
+/// 揃っていない参照記号だけを、参照記号ごとに1件出す。ネットの印と、整えバリアント・盤面のシートは数えない。
+fn project_view_duplicates(project: &crate::model::Project) -> Vec<Diagnostic> {
+    // 参照記号 → (シートid, entity id, 部分表示か)。シート順・シートの中の並び順
+    let mut by_ref: BTreeMap<String, Vec<(SheetId, EntityId, bool)>> = BTreeMap::new();
+    for sheet in &project.sheets {
+        if sheet.is_variant() || sheet.is_panel() {
+            continue;
+        }
+        let defs = crate::symbol::sheet_symbol_defs(sheet);
+        let index = crate::symbol::DefIndex::new(&defs);
+        for e in sheet.entities.values() {
+            let Entity::Symbol(s) = e else { continue };
+            let reference = s.reference.trim();
+            if reference.is_empty() || index.get(s).is_some_and(|d| d.is_net_mark()) {
+                continue;
+            }
+            by_ref.entry(reference.to_string()).or_default().push((sheet.id, s.id, crate::block::is_view(s)));
+        }
+    }
+    let mut diags = Vec::new();
+    for (reference, members) in &by_ref {
+        if !members.iter().any(|m| m.2) || !members.iter().any(|m| !m.2) {
+            continue;
+        }
+        let sheets: BTreeSet<SheetId> = members.iter().map(|m| m.0).collect();
+        let mixed_on_one_sheet = sheets.iter().any(|id| {
+            let on: Vec<_> = members.iter().filter(|m| m.0 == *id).collect();
+            on.iter().any(|m| m.2) && on.iter().any(|m| !m.2)
+        });
+        if mixed_on_one_sheet {
+            continue;
+        }
+        let first_plain = members.iter().find(|m| !m.2).map_or(members[0].0, |m| m.0);
+        diags.push(Diagnostic {
+            severity: Severity::Error,
+            code: "erc.duplicate_reference".into(),
+            message: format!(
+                "参照記号 {reference} が、部分表示と普通のシンボルで別々のシートに{}回使われています",
+                members.len()
+            ),
+            sheet_id: first_plain,
+            entity_ids: members.iter().map(|m| m.1).collect(),
         });
     }
     diags
@@ -2162,6 +2213,42 @@ mod tests {
             symbol("resistor", "U7", 140.0, 40.0),
         ]);
         assert_eq!(of_code(&run(&sheet), "erc.duplicate_reference").len(), 1);
+    }
+
+    /// A view on one sheet and an ordinary symbol of the same reference on another sheet are one duplicate, reported once by the project check with both entities.
+    /// 部分表示と、同じ参照記号の普通のシンボルが別々のシートにあると、プロジェクトの検証が重複として1件だけ指摘し、両方を挙げる。
+    #[test]
+    fn a_view_and_a_plain_symbol_on_two_sheets_are_one_duplicate() {
+        let (v, r) = (crate::block::test_view("U7", "P24X", 40.0, 40.0, PINS_AB), symbol("resistor", "U7", 40.0, 40.0));
+        let (idv, idr) = (v.id(), r.id());
+        let project = project_with(vec![vec![v], vec![r]]);
+        let hits = of_code(&verify_project(&project), "erc.duplicate_reference");
+        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert_eq!(hits[0].severity, Severity::Error);
+        assert!(hits[0].entity_ids.contains(&idv) && hits[0].entity_ids.contains(&idr), "{hits:?}");
+        assert!(hits[0].message.contains("U7"));
+    }
+
+    /// When one sheet already holds a view and an ordinary symbol of one reference, a further view on another sheet does not add a second report.
+    /// 1枚のシートに部分表示と普通のシンボルが既に同居していれば、別のシートにもう1つ部分表示があっても、指摘は1件のまま。
+    #[test]
+    fn a_mixed_reference_is_reported_once_even_across_sheets() {
+        let project = project_with(vec![
+            vec![crate::block::test_view("U7", "P24X", 40.0, 40.0, PINS_AB), symbol("resistor", "U7", 140.0, 40.0)],
+            vec![crate::block::test_view("U7", "P24X", 40.0, 40.0, PINS_CD)],
+        ]);
+        assert_eq!(of_code(&verify_project(&project), "erc.duplicate_reference").len(), 1);
+    }
+
+    /// Views of one reference spread over several sheets, with no ordinary symbol of that reference, are not a duplicate.
+    /// 同じ参照記号の部分表示を何枚かのシートに分けて置き、普通のシンボルが無ければ、重複とは指摘しない。
+    #[test]
+    fn views_on_several_sheets_are_not_duplicates() {
+        let project = project_with(vec![
+            vec![crate::block::test_view("U7", "P24X", 40.0, 40.0, PINS_AB)],
+            vec![crate::block::test_view("U7", "P24X", 40.0, 40.0, PINS_CD)],
+        ]);
+        assert!(of_code(&verify_project(&project), "erc.duplicate_reference").is_empty());
     }
 
     /// Two plain blocks of one reference (not views) are still duplicates.

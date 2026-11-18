@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3875仕様項目**。
+全6領域・**3878仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -1862,6 +1862,9 @@
 - 1枚のシートの中で極が重なっているときも、プロジェクトの検証では1件だけで、シートの検証と合わせて二重に出ない。 <sub>`a_repeated_pole_on_one_sheet_is_reported_once_by_the_project_check`</sub>
 - 同じ参照記号の部分表示を1枚のシートに何個置いても、1つの部品なので参照記号の重複とは指摘しない。 <sub>`views_of_one_reference_on_one_sheet_are_not_duplicates`</sub>
 - 部分表示が普通のシンボルと参照記号を分け合っているときは、今までどおり重複として指摘する。 <sub>`a_view_and_a_plain_symbol_of_one_reference_are_duplicates`</sub>
+- 部分表示と、同じ参照記号の普通のシンボルが別々のシートにあると、プロジェクトの検証が重複として1件だけ指摘し、両方を挙げる。 <sub>`a_view_and_a_plain_symbol_on_two_sheets_are_one_duplicate`</sub>
+- 1枚のシートに部分表示と普通のシンボルが既に同居していれば、別のシートにもう1つ部分表示があっても、指摘は1件のまま。 <sub>`a_mixed_reference_is_reported_once_even_across_sheets`</sub>
+- 同じ参照記号の部分表示を何枚かのシートに分けて置き、普通のシンボルが無ければ、重複とは指摘しない。 <sub>`views_on_several_sheets_are_not_duplicates`</sub>
 - 部分表示の印が無い普通のブロックを同じ参照記号で2個置いたときは、今までどおり重複として指摘する。 <sub>`two_plain_blocks_of_one_reference_are_still_duplicates`</sub>
 - 同じピンを1枚のシートの2つの部分表示が両方とも出していると、両方の部分表示を挙げてエラーにする。 <sub>`a_pin_shown_by_two_views_on_one_sheet_is_reported`</sub>
 - 同じピンを別々のシートの部分表示が出している場合も、同じようにエラーにする。 <sub>`a_pin_shown_by_two_views_on_two_sheets_is_reported`</sub>
