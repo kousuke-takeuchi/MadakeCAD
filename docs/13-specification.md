@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3985 specification clauses** across 6 areas.
+**3989 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -557,7 +557,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Planning the same request twice gives the same wires once the random ids are left out. <sub>`planning_twice_gives_the_same_channel_wires`</sub>
 - A net whose channel wire is blocked (here by a keep-out area over its trunk) is handed to the grid router, which still joins it, and the connections stay the same. <sub>`a_blocked_channel_net_is_taken_by_the_grid_router`</sub>
 - On the core, bars and stacked fixtures, at both pitches, the drafted sheet carries the connections of the source, and no wire touches a tag flag, a mark, a text box or a box. <sub>`drafted_fixtures_keep_the_connections_and_wires_off_everything`</sub>
+- On 200 random sources (fixed seeds), every drafted sheet carries the connections of the source, no wire touches a tag flag, and every channel track lies inside its channel, at least 5 mm from the columns, on the grid; the same request planned twice gives the same wires. <sub>`random_sources_keep_the_connections_and_every_track_inside_its_channel`</sub>
+- A channel net whose drop would come too close to a tag added later for a net the grid router cannot place is handed to the grid router: it no longer runs on its track, it is still wired, no wire touches a flag, and the connections stay the same. <sub>`a_channel_net_near_a_later_fallback_tag_is_handed_to_the_grid_router`</sub>
+- Forty nested nets in one channel get forty tracks, none left out, in well under a second, and a net of thirty terminals is one trunk with a junction at each of its 28 inner drops. <sub>`forty_nets_and_thirty_terminals_are_assigned_quickly`</sub>
 - Opening many new tracks between the same two tracks keeps them apart: the tracks never collapse onto one position, so a net never shorts with or is refused because of a track it does not touch. <sub>`many_tracks_opened_in_one_gap_stay_apart`</sub>
+- Odd requests do not panic: one column, one unit, a unit with only a jumper, and a sheet whose every net leaves it have no channel and still plan. <sub>`odd_requests_plan_without_a_channel`</sub>
 
 ### draft_check
 

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3985仕様項目**。
+全6領域・**3989仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -557,7 +557,11 @@
 - 同じ依頼を2回計画すると、ランダムなidを除けば、全く同じ配線になる。 <sub>`planning_twice_gives_the_same_channel_wires`</sub>
 - 通り道の配線がふさがれたネット (ここでは幹の上に立入禁止の領域を置く) は格子の経路探索に渡され、それでもつながり、つながりは変わらない。 <sub>`a_blocked_channel_net_is_taken_by_the_grid_router`</sub>
 - 基本・棒・積んだ見本のどれでも、どちらのピン間隔でも、下書きのシートは元の図と同じつながりを持ち、札の旗・印・文字の枠・箱に触れる配線は無い。 <sub>`drafted_fixtures_keep_the_connections_and_wires_off_everything`</sub>
+- 決まった種から作った200個のでたらめな元の図のどれでも、下書きのシートは元の図と同じつながりを持ち、札の旗に触れる配線は無く、通り道のトラックは全て通り道の中で列から5mm以上離れて格子の上にある。同じ依頼を2回計画すると同じ配線になる。 <sub>`random_sources_keep_the_connections_and_every_track_inside_its_channel`</sub>
+- 格子の経路探索が引けないネットに後から付けた札のそばを通ってしまう通り道のネットは、格子の経路探索に渡される。トラックの上にはもう無いが配線はされ、旗に触れる配線は無く、つながりは変わらない。 <sub>`a_channel_net_near_a_later_fallback_tag_is_handed_to_the_grid_router`</sub>
+- 1つの通り道の入れ子の40本のネットは、1本も残さず40本のトラックに1秒よりずっと短い時間で割り当てられる。端が30個のネットは幹1本で、内側の28本の枝ごとに接点がある。 <sub>`forty_nets_and_thirty_terminals_are_assigned_quickly`</sub>
 - 同じ2本のトラックのあいだに何度も新しいトラックを開いても、トラックは1つの位置に重ならない。触れていないトラックのせいで短絡したり断られたりはしない。 <sub>`many_tracks_opened_in_one_gap_stay_apart`</sub>
+- おかしな依頼でも止まらない: 1列だけ、機器1つだけ、機器の中のジャンパだけ、全てのネットが出ていくシートは、通り道が無くても計画できる。 <sub>`odd_requests_plan_without_a_channel`</sub>
 
 ### draft_check
 

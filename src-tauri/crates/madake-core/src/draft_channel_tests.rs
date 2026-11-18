@@ -253,7 +253,7 @@ fn tracks_are_on_the_grid_and_keep_their_distance_from_the_columns() {
         assert!(*x >= r + 5.0 - 1e-6 && *x <= left - 5.0 + 1e-6, "{x} in {r}..{left}");
     }
     for pair in t.windows(2) {
-        assert!(pair[1].0 - pair[0].0 >= 2.5 - 1e-6, "{pair:?}");
+        assert!((pair[1].0 - pair[0].0 - 2.5).abs() < 1e-6, "adjacent tracks are 2.5 mm apart: {pair:?}");
     }
 }
 
@@ -485,6 +485,145 @@ fn drafted_fixtures_keep_the_connections_and_wires_off_everything() {
     }
 }
 
+
+// ---- review: seeded random sources, the hand-over to the grid router, size and odd inputs
+
+/// A small deterministic random number generator (the same seed always gives the same numbers).
+struct Lcg(u64);
+impl Lcg {
+    fn next(&mut self) -> u64 {
+        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.0 >> 33
+    }
+    fn below(&mut self, n: usize) -> usize {
+        (self.next() % n as u64) as usize
+    }
+}
+
+/// A random source for one seed: two to six units of two to nine pins, nets of two to five pins, one to four columns,
+/// sometimes one unit left off the sheet (so some nets leave it), and pitch 2.5 or 5. Returns the source, the request and the drafted references.
+fn random_case(seed: u64) -> (Project, DraftRequest, Vec<String>) {
+    let mut r = Lcg(seed.wrapping_mul(7919).wrapping_add(17));
+    let refs = ["A", "B", "C", "D", "E", "F", "G"];
+    let n_units = 2 + r.below(5);
+    let units: Vec<(&str, usize)> = (0..n_units).map(|i| (refs[i], 2 + r.below(8))).collect();
+    let mut pins: Vec<(&str, String)> = units.iter().flat_map(|(u, n)| (1..=*n).map(move |k| (*u, k.to_string()))).collect();
+    for i in (1..pins.len()).rev() {
+        let j = r.below(i + 1);
+        pins.swap(i, j);
+    }
+    let mut nets: Vec<(String, Vec<(&str, String)>)> = Vec::new();
+    let mut it = pins.into_iter().peekable();
+    let mut i = 0;
+    while it.peek().is_some() {
+        let size = 2 + r.below(4);
+        let members: Vec<(&str, String)> = it.by_ref().take(size).collect();
+        if members.len() >= 2 {
+            nets.push((format!("N{}", 1 + r.below(60) * 100 + i), members));
+        }
+        i += 1;
+    }
+    let owned: Vec<(String, Vec<(&str, &str)>)> = nets.iter().map(|(n, m)| (n.clone(), m.iter().map(|(u, k)| (*u, k.as_str())).collect())).collect();
+    let net_refs: Vec<(&str, &[(&str, &str)])> = owned.iter().map(|(n, m)| (n.as_str(), m.as_slice())).collect();
+    let src = source_of("draft-random", &units, &net_refs);
+    let drafted: Vec<&str> = if n_units > 2 && r.below(3) == 0 { units[..n_units - 1].iter().map(|u| u.0).collect() } else { units.iter().map(|u| u.0).collect() };
+    let ncols = 1 + r.below(drafted.len().min(4));
+    let mut cols: Vec<Vec<&str>> = vec![Vec::new(); ncols];
+    for (i, u) in drafted.iter().enumerate() {
+        let c = if i < ncols { i } else { r.below(ncols) };
+        cols[c].push(u);
+    }
+    let col_refs: Vec<&[&str]> = cols.iter().map(|c| c.as_slice()).collect();
+    let pitch = if r.below(2) == 0 { 5.0 } else { 2.5 };
+    (src, stacked_request(&col_refs, pitch), drafted.iter().map(|s| s.to_string()).collect())
+}
+
+/// The wires and junctions of a plan as sorted text, without the random ids.
+fn wire_key(p: &DraftPlan) -> Vec<String> {
+    let mut v: Vec<String> = wires_of(&p.sheet).iter().map(|w| format!("{:?}", w.points)).collect();
+    v.extend(junctions_of(&p.sheet).iter().map(|j| format!("J{j:?}")));
+    v.sort();
+    v
+}
+
+/// On 200 random sources (fixed seeds), every drafted sheet carries the connections of the source, no wire touches a tag flag, and every channel track lies inside its channel, at least 5 mm from the columns, on the grid; the same request planned twice gives the same wires.
+/// 決まった種から作った200個のでたらめな元の図のどれでも、下書きのシートは元の図と同じつながりを持ち、札の旗に触れる配線は無く、通り道のトラックは全て通り道の中で列から5mm以上離れて格子の上にある。同じ依頼を2回計画すると同じ配線になる。
+#[test]
+fn random_sources_keep_the_connections_and_every_track_inside_its_channel() {
+    let (mut drafted_ok, mut on_tracks) = (0, 0);
+    for seed in 0..200u64 {
+        let (src, req, drafted) = random_case(seed);
+        let refs: Vec<&str> = drafted.iter().map(String::as_str).collect();
+        let open = open();
+        // a column taller than the drawing area is refused; that is the size rule, not this test
+        let Ok(p) = plan_function_sheet(&src, &open, &req) else { continue };
+        drafted_ok += 1;
+        assert_eq!(device_groups(&p.sheet, &refs), device_groups(&src.sheets[0], &refs), "seed {seed}");
+        let bad = wires_touching_flags(&with_sheet(&open, &p.sheet), &p.sheet);
+        assert!(bad.is_empty(), "seed {seed}: {bad:#?}");
+        let m = build_model(&src, &open, &req).expect("valid");
+        let l = lay_out(&m, &open, &req).expect("fits");
+        assert_eq!(l.channels.len(), l.columns.len() - 1, "seed {seed}");
+        for (k, ch) in l.channels.iter().enumerate() {
+            assert!((ch.left - l.columns[k].right).abs() < 1e-6 && (ch.right - l.columns[k + 1].left).abs() < 1e-6, "seed {seed}: {ch:?}");
+            for t in ch.placed.iter().filter_map(|pl| pl.track) {
+                on_tracks += 1;
+                assert!(t < ch.tracks, "seed {seed}: {ch:?}");
+                let x = ch.track_x(t);
+                assert!(on_grid(x) && x >= ch.left + 5.0 - 1e-6 && x <= ch.right - 5.0 + 1e-6, "seed {seed}: track at {x} in {ch:?}");
+            }
+        }
+        if seed % 10 == 0 {
+            assert_eq!(wire_key(&p), wire_key(&plan_function_sheet(&src, &open, &req).expect("plan")), "seed {seed}");
+        }
+    }
+    assert!(drafted_ok >= 180 && on_tracks >= 200, "the cases exercise the channels: {drafted_ok} sheets, {on_tracks} nets on tracks");
+}
+
+/// A channel net whose drop would come too close to a tag added later for a net the grid router cannot place is handed to the grid router: it no longer runs on its track, it is still wired, no wire touches a flag, and the connections stay the same.
+/// 格子の経路探索が引けないネットに後から付けた札のそばを通ってしまう通り道のネットは、格子の経路探索に渡される。トラックの上にはもう無いが配線はされ、旗に触れる配線は無く、つながりは変わらない。
+#[test]
+fn a_channel_net_near_a_later_fallback_tag_is_handed_to_the_grid_router() {
+    let (src, m, mut l, p) = drafted(
+        &[("A", 3), ("B", 3), ("C", 2)],
+        &[("N", &[("A", "1"), ("B", "3")]), ("G", &[("A", "2"), ("C", "1")]), ("X", &[("A", "3"), ("B", "1")]), ("Y", &[("B", "2"), ("C", "2")])],
+        &[&["A"], &["B"], &["C"]],
+        5.0,
+    );
+    let x_key = m.nets.iter().position(|n| n.name == "X").expect("X");
+    let track = l.channels[0].placed.iter().find(|pl| pl.key == x_key).and_then(|pl| pl.track).expect("X is on a track");
+    let x = l.channels[0].track_x(track);
+    let g_term = l.terminals.iter().find(|t| m.nets[t.net].name == "G" && t.dir == Dir::E).expect("G leaves A to the right").at;
+    let trunk = trunks(&p.sheet, &l, 0).into_iter().find(|t| (t.0 - x).abs() < 1e-6).expect("X runs on its track at first");
+    assert!(trunk.1 <= g_term.y && g_term.y <= trunk.2, "the trunk of X passes the row where G leaves A: {trunk:?} {g_term:?}");
+    // a keep-out area over the channel to C and over C makes G (and Y) impossible for the grid router: G gets fallback tags,
+    // and the tag on A points right over the drop of X
+    let c = bounds_of(&p.sheet, "C");
+    l.keep_out.push(Rect::from_corners(Point::new(c.min.x - 28.0, c.min.y - 12.0), Point::new(c.max.x + 3.0, c.max.y + 12.0)));
+    let (sheet, wired, labelled) = route_wires(&m, &l, &RouteOptions::default());
+    assert!(labelled.contains(&"G".to_string()), "{labelled:?}");
+    assert!(wired.contains(&"X".to_string()) && wired.contains(&"N".to_string()), "{wired:?}");
+    assert!(!trunks(&sheet, &l, 0).iter().any(|t| (t.0 - x).abs() < 1e-6), "X left its track: {:?}", trunks(&sheet, &l, 0));
+    assert!(wires_touching_flags(&with_sheet(&open(), &sheet), &sheet).is_empty());
+    assert_eq!(device_groups(&sheet, &["A", "B", "C"]), device_groups(&src.sheets[0], &["A", "B", "C"]));
+}
+
+/// Forty nested nets in one channel get forty tracks, none left out, in well under a second, and a net of thirty terminals is one trunk with a junction at each of its 28 inner drops.
+/// 1つの通り道の入れ子の40本のネットは、1本も残さず40本のトラックに1秒よりずっと短い時間で割り当てられる。端が30個のネットは幹1本で、内側の28本の枝ごとに接点がある。
+#[test]
+fn forty_nets_and_thirty_terminals_are_assigned_quickly() {
+    let started = std::time::Instant::now();
+    let mut nets: Vec<ChanNet> = (0..40).map(|i| chan_net(i, &format!("N{i}"), &[(i as f64 * 2.5, true), (400.0 - i as f64 * 2.5, true)])).collect();
+    nets.push(ChanNet { key: 40, name: "W".into(), terms: (0..30).map(|i| ChanTerm { y: 500.0 + 2.5 * i as f64, left: i % 2 == 0 }).collect() });
+    let a = assign_tracks(&nets);
+    assert!(started.elapsed().as_secs_f64() < 1.0, "{:?}", started.elapsed());
+    assert!(a.unplaced.is_empty(), "{a:?}");
+    assert_eq!(a.tracks, 40);
+    let terms: Vec<ChanTermAt> = (0..30).map(|i| at(if i % 2 == 0 { 100.0 } else { 150.0 }, 500.0 + 2.5 * i as f64, i % 2 == 0)).collect();
+    let r = route_geometry(&terms, Some(125.0));
+    assert_eq!((r.wires.len(), r.junctions.len()), (31, 28));
+}
+
 /// Opening many new tracks between the same two tracks keeps them apart: the tracks never collapse onto one position, so a net never shorts with or is refused because of a track it does not touch.
 /// 同じ2本のトラックのあいだに何度も新しいトラックを開いても、トラックは1つの位置に重ならない。触れていないトラックのせいで短絡したり断られたりはしない。
 #[test]
@@ -502,4 +641,24 @@ fn many_tracks_opened_in_one_gap_stay_apart() {
         assert_eq!(track_of(&a, i), Some(i), "R{} is the {i}th track from the left", i + 1);
     }
     assert_eq!(track_of(&a, 100), Some(40), "A stays right of every R");
+}
+
+/// Odd requests do not panic: one column, one unit, a unit with only a jumper, and a sheet whose every net leaves it have no channel and still plan.
+/// おかしな依頼でも止まらない: 1列だけ、機器1つだけ、機器の中のジャンパだけ、全てのネットが出ていくシートは、通り道が無くても計画できる。
+#[test]
+fn odd_requests_plan_without_a_channel() {
+    let cases: [(&[(&str, usize)], Pairs, Vec<&[&str]>); 4] = [
+        (&[("A", 2), ("B", 2)], &[("N", &[("A", "1"), ("B", "1")])], vec![&["A", "B"][..]]),
+        (&[("A", 2)], &[("J", &[("A", "1"), ("A", "2")])], vec![&["A"][..]]),
+        (&[("A", 2), ("B", 2)], &[("J", &[("A", "1"), ("A", "2")]), ("K", &[("B", "1"), ("B", "2")])], vec![&["A"][..], &["B"][..]]),
+        (&[("A", 2), ("B", 2), ("C", 2)], &[("L", &[("A", "1"), ("C", "1")]), ("M", &[("B", "1"), ("C", "2")])], vec![&["A"][..], &["B"][..]]),
+    ];
+    for (units, nets, cols) in cases {
+        let src = source_of("draft-odd", units, nets);
+        let req = stacked_request(&cols, 5.0);
+        let m = build_model(&src, &open(), &req).expect("valid");
+        let l = lay_out(&m, &open(), &req).expect("fits");
+        assert!(l.channels.iter().all(|c| c.placed.is_empty() && c.tracks == 0), "{cols:?}: {:?}", l.channels);
+        assert!(plan_function_sheet(&src, &open(), &req).is_ok(), "{cols:?}");
+    }
 }
