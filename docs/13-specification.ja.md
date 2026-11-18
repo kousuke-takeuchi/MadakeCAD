@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3917仕様項目**。
+全6領域・**3918仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -559,6 +559,7 @@
 - どの印の文字も、全ての配線 (棒・短い線・印の引き出し・引いた配線) とピン番号にかからず、印どうしも触れない。電源の組でも接地の組でも、ピン間隔5.0でも2.5でも、1つの辺に電源と接地の組が2つずつあっても同じ。 <sub>`mark_texts_are_clear_of_wires_and_pin_numbers`</sub>
 - 下書きのシートでは、印字されたピン番号が箱の外形にもピン名にも触れない。6文字の番号でも、ピン間隔2.5でも同じ (箱は番号を辺の外で終わらせる)。 <sub>`no_pin_number_touches_the_box_outline_or_a_pin_name`</sub>
 - 見て確かめるために、棒の見本を下書きしたシートを MADAKE_DRAFT_SVG の場所へSVGで書き出す (--ignored で実行する)。 <sub>`write_the_bars_sheet_as_svg`</sub>
+- 見て確かめるために、積んだ見本を2通り (積んだ列がSYの前・最後の列) に下書きしたシートを、MADAKE_DRAFT_SVG_DIR のフォルダへSVGで書き出す (--ignored で実行する)。 <sub>`write_the_stacked_sheets_as_svg`</sub>
 - 手元のファイルの依頼を順に下書きして、シートをSVGで書き出し、見て確かめる (--ignored で実行。環境変数 MADAKE_DRAFT_REQUESTS と MADAKE_DRAFT_OUT を指定する。無ければ何もしない)。 <sub>`draft_requests_from_a_file_for_looking`</sub>
 
 ### DXF連携 (AutoCAD Electrical / EPLAN)

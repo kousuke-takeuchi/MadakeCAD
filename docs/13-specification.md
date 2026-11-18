@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3917 specification clauses** across 6 areas.
+**3918 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -559,6 +559,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The printed text of each mark is clear of every wire (bars, stubs, mark leads, routed wires) and of every pin number, and no two marks touch, for power and ground groups, at pitch 5.0 and 2.5, also with two power and two ground groups on one side. <sub>`mark_texts_are_clear_of_wires_and_pin_numbers`</sub>
 - On a drafted sheet no printed pin number touches the outline of its box or any pin name, also with a six-character number and at pitch 2.5 (the boxes end their numbers at the box edge). <sub>`no_pin_number_touches_the_box_outline_or_a_pin_name`</sub>
 - Writes the bars fixture as a drafted sheet to the path in MADAKE_DRAFT_SVG (run with --ignored). <sub>`write_the_bars_sheet_as_svg`</sub>
+- Writes the stacked fixture drafted twice (the stack before SY, and the stack in the last column) as SVG files into the directory in MADAKE_DRAFT_SVG_DIR (run with --ignored). <sub>`write_the_stacked_sheets_as_svg`</sub>
 - Drafts the requests of a JSON file one after another and writes the sheets as SVG for a look (run with --ignored; set MADAKE_DRAFT_REQUESTS and MADAKE_DRAFT_OUT). <sub>`draft_requests_from_a_file_for_looking`</sub>
 
 ### DXF interop (AutoCAD Electrical / EPLAN)

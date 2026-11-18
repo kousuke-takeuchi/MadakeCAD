@@ -1107,6 +1107,21 @@ fn write_the_bars_sheet_as_svg() {
 
 
 
+/// Writes the stacked fixture drafted twice (the stack before SY, and the stack in the last column) as SVG files into the directory in MADAKE_DRAFT_SVG_DIR (run with --ignored).
+/// 見て確かめるために、積んだ見本を2通り (積んだ列がSYの前・最後の列) に下書きしたシートを、MADAKE_DRAFT_SVG_DIR のフォルダへSVGで書き出す (--ignored で実行する)。
+#[test]
+#[ignore]
+fn write_the_stacked_sheets_as_svg() {
+    let Ok(dir) = std::env::var("MADAKE_DRAFT_SVG_DIR") else { return };
+    for (name, columns) in [("stacked-right", vec![&STACK[..], &["SY"][..]]), ("stacked-left", vec![&["SY"][..], &STACK[..]])] {
+        let open = stacked_open();
+        let p = plan_function_sheet(&stacked_source(), &open, &stacked_request(&columns, 5.0)).expect("fits");
+        let project = with_sheet(&open, &p.sheet);
+        let svg = crate::svg::project_sheet_to_svg(&project, p.sheet.id, &builtin_symbols()).unwrap();
+        std::fs::write(format!("{dir}/{name}.svg"), svg).unwrap();
+    }
+}
+
 // ---- looking at real data without the app
 
 /// Drafts the requests of a JSON file one after another and writes the sheets as SVG for a look (run with --ignored; set MADAKE_DRAFT_REQUESTS and MADAKE_DRAFT_OUT).
