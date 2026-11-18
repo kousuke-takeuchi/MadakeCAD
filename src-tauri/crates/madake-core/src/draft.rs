@@ -65,8 +65,18 @@ pub struct DraftRequest {
     pub planned_sheets: Vec<PlannedSheet>,
     /// 新しいシートの表題欄の上書き。省略した欄は既定 (品名=シート名、`planned_sheets` があれば図番=「k/n」、
     /// 他は新しいシートと同じ空)。
-    #[serde(default)]
+    #[serde(default, deserialize_with = "title_block_from")]
     pub title_block: Option<DraftTitleBlock>,
+}
+
+/// `title_block` を読む。形が違う・知らない欄があれば、`title_block: …` と項目名を添えて断る
+/// (serde の入れ子の文は項目名を言わないため。Link API の400、MCP のエラー、CLI の表示にそのまま出る)。
+fn title_block_from<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<DraftTitleBlock>, D::Error> {
+    let value = serde_json::Value::deserialize(d)?;
+    if value.is_null() {
+        return Ok(None);
+    }
+    serde_json::from_value(value).map(Some).map_err(|e| serde::de::Error::custom(format!("title_block: {e}")))
 }
 
 /// 下書きのシートの表題欄の上書き。名前は [`TitleBlock`] と同じ。書いた欄だけが既定を置き換える
@@ -113,17 +123,13 @@ impl DraftTitleBlock {
 }
 
 impl DraftRequest {
-    /// 新しいシートの表題欄。品名=シート名、`planned_sheets` があって図番を依頼が書いていなければ
-    /// 計画の中での位置から「k/n」(このシートの名前が計画に無ければ既定の空)、最後に依頼の上書き。
+    /// 新しいシートの表題欄。品名=シート名、`planned_sheets` があれば計画の中での位置から図番「k/n」
+    /// (このシートの名前が計画に無ければ既定の空)、最後に依頼の上書き (図番を書けば「k/n」より優先)。
     fn new_title_block(&self) -> TitleBlock {
         let name = self.name.trim();
-        let mut tb = TitleBlock::default();
-        tb.title = name.to_string();
-        let own_number = self.title_block.as_ref().is_some_and(|t| t.drawing_no.is_some());
-        if !own_number {
-            if let Some(k) = self.planned_sheets.iter().position(|p| p.name().trim() == name) {
-                tb.drawing_no = format!("{}/{}", k + 1, self.planned_sheets.len());
-            }
+        let mut tb = TitleBlock { title: name.to_string(), ..TitleBlock::default() };
+        if let Some(k) = self.planned_sheets.iter().position(|p| p.name().trim() == name) {
+            tb.drawing_no = format!("{}/{}", k + 1, self.planned_sheets.len());
         }
         if let Some(over) = &self.title_block {
             over.apply(&mut tb);
@@ -495,6 +501,18 @@ impl DraftRequest {
             if !planned.insert(p.to_string()) {
                 return Err(format!("The sheet name '{p}' is listed more than once in planned_sheets"));
             }
+        }
+        // 表題欄の自由な欄の名前は set_title_block と同じ決まり (後で表題欄を直してundoしたとき、
+        // 戻す先の欄名が断られないように、ここで断る)
+        if let Some(bad) = self
+            .title_block
+            .as_ref()
+            .and_then(|t| t.fields.as_ref())
+            .and_then(|f| f.keys().find(|k| !crate::model::valid_field_name(k)))
+        {
+            return Err(format!(
+                "title_block.fields: the field name '{bad}' must be 1 to 32 characters of a-z, 0-9 and _"
+            ));
         }
         Ok(())
     }
@@ -3590,7 +3608,7 @@ pub(crate) fn plan_in(
     let model = build_model(source, open, req)?;
     let layout = lay_out_in(&model, open, req, template)?;
     let (mut sheet, wired, labelled) = route_wires(&model, &layout, opts);
-sheet.title_block = req.new_title_block();
+    sheet.title_block = req.new_title_block();
     Ok(DraftPlan {
         sheet,
         units: model.units.len(),
@@ -4687,14 +4705,13 @@ mod wire_tests {
     /// 依頼の title_block に書いた欄は、品名も含めて既定を置き換え、書かなかった欄は既定のままになる。
     #[test]
     fn title_block_fields_in_the_request_override_the_defaults() {
-        let req = request_with(serde_json::json!({"title_block": {
-            "title": "Cooling line", "company": "Example Works", "drawing_no": "EX-10", "rev": "B", "fields": {"title_en": "COOLING"}
-        }}))
-        .unwrap();
-        let tb = title_of(&req);
-        assert_eq!((tb.title.as_str(), tb.company.as_str(), tb.drawing_no.as_str(), tb.rev.as_str()), ("Cooling line", "Example Works", "EX-10", "B"));
-        assert_eq!(tb.fields.get("title_en").map(String::as_str), Some("COOLING"));
-        assert!(tb.scale.is_empty() && tb.date.is_empty() && tb.designed.is_empty());
+        let every = serde_json::json!({
+            "company": "Example Works", "title": "Cooling line", "drawing_no": "EX-10", "scale": "NTS", "date": "2026-01-02",
+            "designed": "D. Able", "drawn": "R. Baker", "checked": "C. Dale", "approved": "A. Eaton", "rev": "B",
+            "fields": {"title_en": "COOLING"}
+        });
+        let tb = title_of(&request_with(serde_json::json!({"title_block": every.clone()})).unwrap());
+        assert_eq!(serde_json::to_value(&tb).unwrap(), every, "every field of title_block is written to the sheet");
         let only_company = title_of(&request_with(serde_json::json!({"title_block": {"company": "Example Works"}})).unwrap());
         assert_eq!((only_company.title.as_str(), only_company.company.as_str()), ("Function", "Example Works"));
     }
@@ -4704,15 +4721,33 @@ mod wire_tests {
     #[test]
     fn an_unknown_title_block_field_is_refused() {
         let err = request_with(serde_json::json!({"title_block": {"titel": "x"}})).unwrap_err().to_string();
-        assert!(err.contains("titel"), "{err}");
+        assert!(err.contains("titel") && err.contains("title_block"), "{err}");
+        let err = request_with(serde_json::json!({"title_block": "Cooling"})).unwrap_err().to_string();
+        assert!(err.contains("title_block"), "{err}");
+        assert!(request_with(serde_json::json!({"title_block": null})).unwrap().title_block.is_none());
     }
 
-    /// With planned_sheets, the drawing number is "k/n": this sheet's place among the n planned entries (names compared without surrounding spaces, strings and objects alike).
-    /// planned_sheets があると、図番は「k/n」(計画のn枚の中でこのシートが何番目か。名前は前後の空白を無視して比べ、文字列の項目でも詳しい項目でも同じ) になる。
+    /// A free title block field whose name is not 1 to 32 characters of a-z, 0-9 and _ is refused, as set_title_block refuses it, and the message names title_block.fields.
+    /// 表題欄の自由な欄の名前が a-z・0-9・_ の1〜32文字でなければ、set_title_block と同じく断られ、文に title_block.fields が出る。
+    #[test]
+    fn a_bad_free_field_name_in_title_block_is_refused() {
+        for bad in ["Title", "a-b", ""] {
+            let req = request_with(serde_json::json!({"title_block": {"fields": {bad: "x"}}})).unwrap();
+            let err = plan_function_sheet(&fixture_source(), &open(), &req).unwrap_err();
+            assert!(err.contains("title_block.fields") && err.contains(&format!("'{bad}'")), "{err}");
+        }
+    }
+
+    /// With planned_sheets, the drawing number is "k/n": this sheet's place among the n planned entries (names compared without surrounding spaces, strings and objects alike); a single planned entry gives "1/1".
+    /// planned_sheets があると、図番は「k/n」(計画のn枚の中でこのシートが何番目か。名前は前後の空白を無視して比べ、文字列の項目でも詳しい項目でも同じ) になり、計画が1項目だけなら「1/1」になる。
     #[test]
     fn the_drawing_number_is_the_position_among_the_planned_sheets() {
         let req = request_with(serde_json::json!({"planned_sheets": ["Power", {"name": " Function ", "units": ["U1"]}, "Motors"]})).unwrap();
         assert_eq!(title_of(&req).drawing_no, "2/3");
+        let last = request_with(serde_json::json!({"planned_sheets": ["Power", "Motors", "Function"]})).unwrap();
+        assert_eq!(title_of(&last).drawing_no, "3/3");
+        let single = request_with(serde_json::json!({"planned_sheets": ["Function"]})).unwrap();
+        assert_eq!(title_of(&single).drawing_no, "1/1");
     }
 
     /// When this sheet's name is not among the planned entries, the drawing number stays empty.
@@ -4754,6 +4789,31 @@ mod wire_tests {
             })
             .expect("the sheet name is printed");
         assert!(hit.0 >= x0 && hit.0 <= x1 && hit.1 >= y0 && hit.1 <= y1, "{hit:?} is outside the title block {x0},{y0},{x1},{y1}");
+    }
+
+    /// A sheet name too long for the item name cell is printed smaller so that it still ends inside the title block; a short name keeps the normal text size.
+    /// 品名の欄に収まらない長いシート名は、文字を小さくして表題欄の中で終わるように印字され、短い名前はふつうの文字の大きさのままになる。
+    #[test]
+    fn a_long_sheet_name_is_shrunk_to_fit_the_title_block() {
+        let printed = |name: &str| -> (f64, f64, f64) {
+            let mut req = request();
+            req.name = name.into();
+            let sheet = plan_function_sheet(&fixture_source(), &open(), &req).unwrap().sheet;
+            let svg = svg_of(&sheet);
+            let (_, (_, _, x1, _)) = crate::arrange::frame_areas(&crate::frame_template::for_project(&open()), &sheet);
+            let line = svg.lines().find(|l| l.contains(&format!(">{name}</text>"))).expect("the sheet name is printed");
+            let num = |key: &str| -> f64 {
+                let i = line.find(key).unwrap() + key.len();
+                line[i..].split('"').next().unwrap().parse().unwrap()
+            };
+            (num("x=\""), num("font-size=\""), x1)
+        };
+        let long = "Cooling water pumps and fans of the second line, upper deck";
+        let (x, font, x1) = printed(long);
+        assert!(font < 3.0, "the long name keeps size {font}");
+        let right = x + crate::svg::text_advance(long, font, 1.0);
+        assert!(right <= x1 + 1e-6, "the long name ends at {right}, past the title block edge {x1}");
+        assert_eq!(printed("Zeta Cooling").1, 3.0);
     }
 
     /// A drafted sheet draws exactly like the golden file (entity ids replaced by their order of appearance). Set MADAKE_UPDATE_DRAFT_GOLDEN=1 to rewrite the file.

@@ -1573,7 +1573,12 @@ mod tests {
     /// 新しい項目は省略できるキーである。追加前のテンプレートファイルはそのまま読め、使っていないテンプレートを保存しても新しいキーは書かれない。
     #[test]
     fn old_template_files_load_and_unused_items_are_not_written() {
-        let t = parse(BUNDLED[0]).expect("jis-a3");
+        let mut t = parse(BUNDLED[0]).expect("jis-a3");
+        // 同梱の jis-a3 は品名の欄だけ fit を使う。ここでは使っていないテンプレートとして外す
+        assert!(t.title_block.cells.iter().any(|c| c.fit), "the bundled item name cell fits its text");
+        for c in &mut t.title_block.cells {
+            c.fit = false;
+        }
         let json = serde_json::to_string(&t).unwrap();
         for key in ["\"frame_margins\"", "\"marks\"", "\"text_size_is\"", "\"show\"", "\"weight\":\"thin\"", "\"rotation\"", "\"boxed\"", "\"fit\"", "\"columns\"", "\"rows_fixed\"", "\"mark_shape\"", "\"data_url\""] {
             assert!(!json.contains(key), "{key} が書かれている: {json}");

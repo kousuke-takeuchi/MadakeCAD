@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**4000仕様項目**。
+全6領域・**4003仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -532,10 +532,12 @@
 - 依頼に表題欄が無いとき、新しいシートの品名はシート名になり、他の欄は全て空のままになる。 <sub>`the_drawing_title_is_the_sheet_name_by_default`</sub>
 - 依頼の title_block に書いた欄は、品名も含めて既定を置き換え、書かなかった欄は既定のままになる。 <sub>`title_block_fields_in_the_request_override_the_defaults`</sub>
 - 表題欄に無い欄名を書いた依頼は断られ、その欄名が文に出る。 <sub>`an_unknown_title_block_field_is_refused`</sub>
-- planned_sheets があると、図番は「k/n」(計画のn枚の中でこのシートが何番目か。名前は前後の空白を無視して比べ、文字列の項目でも詳しい項目でも同じ) になる。 <sub>`the_drawing_number_is_the_position_among_the_planned_sheets`</sub>
+- 表題欄の自由な欄の名前が a-z・0-9・_ の1〜32文字でなければ、set_title_block と同じく断られ、文に title_block.fields が出る。 <sub>`a_bad_free_field_name_in_title_block_is_refused`</sub>
+- planned_sheets があると、図番は「k/n」(計画のn枚の中でこのシートが何番目か。名前は前後の空白を無視して比べ、文字列の項目でも詳しい項目でも同じ) になり、計画が1項目だけなら「1/1」になる。 <sub>`the_drawing_number_is_the_position_among_the_planned_sheets`</sub>
 - このシートの名前が計画の項目に無いときは、図番は空のままになる。 <sub>`the_drawing_number_is_left_alone_when_the_sheet_is_not_planned`</sub>
 - title_block に図番を書けば、計画の位置から決まる図番より優先され、空の図番を書いた場合も同じになる。 <sub>`a_drawing_number_in_the_request_is_not_replaced_by_the_planned_position`</sub>
 - 下書きしたシートの絵には、図枠の表題欄の中にシート名が品名として印字される。 <sub>`the_drawn_sheet_prints_its_name_inside_the_title_block`</sub>
+- 品名の欄に収まらない長いシート名は、文字を小さくして表題欄の中で終わるように印字され、短い名前はふつうの文字の大きさのままになる。 <sub>`a_long_sheet_name_is_shrunk_to_fit_the_title_block`</sub>
 - 下書きのシートは、ゴールデンファイル (id は出てくる順の番号に置き換え) と全く同じ絵になる。ファイルを作り直すときは MADAKE_UPDATE_DRAFT_GOLDEN=1 を付ける。 <sub>`a_drafted_sheet_renders_like_the_golden_file`</sub>
 
 ### draft_channel_tests
@@ -2121,7 +2123,7 @@
 
 - 下書きの2つのツールが公開され、下書きの説明にはundo一発、両方の説明に元のファイルは読むだけと書いてある。 <sub>`the_draft_tools_are_advertised`</sub>
 - 下書きは1回の編集でシートを1枚だけ足し、undo一発でそのシートが消える。 <sub>`a_draft_adds_one_sheet_and_one_undo_removes_it`</sub>
-- 下書きの後にundoを1回すると、プロジェクトは下書きの前とバイト単位で同じに戻る。 <sub>`undo_after_a_draft_restores_the_project_bytes`</sub>
+- 下書きの後にundoを1回すると、表題欄を埋めた下書きでも、プロジェクトは下書きの前とバイト単位で同じに戻る。 <sub>`undo_after_a_draft_restores_the_project_bytes`</sub>
 - 同じ依頼を2回続けると、2回目はシート名が使用中で断られ、何も変わらない。 <sub>`drafting_the_same_request_twice_is_refused`</sub>
 - 元のファイルが無いと、メッセージに場所を入れて断り、何も変わらない。 <sub>`a_missing_source_file_is_refused_and_nothing_changes`</sub>
 - 下書きと検算は元のファイルを読むだけで、中身も更新時刻も変わらない。 <sub>`the_source_file_is_not_modified`</sub>
@@ -2140,8 +2142,9 @@
 - planned_sheets の形の違う項目は、Link API (400) でも MCP のツールでも、planned_sheets と何番目の項目かを挙げた文で断られ、何も変わらない。 <sub>`a_malformed_planned_entry_is_refused_naming_its_position`</sub>
 - Link API経由で、機器つきの項目は計画まで届く。元の図に無い機器は項目を挙げて断られ、正しい項目ならシートが作られる。 <sub>`the_link_api_reads_planned_objects`</sub>
 - MCPツール経由で、title_block の無い下書きはシート名が品名になり、planned_sheets と title_block の欄を付けると計画の位置の図番と書いた欄が入る。 <sub>`the_mcp_tool_fills_the_title_block`</sub>
-- MCPの引数の型は title_block を読み、知らない欄を書けばその欄名を挙げて断る。 <sub>`the_mcp_params_read_title_block_and_refuse_unknown_fields`</sub>
-- Link API経由で、title_block は既定の品名を置き換え、知らない欄は400で断られて何も変わらない。 <sub>`the_link_api_reads_title_block`</sub>
+- MCPの引数の型は title_block を読み、知らない欄を書けばその欄名と title_block を挙げて断る。 <sub>`the_mcp_params_read_title_block_and_refuse_unknown_fields`</sub>
+- Link API経由で、title_block は既定の品名を置き換え、知らない欄はその欄名と title_block を挙げて400で断られ、何も変わらない。 <sub>`the_link_api_reads_title_block`</sub>
+- MCPのツール経由でも、title_block の知らない欄はその欄名と title_block を挙げて断られ、何も変わらない。 <sub>`the_mcp_tool_refuses_an_unknown_title_block_field`</sub>
 
 ### drawing_tools
 

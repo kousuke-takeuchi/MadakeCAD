@@ -234,7 +234,7 @@ export const DEFAULT_FRAME_TEMPLATE: FrameTemplate = {
       { x: 2, y: 5.5, w: 22, h: 8, text: "図番", size: 3 },
       { x: 26, y: 5.5, w: 92, h: 8, bind: "{title_block.drawing_no}  Rev {rev.latest}", size: 3 },
       { x: 2, y: 13.5, w: 22, h: 8, text: "品名", size: 3 },
-      { x: 26, y: 13.5, w: 92, h: 8, bind: "{title_block.title}", size: 3 },
+      { x: 26, y: 13.5, w: 92, h: 8, bind: "{title_block.title}", size: 3, fit: true },
       { x: 2, y: 21.5, w: 22, h: 8, text: "尺度", size: 3 },
       { x: 26, y: 21.5, w: 92, h: 8, bind: "{scale}    日付 {date}", size: 3 },
       { x: 2, y: 29.5, w: 22, h: 8, text: "設計", size: 3 },

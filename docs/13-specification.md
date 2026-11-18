@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**4000 specification clauses** across 6 areas.
+**4003 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -532,10 +532,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Without a title_block in the request, the drawing title of the new sheet is the sheet name and every other title block field is empty. <sub>`the_drawing_title_is_the_sheet_name_by_default`</sub>
 - Fields given in title_block replace the defaults, the title included; fields not given keep the default. <sub>`title_block_fields_in_the_request_override_the_defaults`</sub>
 - A title_block field that does not exist is refused, and the message names it. <sub>`an_unknown_title_block_field_is_refused`</sub>
-- With planned_sheets, the drawing number is "k/n": this sheet's place among the n planned entries (names compared without surrounding spaces, strings and objects alike). <sub>`the_drawing_number_is_the_position_among_the_planned_sheets`</sub>
+- A free title block field whose name is not 1 to 32 characters of a-z, 0-9 and _ is refused, as set_title_block refuses it, and the message names title_block.fields. <sub>`a_bad_free_field_name_in_title_block_is_refused`</sub>
+- With planned_sheets, the drawing number is "k/n": this sheet's place among the n planned entries (names compared without surrounding spaces, strings and objects alike); a single planned entry gives "1/1". <sub>`the_drawing_number_is_the_position_among_the_planned_sheets`</sub>
 - When this sheet's name is not among the planned entries, the drawing number stays empty. <sub>`the_drawing_number_is_left_alone_when_the_sheet_is_not_planned`</sub>
 - A drawing number given in title_block wins over the planned position, and so does an empty one. <sub>`a_drawing_number_in_the_request_is_not_replaced_by_the_planned_position`</sub>
 - The picture of a drafted sheet prints the sheet name inside the title block area of the frame. <sub>`the_drawn_sheet_prints_its_name_inside_the_title_block`</sub>
+- A sheet name too long for the item name cell is printed smaller so that it still ends inside the title block; a short name keeps the normal text size. <sub>`a_long_sheet_name_is_shrunk_to_fit_the_title_block`</sub>
 - A drafted sheet draws exactly like the golden file (entity ids replaced by their order of appearance). Set MADAKE_UPDATE_DRAFT_GOLDEN=1 to rewrite the file. <sub>`a_drafted_sheet_renders_like_the_golden_file`</sub>
 
 ### draft_channel_tests
@@ -2121,7 +2123,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 - Both draft tools are advertised, and the draft description says that it is one edit with one undo, and both say that the source file is only read. <sub>`the_draft_tools_are_advertised`</sub>
 - A draft adds exactly one sheet in one edit, and one undo removes it again. <sub>`a_draft_adds_one_sheet_and_one_undo_removes_it`</sub>
-- After one undo the project is byte for byte what it was before the draft. <sub>`undo_after_a_draft_restores_the_project_bytes`</sub>
+- After one undo the project is byte for byte what it was before the draft, also when the draft filled in a title block. <sub>`undo_after_a_draft_restores_the_project_bytes`</sub>
 - Drafting the same request twice is refused the second time (the sheet name is in use) and changes nothing. <sub>`drafting_the_same_request_twice_is_refused`</sub>
 - A source file that does not exist is refused with its path in the message, and nothing changes. <sub>`a_missing_source_file_is_refused_and_nothing_changes`</sub>
 - Drafting and checking only read the source file: its bytes and its modification time stay the same. <sub>`the_source_file_is_not_modified`</sub>
@@ -2140,8 +2142,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A malformed planned_sheets entry is refused through the Link API (400) and through the MCP tool with a message that names planned_sheets and the entry's position, and nothing changes. <sub>`a_malformed_planned_entry_is_refused_naming_its_position`</sub>
 - Through the Link API an object entry reaches the planner: a unit the source does not have is refused naming the entry, a good entry drafts the sheet. <sub>`the_link_api_reads_planned_objects`</sub>
 - Through the MCP tool, a draft without title_block gets the sheet name as its drawing title, and one with planned_sheets and title_block fields gets the planned number and the given fields. <sub>`the_mcp_tool_fills_the_title_block`</sub>
-- The MCP parameter type reads title_block and refuses an unknown title_block field, naming it. <sub>`the_mcp_params_read_title_block_and_refuse_unknown_fields`</sub>
-- Through the Link API, title_block overrides the default title, and an unknown title_block field is refused with 400 and changes nothing. <sub>`the_link_api_reads_title_block`</sub>
+- The MCP parameter type reads title_block and refuses an unknown title_block field, naming the field and title_block. <sub>`the_mcp_params_read_title_block_and_refuse_unknown_fields`</sub>
+- Through the Link API, title_block overrides the default title, and an unknown title_block field is refused with 400, naming the field and title_block, and changes nothing. <sub>`the_link_api_reads_title_block`</sub>
+- Through the MCP tool, an unknown title_block field is refused with a message that names the field and title_block, and nothing changes. <sub>`the_mcp_tool_refuses_an_unknown_title_block_field`</sub>
 
 ### drawing_tools
 

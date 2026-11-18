@@ -151,13 +151,20 @@ async fn a_draft_adds_one_sheet_and_one_undo_removes_it() {
     assert_eq!(doc.engine.lock().unwrap().undo_depth(), depth);
 }
 
-/// After one undo the project is byte for byte what it was before the draft.
-/// 下書きの後にundoを1回すると、プロジェクトは下書きの前とバイト単位で同じに戻る。
+/// After one undo the project is byte for byte what it was before the draft, also when the draft filled in a title block.
+/// 下書きの後にundoを1回すると、表題欄を埋めた下書きでも、プロジェクトは下書きの前とバイト単位で同じに戻る。
 #[tokio::test]
 async fn undo_after_a_draft_restores_the_project_bytes() {
     let (doc, _, _) = fixture();
     let before = project_json(&doc);
     draft(&doc, &first_request()).expect("下書きできる");
+    assert_ne!(project_json(&doc), before);
+    doc.engine.lock().unwrap().undo().expect("元に戻せる");
+    assert_eq!(project_json(&doc), before);
+    let mut titled = first_request();
+    titled["planned_sheets"] = json!(["Sheet A", "Sheet B"]);
+    titled["title_block"] = json!({"company": "Example Works", "fields": {"title_en": "A"}});
+    draft(&doc, &titled).expect("表題欄つきでも下書きできる");
     assert_ne!(project_json(&doc), before);
     doc.engine.lock().unwrap().undo().expect("元に戻せる");
     assert_eq!(project_json(&doc), before);
@@ -557,8 +564,8 @@ async fn the_mcp_tool_fills_the_title_block() {
     assert_eq!((tb["title"].as_str(), tb["drawing_no"].as_str(), tb["company"].as_str(), tb["rev"].as_str()), (Some("Sheet B"), Some("2/2"), Some("Example Works"), Some("A")));
 }
 
-/// The MCP parameter type reads title_block and refuses an unknown title_block field, naming it.
-/// MCPの引数の型は title_block を読み、知らない欄を書けばその欄名を挙げて断る。
+/// The MCP parameter type reads title_block and refuses an unknown title_block field, naming the field and title_block.
+/// MCPの引数の型は title_block を読み、知らない欄を書けばその欄名と title_block を挙げて断る。
 #[test]
 fn the_mcp_params_read_title_block_and_refuse_unknown_fields() {
     let params: madake_mcp::DraftFunctionSheetParams =
@@ -569,11 +576,11 @@ fn the_mcp_params_read_title_block_and_refuse_unknown_fields() {
     )
     .unwrap_err()
     .to_string();
-    assert!(err.contains("titel"), "{err}");
+    assert!(err.contains("titel") && err.contains("title_block"), "{err}");
 }
 
-/// Through the Link API, title_block overrides the default title, and an unknown title_block field is refused with 400 and changes nothing.
-/// Link API経由で、title_block は既定の品名を置き換え、知らない欄は400で断られて何も変わらない。
+/// Through the Link API, title_block overrides the default title, and an unknown title_block field is refused with 400, naming the field and title_block, and changes nothing.
+/// Link API経由で、title_block は既定の品名を置き換え、知らない欄はその欄名と title_block を挙げて400で断られ、何も変わらない。
 #[tokio::test]
 async fn the_link_api_reads_title_block() {
     let (doc, _, router) = fixture();
@@ -581,7 +588,7 @@ async fn the_link_api_reads_title_block() {
     bad["title_block"] = json!({"titel": "x"});
     let (status, text) = post_text(&router, "/api/v1/draft/function-sheet", bad).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(text.contains("titel"), "{text}");
+    assert!(text.contains("titel") && text.contains("title_block"), "{text}");
     assert_eq!(sheet_count(&doc), 0);
     let mut good = first_request();
     good["title_block"] = json!({"title": "Cooling line", "drawing_no": "EX-1"});
@@ -589,4 +596,17 @@ async fn the_link_api_reads_title_block() {
     assert_eq!(status, StatusCode::OK);
     let tb = title_block_of_sheet(&doc, "Sheet A");
     assert_eq!((tb["title"].as_str(), tb["drawing_no"].as_str()), (Some("Cooling line"), Some("EX-1")));
+}
+
+/// Through the MCP tool, an unknown title_block field is refused with a message that names the field and title_block, and nothing changes.
+/// MCPのツール経由でも、title_block の知らない欄はその欄名と title_block を挙げて断られ、何も変わらない。
+#[tokio::test]
+async fn the_mcp_tool_refuses_an_unknown_title_block_field() {
+    let (doc, bridge, _) = fixture();
+    let mut bad = first_request();
+    bad["title_block"] = json!({"titel": "x"});
+    let outcome = bridge.call("draft_function_sheet", bad).await;
+    assert!(outcome.is_error, "{}", outcome.content);
+    assert!(outcome.content.contains("titel") && outcome.content.contains("title_block"), "{}", outcome.content);
+    assert_eq!(sheet_count(&doc), 0);
 }
