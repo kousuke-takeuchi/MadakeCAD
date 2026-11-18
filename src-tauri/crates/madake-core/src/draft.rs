@@ -58,6 +58,11 @@ pub struct DraftRequest {
     /// 箱のピン間隔 (mm)。2.5 か 5.0 (既定 5.0)。
     #[serde(default = "default_pitch")]
     pub pitch_mm: f64,
+    /// 呼び出し側が下書きするつもりの全ての機能シートの名前 (順不同。この依頼自身の名前や、すでにある名前を含んでよい)。
+    /// 札の行き先の文字のために確保する幅は、開いているプロジェクトにあるシート名とこの一覧の和集合から
+    /// この依頼のシート名を除いた集合で、旗が将来持ちうる最も広い文字になる。空なら従来どおり。
+    #[serde(default)]
+    pub planned_sheets: Vec<String>,
 }
 
 /// ネットの種類。
@@ -316,6 +321,16 @@ impl DraftRequest {
         }
         if self.pitch_mm != 2.5 && self.pitch_mm != 5.0 {
             return Err(format!("pitch_mm must be 2.5 or 5.0, got {}", self.pitch_mm));
+        }
+        let mut planned = BTreeSet::new();
+        for (i, p) in self.planned_sheets.iter().enumerate() {
+            let p = p.trim();
+            if p.is_empty() {
+                return Err(format!("planned_sheets entry {} is blank: give the name of a sheet you will draft", i + 1));
+            }
+            if !planned.insert(p.to_string()) {
+                return Err(format!("The sheet name '{p}' is listed more than once in planned_sheets"));
+            }
         }
         Ok(())
     }
@@ -705,6 +720,7 @@ mod model_tests {
             destinations: BTreeMap::new(),
             paper: DraftPaper::A3,
             pitch_mm: 5.0,
+            planned_sheets: Vec::new(),
         }
     }
 
@@ -718,6 +734,26 @@ mod model_tests {
 
     fn refuse(source: &Project, open: &Project, req: &DraftRequest) -> String {
         build_model(source, open, req).expect_err("the draft is refused")
+    }
+
+    /// A blank planned name is refused.
+    /// 空白だけの計画のシート名は断られる。
+    #[test]
+    fn a_blank_planned_name_is_refused() {
+        let mut r = request(&[&["U1"]]);
+        r.planned_sheets = vec!["Other".into(), "  ".into()];
+        let msg = refuse(&fixture_source(), &Project::new("open"), &r);
+        assert!(msg.contains("planned_sheets") && msg.contains("blank"), "{msg}");
+    }
+
+    /// The same planned name twice (ignoring surrounding spaces) is refused and the message names it.
+    /// 同じ計画のシート名が2回 (前後の空白は無視) あると断られ、その名前が文に出る。
+    #[test]
+    fn a_duplicate_planned_name_is_refused() {
+        let mut r = request(&[&["U1"]]);
+        r.planned_sheets = vec!["Other".into(), " Other".into()];
+        let msg = refuse(&fixture_source(), &Project::new("open"), &r);
+        assert!(msg.contains("Other") && msg.contains("more than once"), "{msg}");
     }
 
     fn unit<'a>(m: &'a DraftModel, reference: &str) -> &'a DraftUnit {
@@ -1980,6 +2016,31 @@ fn reserved_dest(open: &Project) -> String {
         .fold(String::new(), |best, n| if text_width(&n, 1.0) > text_width(&best, 1.0) { n } else { best })
 }
 
+/// `planned_sheets` を使うとき、札の旗が将来持ちうる最も広い行き先の文字。
+///
+/// 集合 = (開いているプロジェクトのシート名) ∪ `planned` から、このシート自身の名前 `own` を除いたもの (前後の空白は無視、
+/// 名前が空のシートはシート番号)。集合が1つならその名前、2つ以上なら幅の広い2つを [`crate::xref::tag_dest_names`] と同じつなぎ方で
+/// つないだもの、3つ以上ならさらに「他」を付けたもの。集合が空なら `None`。順序は幅の降順、同じ幅なら自然順で決まり、ハッシュの順序には依らない。
+pub(crate) fn planned_reserve_text(open: &Project, planned: &[String], own: &str) -> Option<String> {
+    let own = own.trim();
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    for (i, s) in open.sheets.iter().enumerate() {
+        let n = s.name.trim();
+        names.insert(if n.is_empty() { (i + 1).to_string() } else { n.to_string() });
+    }
+    names.extend(planned.iter().map(|p| p.trim().to_string()));
+    names.remove(own);
+    let mut by_width: Vec<String> = names.into_iter().collect();
+    by_width.sort_by(|a, b| text_width(b, 1.0).total_cmp(&text_width(a, 1.0)).then_with(|| natural_cmp(a, b)));
+    let sep = crate::xref::DEST_SEPARATOR;
+    match by_width.as_slice() {
+        [] => None,
+        [a] => Some(a.clone()),
+        [a, b] => Some(format!("{a}{sep}{b}")),
+        [a, b, ..] => Some(format!("{a}{sep}{b}{}", crate::xref::DEST_MORE)),
+    }
+}
+
 /// 札の旗に後から書かれる行き先のために確保する文字の決め方。
 #[derive(Debug, Clone)]
 pub(crate) struct Reserve {
@@ -1998,8 +2059,16 @@ impl Reserve {
     }
 
     /// 出ていくネットの札ごとに、すでに同じ名前を持つシートの名前をつないだ文字を調べる。
-    fn of(open: &Project, model: &DraftModel) -> Self {
+    fn of(open: &Project, model: &DraftModel, req: &DraftRequest) -> Self {
         let mut r = Reserve { floor: reserved_dest(open), joined: BTreeMap::new() };
+        // 計画したシートの名前が渡されたら、後から足される名前の分まで全ての札に確保する (床は従来の10文字以上)
+        if !req.planned_sheets.is_empty() {
+            if let Some(text) = planned_reserve_text(open, &req.planned_sheets, &req.name) {
+                if text_width(&text, 1.0) > text_width(&r.floor, 1.0) {
+                    r.floor = text;
+                }
+            }
+        }
         let new_sheet = uuid::Uuid::new_v4(); // まだ無いシート: 開いているプロジェクトの全シートが相手になる
         for net in model.nets.iter().filter(|n| n.class == NetClass::Leaving) {
             if let Some(text) = crate::xref::tag_dest_names(open, new_sheet, &net.name) {
@@ -2075,7 +2144,7 @@ pub(crate) fn lay_out_in(
     template: &crate::frame_template::FrameTemplate,
 ) -> Result<DraftLayout, String> {
     let pitch = req.pitch_mm;
-    let reserve = Reserve::of(open, model);
+    let reserve = Reserve::of(open, model, req);
     let units = &model.units;
     if units.is_empty() {
         return Err("No unit carries a pin: nothing to draw".to_string());
@@ -2343,6 +2412,7 @@ mod layout_tests {
             destinations: BTreeMap::new(),
             paper: DraftPaper::A3,
             pitch_mm: 5.0,
+            planned_sheets: Vec::new(),
         }
     }
 
@@ -2709,6 +2779,95 @@ mod layout_tests {
                 }
             }
         }
+    }
+
+    /// An open project without any sheet.
+    fn bare() -> Project {
+        let mut p = open();
+        p.sheets.clear();
+        p
+    }
+
+    /// With one other sheet planned, a tag keeps room for exactly that sheet name when it is wider than ten characters.
+    /// 他に計画したシートが1枚なら、その名前が10文字より広いとき、札はその名前ちょうどの場所を空ける。
+    #[test]
+    fn one_planned_name_is_the_reserved_text() {
+        let name = "Spare relay panel number two".to_string();
+        let got = planned_reserve_text(&bare(), &[name.clone()], "Main");
+        assert_eq!(got.as_deref(), Some(name.as_str()));
+    }
+
+    /// With two other sheets, the reserve is the two names joined with the separator a tag uses, the wider name first.
+    /// 他のシートが2枚なら、確保する文字は、札が使う区切りで2枚の名前をつないだもので、広い名前が先に来る。
+    #[test]
+    fn two_planned_names_are_joined() {
+        let got = planned_reserve_text(&bare(), &["Alpha cabinet".into(), "Beta cabinet wide".into()], "Main").unwrap();
+        assert_eq!(got, format!("Beta cabinet wide{}Alpha cabinet", crate::xref::DEST_SEPARATOR));
+    }
+
+    /// With three or more other sheets, the reserve is the two widest names joined plus the other marker.
+    /// 他のシートが3枚以上なら、確保する文字は、いちばん広い2つの名前をつないだものに「他」を付けたものになる。
+    #[test]
+    fn three_planned_names_keep_the_two_widest_and_the_other_marker() {
+        let planned: Vec<String> = ["Short", "The widest name here", "Second widest name", "Mid size"].iter().map(|s| s.to_string()).collect();
+        let got = planned_reserve_text(&bare(), &planned, "Main").unwrap();
+        assert_eq!(got, format!("The widest name here{}Second widest name{}", crate::xref::DEST_SEPARATOR, crate::xref::DEST_MORE));
+    }
+
+    /// The name of the sheet being drafted, even when it is listed in planned_sheets, never counts; existing sheet names and planned names that repeat count once.
+    /// 下書きするシート自身の名前は、一覧にあっても数えない。すでにあるシート名と重なる計画の名前は1回だけ数える。
+    #[test]
+    fn the_own_name_is_left_out_and_existing_names_count_once() {
+        let mut project = open();
+        project.sheets[0].name = "Existing".into();
+        project.sheets.truncate(1);
+        let planned: Vec<String> = ["Main".to_string(), "Existing".to_string()].to_vec();
+        assert_eq!(planned_reserve_text(&project, &planned, "Main").as_deref(), Some("Existing"));
+        assert_eq!(planned_reserve_text(&project, &planned, " Main ").as_deref(), Some("Existing"));
+    }
+
+    /// A planned set that is too narrow still keeps the ten-character minimum for the flag.
+    /// 計画した名前が短くても、旗の場所は10文字分の最小の幅を下回らない。
+    #[test]
+    fn a_short_planned_name_keeps_the_ten_character_minimum() {
+        let r = request(&[&["U1"], &["U2"]]);
+        let mut with = r.clone();
+        with.planned_sheets = vec!["B".into()];
+        let m = build_model(&fixture_source(), &open(), &with).unwrap();
+        let reserve = Reserve::of(&open(), &m, &with);
+        let font = 1.0;
+        assert!(text_width(reserve.text("SIG_A"), font) >= text_width(&"M".repeat(RESERVED_DEST_CHARS), font) - 1e-9);
+        let legacy = Reserve::of(&open(), &m, &r);
+        assert_eq!(reserve.text("SIG_A"), legacy.text("SIG_A"));
+    }
+
+    /// With planned names the layout is wider than with none: the first column starts further right so that the widest flag fits.
+    /// 計画した名前を渡すと、いちばん広い旗が収まるように、渡さないときより1列目の位置が右になる。
+    #[test]
+    fn planned_names_push_the_first_column_right() {
+        let r = request(&[&["U1"], &["TB1"]]);
+        let mut with = r.clone();
+        with.planned_sheets = vec!["Cabinet B terminal side".into(), "Spare relay panel number two".into(), "Another quite long sheet".into()];
+        let a = layout(&r);
+        let b = layout(&with);
+        assert!(b.columns[0].right >= a.columns[0].right);
+        let wide = |l: &DraftLayout| l.columns[0].right - l.columns[0].left;
+        assert!(wide(&b) > wide(&a), "{} vs {}", wide(&b), wide(&a));
+    }
+
+    /// A request without planned_sheets reads as an empty list and lays out exactly as one that names an empty list.
+    /// planned_sheets の無い依頼は空の一覧として読まれ、空の一覧を明示した依頼とまったく同じ配置になる。
+    #[test]
+    fn a_request_without_planned_sheets_lays_out_as_before() {
+        let r: DraftRequest = serde_json::from_str(r#"{"name":"Function","columns":[["U1"],["U2"]]}"#).unwrap();
+        assert!(r.planned_sheets.is_empty());
+        let mut explicit = r.clone();
+        explicit.planned_sheets = Vec::new();
+        let (a, b) = (layout(&r), layout(&explicit));
+        let spans = |l: &DraftLayout| l.columns.iter().map(|c| (c.left, c.right)).collect::<Vec<_>>();
+        assert_eq!(spans(&a), spans(&b));
+        assert_eq!(a.keep_out.len(), b.keep_out.len());
+        assert_eq!(a.reserve.text("SIG_A"), b.reserve.text("SIG_A"));
     }
 
     // ---- placement
@@ -3141,6 +3300,7 @@ mod wire_tests {
             destinations: BTreeMap::new(),
             paper: DraftPaper::A3,
             pitch_mm: 5.0,
+            planned_sheets: Vec::new(),
         }
     }
 

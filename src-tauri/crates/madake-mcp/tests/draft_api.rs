@@ -384,3 +384,85 @@ async fn export_the_drafted_sheets_as_svg() {
         call(&bridge, "export_svg", json!({"sheet_id": id, "path": path})).await;
     }
 }
+
+const LATER_A: &str = "Cabinet B terminal side";
+const LATER_B: &str = "Spare relay panel number two";
+
+/// The three sheets of the scenario in which every sheet carries the net SIG_A; `planned` is sent to every request when given.
+fn three_requests(planned: bool) -> Vec<Value> {
+    let mut requests = vec![
+        json!({"source_path": fixture_path(), "name": "Main", "columns": [["U1"], ["TB1"]], "power_nets": ["P24X"]}),
+        json!({"source_path": fixture_path(), "name": LATER_A, "columns": [["R1"]]}),
+        json!({"source_path": fixture_path(), "name": LATER_B, "columns": [["U2"]], "pins": {"U2": ["3"]}}),
+    ];
+    if planned {
+        for r in &mut requests {
+            r["planned_sheets"] = json!(["Main", LATER_A, LATER_B]);
+        }
+    }
+    requests
+}
+
+/// planned_sheets is read by the MCP parameter type, including its hand-written reader, and a wrong type is refused.
+/// planned_sheets はMCPの引数の型 (手書きの読み取りを含む) で読まれ、型が違えば断られる。
+#[test]
+fn planned_sheets_round_trips_through_the_mcp_params() {
+    let params: madake_mcp::DraftFunctionSheetParams =
+        serde_json::from_value(json!({"source_path": "/x.mdkproj", "name": "A", "columns": [["U1"]], "planned_sheets": ["A", "B"]})).unwrap();
+    assert_eq!(params.request.planned_sheets, vec!["A".to_string(), "B".to_string()]);
+    let none: madake_mcp::DraftFunctionSheetParams =
+        serde_json::from_value(json!({"source_path": "/x.mdkproj", "name": "A", "columns": [["U1"]]})).unwrap();
+    assert!(none.request.planned_sheets.is_empty());
+    assert!(serde_json::from_value::<madake_mcp::DraftFunctionSheetParams>(
+        json!({"source_path": "/x.mdkproj", "name": "A", "columns": [["U1"]], "planned_sheets": "A"})
+    )
+    .is_err());
+}
+
+/// The draft tool description tells the caller to pass the names of all sheets so that tags keep room for them.
+/// 下書きツールの説明は、札が場所を空けるように全てのシートの名前を渡すよう伝えている。
+#[test]
+fn the_draft_tool_description_mentions_planned_sheets() {
+    let descriptions = tool_descriptions();
+    let description = &descriptions.iter().find(|(tool, _)| tool == "draft_function_sheet").unwrap().1;
+    assert!(description.contains("planned_sheets"), "{description}");
+}
+
+/// Through the Link API, planned_sheets reaches the planner: a blank entry is refused (400, and the planner's message names the field), and nothing changes.
+/// Link API経由で planned_sheets は計画まで届く。空白の項目は、項目名を挙げた400で断られ、何も変わらない。
+#[tokio::test]
+async fn the_link_api_reads_planned_sheets() {
+    let (doc, _, router) = fixture();
+    let before = project_json(&doc);
+    let mut bad = three_requests(true).remove(0);
+    bad["planned_sheets"] = json!(["Main", " "]);
+    let err = draft(&doc, &bad).expect_err("a blank planned name is refused");
+    assert!(err.contains("planned_sheets"), "{err}");
+    let (status, reply) = post(&router, "/api/v1/draft/function-sheet", bad).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{reply}");
+    assert_eq!(project_json(&doc), before);
+    let (status, reply) = post(&router, "/api/v1/draft/function-sheet", three_requests(true).remove(0)).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+}
+
+/// Through the Link API, drafting three sheets with planned_sheets leaves no tag outside the frame, and without it the check lists the tag and says layout_ok is false while ok stays true.
+/// Link API経由で、planned_sheets を付けて3枚を下書きすると枠からはみ出す札は無く、付けないと検算がその札を挙げて layout_ok が false になるが ok は true のまま。
+#[tokio::test]
+async fn the_check_reports_tags_outside_the_frame_through_the_link_api() {
+    for planned in [true, false] {
+        let (_, _, router) = fixture();
+        for body in three_requests(planned) {
+            let (status, reply) = post(&router, "/api/v1/draft/function-sheet", body).await;
+            assert_eq!(status, StatusCode::OK, "{reply}");
+        }
+        let (status, check) = post(&router, "/api/v1/draft/check", json!({"source_path": fixture_path()})).await;
+        assert_eq!(status, StatusCode::OK, "{check}");
+        let outside = check["tags_outside"].as_array().expect("tags_outside");
+        assert_eq!(check["layout_ok"], json!(outside.is_empty()), "{check}");
+        assert_eq!(outside.is_empty(), planned, "{check}");
+        if !planned {
+            assert_eq!(outside[0]["sheet"], json!("Main"), "{check}");
+            assert!(outside[0]["excess_mm"].as_f64().unwrap() > 0.0, "{check}");
+        }
+    }
+}

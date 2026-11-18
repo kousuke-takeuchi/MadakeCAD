@@ -61,7 +61,8 @@ The draft command sets `block_view` on every block it creates. A person may set 
   "ground_nets": ["GND"],
   "destinations": {"J7.2": "cabinet B"},
   "paper": "A3",
-  "pitch_mm": 5.0
+  "pitch_mm": 5.0,
+  "planned_sheets": ["1 Power", "2 Control", "3 Motors"]
 }
 ```
 
@@ -73,6 +74,7 @@ The draft command sets `block_view` on every block it creates. A person may set 
 - `destinations`: optional. Net name to free text, for a net that continues outside the project. It becomes `tag_dest`.
 - `paper`: `A3` (default) or `A4`, landscape.
 - `pitch_mm`: pin pitch of the boxes, 2.5 or 5.0 (default 5.0).
+- `planned_sheets`: optional. The names of all function sheets the caller plans to draft, in any order; it may include this request's own name and names that already exist. Pass the names of all sheets you will draft so that tags keep room for them. A blank name, or the same name twice (spaces around a name are ignored), is refused. Default: empty (the room is chosen as before, see Placement).
 
 ### Which pins a view carries
 
@@ -108,7 +110,7 @@ The new sheet has `xref_style` = `sheet_name`, so a tag shows the names of the o
 - Columns are packed, not spread: the first starts at the left edge of the drawing area plus its own left extent; column k+1 starts at the right extent of column k (boxes, stubs, bars, tags, marks) plus a channel of max(20 mm, 10 mm + 2.5 mm × the nets that use that channel), rounded up to the 2.5 mm grid. A net uses a channel when it has terminals on both sides of it or passes through it, or when it joins two or more units of column k on their right side (of the last column on their left side: then it uses the channel to the left of that column); each net counts once per channel. Units in a column are stacked top to bottom in the given order, top aligned, with a gap of at least four pitches measured between everything one unit draws (marks and bars included) and the caption of the next.
 - Box width holds the longest pin name on both sides plus the reference; `block_pin_text` is chosen so that names are at least 2.2 mm high. Every box has `block_number_align` = `"edge"`: an outside pin number ends 0.5 mm outside the box edge and runs away from the box along the lead and the stub, so a long number never covers the box edge or a pin name. (The attribute is a general block attribute; without it a block draws its numbers centred on the lead as before.)
 - Tag text size is chosen so that tags on adjacent pins do not touch (flag height at most pitch minus 1 mm; at a pitch of 2.5 mm the text cannot be smaller than the smallest annotation size, so the flag is taller and adjacent flags are only 0.25 mm apart).
-- A tag's width reserves room for the names of other sheets that appear inside it later: the wider of its `tag_dest`, the names of the sheets of the open project that already carry the net name (joined as `xref::tag_dest_names` joins them: at most two names plus the other mark), the longest sheet name of the open project and 10 characters. Column extents include every tag flag with that room.
+- A tag's width reserves room for the names of other sheets that appear inside it later: the wider of its `tag_dest`, the names of the sheets of the open project that already carry the net name (joined as `xref::tag_dest_names` joins them: at most two names plus the other mark), the longest sheet name of the open project and 10 characters. Column extents include every tag flag with that room. When `planned_sheets` is given, the room is instead the width of the widest text the flag can get, taken from the set of the sheet names of the open project and `planned_sheets`, minus this sheet's own name: one name gives that name; two or more give the two widest names joined as `xref::tag_dest_names` joins them, plus the other mark when the set has three or more names. The minimum of 10 characters stays, and a `tag_dest` given through `destinations` keeps its own exact width when it is wider. Column extents, packed columns, the edge refusals and the router obstacles all use this room, for every tag of the sheet whatever net it carries.
 - Symbols, pins, the ends of stubs, tags and marks are on the 2.5 mm grid. The bends of routed wires may lie on the router's 1.25 mm grid.
 - A column that is taller than the drawing area, or columns whose right extent (tags and marks included) would cross the right edge of the drawing area with the channels above, refuse the draft. The message names the column and the excess in mm, so that the caller can move units to another sheet. Nothing is created.
 
@@ -166,6 +168,17 @@ Each refusal changes nothing and states the cause: source file missing or unread
 
 `missing_pins`: in the source, on no sheet. `extra_pins`: on a sheet, not in the source. `split`: pins of one source net that are not one net in the open project (a tag name that differs between sheets shows up here). `merged`: pins of different source nets that are one net in the open project.
 
+The reply also lists the tags whose flag does not fit its sheet:
+
+```json
+{
+  "layout_ok": false,
+  "tags_outside": [{"sheet": "2 Control", "net": "SIG_A", "excess_mm": 12.3}]
+}
+```
+
+`tags_outside` holds every tagged net label of the open project whose flag, drawn with the destination text the project export prints (`xref::sheet_tag_dests`, or the tag's own `tag_dest`; shape from `net_tag::net_tag_with`), extends beyond the inner frame area of its sheet (`arrange::frame_areas` with the project's frame template) on any side, or into the title block with its revision rows. `excess_mm` is the largest overhang, in mm with one decimal. The list is sorted by sheet order, then net in natural order. This happens when sheets drafted later add their names to a flag that did not reserve room for them (see `planned_sheets`). `layout_ok` is true when `tags_outside` is empty. `ok` keeps meaning that the connections are equal and is not affected by `layout_ok`. The CLI `draft-check` prints the list and exits non-zero when `ok` or `layout_ok` is false.
+
 ## 5. Entry points
 
 - madake-core: `draft::plan_function_sheet(source: &Project, open: &Project, request: &DraftRequest) -> Result<DraftPlan, String>` and `draft::check_function_sheets(source: &Project, open: &Project, ignore: &[String]) -> DraftCheck`.
@@ -183,7 +196,6 @@ Each refusal changes nothing and states the cause: source file missing or unread
 - Updating a function sheet after the source changed (draft again after deleting the sheet).
 - Per-sheet frame templates and fonts; a terminal-block common bar; one tag for several wires.
 - A pin whose peers on the sheet are on both sides of its box goes on one side only (the side with more peers), so its wire to the other side runs round the box.
-- A tag reserves room only for the sheet names known when its sheet is drafted (see Placement). A sheet drafted later that carries the same net adds its name to the earlier sheet's flag, which then may grow past the room its wires were routed around.
 - Wires between units of one column cross the stubs of other nets at right angles near the box; the rule allows it, but a stacked column reads less well than one unit per column.
 
 ## Testing

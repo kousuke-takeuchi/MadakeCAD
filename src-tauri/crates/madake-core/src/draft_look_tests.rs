@@ -126,6 +126,7 @@ fn request(columns: &[&[&str]]) -> DraftRequest {
         destinations: BTreeMap::new(),
         paper: DraftPaper::A3,
         pitch_mm: 5.0,
+        planned_sheets: Vec::new(),
     }
 }
 

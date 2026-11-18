@@ -92,7 +92,7 @@ pub enum Commands {
         /// 依頼のJSONファイル (`source_path` と name・columns など。相対の `source_path` はこのファイルの場所から探す)
         file: PathBuf,
     },
-    /// 下書きしたシート全部が元の図と同じつながりかを検算する (合っていなければ終了コード1)
+    /// 下書きしたシート全部が元の図と同じつながりかを検算する (合っていない・札の旗が図枠からはみ出しているときは終了コード1)
     DraftCheck {
         /// 元の図 (.mdkproj)
         source: PathBuf,
@@ -323,7 +323,8 @@ pub fn run(cli: &Cli, api: &dyn LinkApi) -> Result<String, CliError> {
             let path = absolute(source)?.display().to_string();
             let result = api.draft_check(&path, ignore)?;
             let out = if cli.json { pretty(&result) } else { format::draft_check(&result) };
-            if result["ok"].as_bool() == Some(true) {
+            // 検算の失敗: つながりが違う (ok) か、札の旗が図枠からはみ出している (layout_ok)。layout_ok の無い古い返り値は問題なしとみなす
+            if result["ok"].as_bool() == Some(true) && result["layout_ok"].as_bool() != Some(false) {
                 Ok(out)
             } else {
                 Err(CliError::CheckFailed(out))
@@ -1420,6 +1421,41 @@ mod tests {
             Err(CliError::CheckFailed(report)) => assert_eq!(serde_json::from_str::<Value>(&report).unwrap(), reply),
             other => panic!("検算の失敗になるはず: {other:?}"),
         }
+    }
+
+    /// madake draft-check also fails when the connections match but a tag flag leaves the frame, and the report lists the sheet, the net and the excess.
+    /// madake draft-checkは、つながりが合っていても札の旗が図枠からはみ出していると失敗になり、結果にシート・ネット・はみ出し量を書く。
+    #[test]
+    fn draft_check_fails_when_a_tag_leaves_the_frame() {
+        let reply = json!({"ok": true, "layout_ok": false, "source_nets": 2, "matched": 2,
+            "missing_pins": [], "extra_pins": [], "split": [], "merged": [],
+            "tags_outside": [{"sheet": "Main", "net": "SIG_A", "excess_mm": 12.3}]});
+        let api = FakeApi { result: reply.clone(), ..Default::default() };
+        match run(&parse(&["madake", "draft-check", "/tmp/src.mdkproj"]), &api) {
+            Err(CliError::CheckFailed(report)) => {
+                assert!(report.contains("Main") && report.contains("SIG_A") && report.contains("12.3"), "{report}");
+            }
+            other => panic!("検算の失敗になるはず: {other:?}"),
+        }
+        match run(&parse(&["madake", "draft-check", "/tmp/src.mdkproj", "--json"]), &api) {
+            Err(CliError::CheckFailed(report)) => assert_eq!(serde_json::from_str::<Value>(&report).unwrap(), reply),
+            other => panic!("検算の失敗になるはず: {other:?}"),
+        }
+    }
+
+    /// madake draft sends planned_sheets from the request file unchanged.
+    /// madake draftは、依頼のファイルにある planned_sheets をそのまま送る。
+    #[test]
+    fn draft_sends_planned_sheets() {
+        let dir = std::env::temp_dir().join(format!("madake-cli-draft-planned-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("request.json");
+        std::fs::write(&file, r#"{"source_path": "/tmp/big.mdkproj", "name": "A", "columns": [["U1"]], "planned_sheets": ["A", "Cabinet B"]}"#).unwrap();
+        let api = FakeApi { result: json!({"sheet_id": "S1"}), ..Default::default() };
+        run(&parse(&["madake", "draft", file.to_str().unwrap()]), &api).unwrap();
+        let sent = api.calls()[0].clone();
+        assert!(sent.contains(r#""planned_sheets":["A","Cabinet B"]"#), "{sent}");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// madake undo tells the user when there is nothing to undo.

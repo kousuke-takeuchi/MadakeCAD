@@ -525,6 +525,14 @@ pub fn draft_check(result: &Value) -> String {
             out.push_str(&format!("  {} (ピン {})\n", join("source_nets"), join("pins")));
         }
     }
+    let outside = result["tags_outside"].as_array().cloned().unwrap_or_default();
+    if !outside.is_empty() {
+        out.push_str("図枠からはみ出した札:\n");
+        for t in &outside {
+            let excess = t["excess_mm"].as_f64().unwrap_or(0.0);
+            out.push_str(&format!("  {} の {} ({:.1} mm)\n", text(t, "sheet"), text(t, "net"), excess));
+        }
+    }
     out.trim_end().to_string()
 }
 

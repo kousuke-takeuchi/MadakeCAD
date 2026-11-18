@@ -33,7 +33,7 @@ Claude Code connects automatically via this repository's `.mcp.json`.
 - Local-origin guard: requests from non-local web origins are rejected
 
 ### madake CLI
-Thin terminal client over the Link API: `status`, `project`, `netlist`, `verify`, `sim`, `reroute` (`--sheet <ID>`, repeatable `--net <NAME>`; `--json` prints the raw reply), `arrange` (`--sheet <ID>`, `--channel <MM>`, which also raises `max_gap_mm` to the channel when it is above 20 mm; `--json` prints the raw reply), `draft <request.json>` (function sheet draft, see below; `--json` prints the raw reply), `draft-check <source.mdkproj>` (repeatable `--ignore <REF>`; exits non-zero when the sheets do not match the source), `parts`, `terminals` (terminal block list), `export`, `save`/`open` (incl. `.kicad_sch` and `.dxf`, the latter with `--wire-layer`), `renumber` (wire numbering: `--sheet`, `--mode append|renumber`, `--start`), `exec` (Command array from JSON), `undo`/`redo`. `--json` for machine-readable output.
+Thin terminal client over the Link API: `status`, `project`, `netlist`, `verify`, `sim`, `reroute` (`--sheet <ID>`, repeatable `--net <NAME>`; `--json` prints the raw reply), `arrange` (`--sheet <ID>`, `--channel <MM>`, which also raises `max_gap_mm` to the channel when it is above 20 mm; `--json` prints the raw reply), `draft <request.json>` (function sheet draft, see below; `--json` prints the raw reply), `draft-check <source.mdkproj>` (repeatable `--ignore <REF>`; exits non-zero when the sheets do not match the source or a tag flag leaves the frame), `parts`, `terminals` (terminal block list), `export`, `save`/`open` (incl. `.kicad_sch` and `.dxf`, the latter with `--wire-layer`), `renumber` (wire numbering: `--sheet`, `--mode append|renumber`, `--start`), `exec` (Command array from JSON), `undo`/`redo`. `--json` for machine-readable output.
 
 `madake export <kind> <path>` covers both schematics and reports:
 
@@ -63,7 +63,8 @@ Request (the Link API body and the MCP input; the CLI reads the same object from
   "ground_nets": ["GND"],
   "destinations": {"J7.2": "cabinet B"},
   "paper": "A3",
-  "pitch_mm": 5.0
+  "pitch_mm": 5.0,
+  "planned_sheets": ["1 Power", "2 Control", "3 Motors"]
 }
 ```
 
@@ -71,6 +72,7 @@ Request (the Link API body and the MCP input; the CLI reads the same object from
 - `pins`: limits a unit to the listed pin keys, so one unit can be divided over several sheets. Without an entry the view carries every pin of the unit that is in use (its source net has two or more pins).
 - `power_nets`, `ground_nets`: source net names. Their pins get no wire: pins of one unit on one side that share the net sit in adjacent rows and are joined at their stub ends by one vertical bar, and the group gets one mark, led out from the bar (power from the upper end one pitch up, ground from the lower end one pitch down, then away from the box) so that its text is clear of the bar, the stubs and the pin numbers; `marked` counts marks, not pins. `ground_nets` defaults to every source net that carries a net mark symbol.
 - `destinations`: net name to free text for a net that continues outside the project (it becomes the tag's destination text).
+- `planned_sheets` (optional): pass the names of all sheets you will draft so that tags keep room for them. The list may be in any order and may include this request's own name and names that already exist; a blank or repeated name is refused. A tag then reserves the width of the widest text its flag can get from the sheet names of the open project and this list, without this sheet's own name (one name: that name; two or more: the two widest joined as the flag joins them, plus the other mark for three or more; at least 10 characters). Without it, a sheet drafted later that carries the same net can make the flag of an earlier sheet grow past the room and out of the frame; `draft-check` reports such tags in `tags_outside`.
 - A block unit becomes a block with `block_view` = `1` (one unit on several sheets is one part for the duplicate-reference check, the parts list and the netlist). A library symbol (a resistor, a relay coil) is placed as it is and may appear on one function sheet only.
 - Stub length is per unit side: max(5 mm, width of the widest printed pin number on that side + 2.5 mm) rounded up to the 2.5 mm grid. Carried pins of one unit and one side on the same net are one group (the bar, with a junction wherever three ends meet); a net's group is one wire terminal (the bar end nearest its peers, the middle when peers are above and below), and a net whose pins are all in one group (a jumper inside a unit) is only the bar. A net whose pins are all on the sheet is wired (orthogonal, off symbols and text). A net with pins on other sheets gets its carried pins wired and one tag, at the pin that comes first in column order: with one carried pin the tag sits at the end of that pin's stub (bar); with more, it hangs 5 mm beyond the stub on the same row, flag pointing away from the box, and the wire to the other pins leaves before the flag, so no wire runs through or along a flag. Tags and marks (with their text) are obstacles for the wires, and a tag reserves room for the other sheets' names that appear inside it later (the wider of its destination, the longest sheet name of the open project and 10 characters). Symbols, pins, stub ends, tags and marks are on the 2.5 mm grid; bends of routed wires may lie on the 1.25 mm router grid; wires stay inside the frame and out of the title block. The tag name is the net's label, or `<reference>.<pin>` of the first pin of the whole source net, so every sheet computes the same name. The new sheet shows the names of the other sheets inside the tags (`xref_style` = `sheet_name`). Columns are packed from the left edge of the drawing area: column k+1 starts at the right extent of column k (boxes, stubs, bars, tags, marks) plus a channel of max(20 mm, 10 mm + 2.5 mm per net crossing it) on the 2.5 mm grid; a tag reserves the names of the sheets of the open project that already carry its net (two names and the other mark, at least the longest sheet name or 10 characters); a request whose columns would cross the drawing area is refused with the column and the excess in mm. A pin whose peers on the sheet are all in its own column goes on the right side (on the left in the last column), and same-column peers count as right (left in the last column) in mixed cases; such nets count for the channel to the right of the column. Every box ends its outside numbers at the box edge (`block_number_align` = `edge`). No wire crosses or touches a tag flag: flags (with their reserved room) are hard obstacles, and a net that cannot be routed without touching one is joined instead by tags without destination at the upper ends of its bars (stub ends), which are obstacles for the other nets too; it is listed in `labelled`.
 
@@ -88,11 +90,13 @@ Check: `check_function_sheets { source_path, ignore_references? }` compares the 
   "missing_pins": [{"reference": "U3", "pin": "4", "source_net": "P24X"}],
   "extra_pins": [],
   "split": [{"source_net": "SIG_A", "parts": [["U1:3"], ["U2:3", "U4:1"]]}],
-  "merged": []
+  "merged": [],
+  "tags_outside": [],
+  "layout_ok": true
 }
 ```
 
-`missing_pins` are in the source and on no sheet; `extra_pins` are on a sheet and not in the source; `split` lists pins of one source net that are not one net in the open project (a tag name that differs between sheets shows up here); `merged` lists pins of different source nets that are one net in the open project. `madake draft-check` prints the same and exits with a non-zero status when `ok` is false.
+`missing_pins` are in the source and on no sheet; `extra_pins` are on a sheet and not in the source; `split` lists pins of one source net that are not one net in the open project (a tag name that differs between sheets shows up here); `merged` lists pins of different source nets that are one net in the open project. `tags_outside` (`[{sheet, net, excess_mm}]`, sorted by sheet order, then net) lists every tag whose flag, drawn with the destination text the SVG export prints, reaches beyond the inner frame area of its sheet or into the title block; `excess_mm` is the largest overhang with one decimal. `layout_ok` is true when that list is empty; `ok` stays "connections equal" and is not affected. `madake draft-check` prints the same and exits with a non-zero status when `ok` or `layout_ok` is false (`--json` prints the raw reply).
 
 ## Planned
 

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3918仕様項目**。
+全6領域・**3938仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -431,6 +431,8 @@
 ### draft
 
 - 下書きの見本の元の図のファイルを作り直す。普段は走らせず、手で動かしたときだけ作り直す。 <sub>`write_the_draft_fixture`</sub>
+- 空白だけの計画のシート名は断られる。 <sub>`a_blank_planned_name_is_refused`</sub>
+- 同じ計画のシート名が2回 (前後の空白は無視) あると断られ、その名前が文に出る。 <sub>`a_duplicate_planned_name_is_refused`</sub>
 - 見本として作った元の図は読み込めて、検証しても間違い(エラー)が1件も出ない。 <sub>`the_draft_fixture_loads_and_verifies_clean`</sub>
 - 機器の箱が持つのは、ほかのピンと結ばれているネットのピンだけで、つながりのないピンは持たない。 <sub>`a_view_carries_only_the_pins_in_use`</sub>
 - 相手のいない1本だけのネットのピンは外し、外した理由を残す。 <sub>`a_pin_on_a_one_pin_net_is_skipped_with_a_reason`</sub>
@@ -486,6 +488,13 @@
 - destinations に書いた行き先は、タグの行き先の文字になる。 <sub>`a_destination_option_becomes_the_tags_destination`</sub>
 - 隣り合うピンのタグは、ピン間隔が5mmでも2.5mmでも、互いに触れない。 <sub>`tags_on_adjacent_pins_do_not_touch`</sub>
 - 札は、後から中に書かれる他のシートの名前の場所を空けておく。配線が近づかない範囲は、10文字の行き先と、開いているプロジェクトの最も長いシート名を入れた旗を含む。 <sub>`a_tag_reserves_room_for_ten_characters_and_the_longest_sheet_name`</sub>
+- 他に計画したシートが1枚なら、その名前が10文字より広いとき、札はその名前ちょうどの場所を空ける。 <sub>`one_planned_name_is_the_reserved_text`</sub>
+- 他のシートが2枚なら、確保する文字は、札が使う区切りで2枚の名前をつないだもので、広い名前が先に来る。 <sub>`two_planned_names_are_joined`</sub>
+- 他のシートが3枚以上なら、確保する文字は、いちばん広い2つの名前をつないだものに「他」を付けたものになる。 <sub>`three_planned_names_keep_the_two_widest_and_the_other_marker`</sub>
+- 下書きするシート自身の名前は、一覧にあっても数えない。すでにあるシート名と重なる計画の名前は1回だけ数える。 <sub>`the_own_name_is_left_out_and_existing_names_count_once`</sub>
+- 計画した名前が短くても、旗の場所は10文字分の最小の幅を下回らない。 <sub>`a_short_planned_name_keeps_the_ten_character_minimum`</sub>
+- 計画した名前を渡すと、いちばん広い旗が収まるように、渡さないときより1列目の位置が右になる。 <sub>`planned_names_push_the_first_column_right`</sub>
+- planned_sheets の無い依頼は空の一覧として読まれ、空の一覧を明示した依頼とまったく同じ配置になる。 <sub>`a_request_without_planned_sheets_lays_out_as_before`</sub>
 - 箱の原点・ピン・短い線の先・タグは、どちらのピン間隔でも2.5mmの格子の上にある。 <sub>`every_pin_and_origin_is_on_the_grid`</sub>
 - 列は描画範囲の左から、指定した順に、通り道の最小幅以上のすき間をあけて詰めて並び、描画範囲からはみ出さない。 <sub>`columns_are_packed_from_the_left_of_the_drawing_area`</sub>
 - 新しいシートの上のものは、何も表題欄に入らない。 <sub>`nothing_enters_the_title_block`</sub>
@@ -513,6 +522,11 @@
 
 ### draft_check
 
+- 呼び出し側がこれから下書きする全てのシートの名前を渡すと、1列目の左の札は後から足される名前の分の場所を空けておき、どの旗も図枠からはみ出さない。 <sub>`planned_sheets_keep_every_tag_inside_the_frame`</sub>
+- 後のシートの名前を渡さないと、同じ左の札の旗は図枠の左端を越えて伸び、検算がそれを知らせる。つながりは合ったままである。 <sub>`without_planned_sheets_the_check_reports_the_flag_that_leaves_the_frame`</sub>
+- 旗のはみ出しは `ok` を変えない。`ok` はつながりが同じかどうかだけを表す。 <sub>`layout_ok_false_does_not_change_ok`</sub>
+- 既存の2枚の下書きでは、図枠の外へはみ出す札は無く、`layout_ok` は true になる。 <sub>`the_two_sheet_scenario_has_no_tag_outside_the_frame`</sub>
+- 枠からはみ出した札は、シートの並び順、次にネット名の自然順で並ぶ。 <sub>`tags_outside_are_sorted_by_sheet_then_net`</sub>
 - 元の図を全部合わせて写した2枚の下書きは、検算に通り、数えたネットがすべて一致する。 <sub>`a_full_set_of_drafted_sheets_passes`</sub>
 - どのシートにも描かれていないピンは、元のネットの名前つきで「足りない」と報告される。 <sub>`a_pin_on_no_sheet_is_missing`</sub>
 - 開いた図にだけあって元の図に無いピンは、「余分」と報告される。 <sub>`a_pin_the_source_does_not_have_is_extra`</sub>
@@ -2061,6 +2075,10 @@
 - Link APIの下書きは、計画の要約と新しいシートのidを返し、使えない本文は400で断って何も変えない。 <sub>`the_link_api_drafts_and_refuses_bad_bodies`</sub>
 - 元の図を2枚で覆う下書きの依頼を2つ送り、続けて検算を送ると、すべてLink API経由で「合っている」と返る。 <sub>`two_drafts_and_a_check_through_the_link_api`</sub>
 - 下書きした2枚をSVGに書き出す (目で見るための手動の試験。--ignored を付けて実行する)。 <sub>`export_the_drafted_sheets_as_svg`</sub>
+- planned_sheets はMCPの引数の型 (手書きの読み取りを含む) で読まれ、型が違えば断られる。 <sub>`planned_sheets_round_trips_through_the_mcp_params`</sub>
+- 下書きツールの説明は、札が場所を空けるように全てのシートの名前を渡すよう伝えている。 <sub>`the_draft_tool_description_mentions_planned_sheets`</sub>
+- Link API経由で planned_sheets は計画まで届く。空白の項目は、項目名を挙げた400で断られ、何も変わらない。 <sub>`the_link_api_reads_planned_sheets`</sub>
+- Link API経由で、planned_sheets を付けて3枚を下書きすると枠からはみ出す札は無く、付けないと検算がその札を挙げて layout_ok が false になるが ok は true のまま。 <sub>`the_check_reports_tags_outside_the_frame_through_the_link_api`</sub>
 
 ### drawing_tools
 
@@ -2669,6 +2687,8 @@
 - madake draftは、依頼のファイルが無い・JSONでない・元の図の場所が無いときは、アプリを呼ばずに断る。 <sub>`draft_refuses_a_bad_request_file`</sub>
 - madake draft-checkは絶対パスと繰り返した--ignoreの参照記号を送り、合っていれば成功で終わる。 <sub>`draft_check_sends_the_path_and_the_ignored_references`</sub>
 - madake draft-checkは、合っていないと失敗 (終了コード0以外) になり、エラーに問題のピンを書いた結果を持つ。 <sub>`draft_check_fails_when_the_sheets_do_not_match`</sub>
+- madake draft-checkは、つながりが合っていても札の旗が図枠からはみ出していると失敗になり、結果にシート・ネット・はみ出し量を書く。 <sub>`draft_check_fails_when_a_tag_leaves_the_frame`</sub>
+- madake draftは、依頼のファイルにある planned_sheets をそのまま送る。 <sub>`draft_sends_planned_sheets`</sub>
 - madake undoは戻す操作が無いことをユーザーに伝える。 <sub>`undo_reports_empty_history`</sub>
 - madake redoは成功時に新しいドキュメントrevisionを報告する。 <sub>`redo_reports_revision`</sub>
 - madake save/openは対象のファイルパスを報告する。 <sub>`save_and_open_report_path`</sub>

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3918 specification clauses** across 6 areas.
+**3938 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -431,6 +431,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### draft
 
 - Rebuilds the draft fixture file; ignored by default and run by hand only. <sub>`write_the_draft_fixture`</sub>
+- A blank planned name is refused. <sub>`a_blank_planned_name_is_refused`</sub>
+- The same planned name twice (ignoring surrounding spaces) is refused and the message names it. <sub>`a_duplicate_planned_name_is_refused`</sub>
 - The invented source drawing loads and verification finds no error in it. <sub>`the_draft_fixture_loads_and_verifies_clean`</sub>
 - A unit carries only the pins whose net joins two or more pins (or is a power or ground net). <sub>`a_view_carries_only_the_pins_in_use`</sub>
 - A pin on a net of one pin is left out and the reason is recorded. <sub>`a_pin_on_a_one_pin_net_is_skipped_with_a_reason`</sub>
@@ -486,6 +488,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The destinations option becomes the destination text of the tag. <sub>`a_destination_option_becomes_the_tags_destination`</sub>
 - Tags on adjacent pins do not touch, at 5 mm and at 2.5 mm pitch. <sub>`tags_on_adjacent_pins_do_not_touch`</sub>
 - A tag keeps room for the names other sheets add inside it later: its keep-out holds the flag with ten characters and with the longest sheet name of the open project. <sub>`a_tag_reserves_room_for_ten_characters_and_the_longest_sheet_name`</sub>
+- With one other sheet planned, a tag keeps room for exactly that sheet name when it is wider than ten characters. <sub>`one_planned_name_is_the_reserved_text`</sub>
+- With two other sheets, the reserve is the two names joined with the separator a tag uses, the wider name first. <sub>`two_planned_names_are_joined`</sub>
+- With three or more other sheets, the reserve is the two widest names joined plus the other marker. <sub>`three_planned_names_keep_the_two_widest_and_the_other_marker`</sub>
+- The name of the sheet being drafted, even when it is listed in planned_sheets, never counts; existing sheet names and planned names that repeat count once. <sub>`the_own_name_is_left_out_and_existing_names_count_once`</sub>
+- A planned set that is too narrow still keeps the ten-character minimum for the flag. <sub>`a_short_planned_name_keeps_the_ten_character_minimum`</sub>
+- With planned names the layout is wider than with none: the first column starts further right so that the widest flag fits. <sub>`planned_names_push_the_first_column_right`</sub>
+- A request without planned_sheets reads as an empty list and lays out exactly as one that names an empty list. <sub>`a_request_without_planned_sheets_lays_out_as_before`</sub>
 - Every box origin, pin, stub end and tag lies on the 2.5 mm grid, at both pitches. <sub>`every_pin_and_origin_is_on_the_grid`</sub>
 - Columns are packed from the left side of the drawing area, in the given order, with at least the minimum channel between them, and stay inside the drawing area. <sub>`columns_are_packed_from_the_left_of_the_drawing_area`</sub>
 - Nothing on the new sheet enters the title block. <sub>`nothing_enters_the_title_block`</sub>
@@ -513,6 +522,11 @@ if a behavior is listed here, a test proves it on every run of the suite.
 
 ### draft_check
 
+- When the caller names every sheet it will draft, the left tag of the first column keeps room for the names the later sheets add, and no flag leaves the frame. <sub>`planned_sheets_keep_every_tag_inside_the_frame`</sub>
+- Without the names of the later sheets, the flag of the same left tag grows past the left edge of the frame and the check reports it, while the connections still match. <sub>`without_planned_sheets_the_check_reports_the_flag_that_leaves_the_frame`</sub>
+- A layout problem does not change `ok`, which keeps meaning that the connections are equal. <sub>`layout_ok_false_does_not_change_ok`</sub>
+- The existing two-sheet scenario has no tag outside the frame, so `layout_ok` is true. <sub>`the_two_sheet_scenario_has_no_tag_outside_the_frame`</sub>
+- The tags outside the frame are listed by sheet order, then by net name in natural order. <sub>`tags_outside_are_sorted_by_sheet_then_net`</sub>
 - Two drafted sheets that together cover the source pass the check, with every counted net matched. <sub>`a_full_set_of_drafted_sheets_passes`</sub>
 - A pin that is on no sheet is reported as missing, with the name of its source net. <sub>`a_pin_on_no_sheet_is_missing`</sub>
 - A pin on a sheet that the source does not have is reported as extra. <sub>`a_pin_the_source_does_not_have_is_extra`</sub>
@@ -2061,6 +2075,10 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The Link API draft endpoint returns the plan summary with the new sheet id, and refuses bad bodies with 400 and no change. <sub>`the_link_api_drafts_and_refuses_bad_bodies`</sub>
 - Two draft requests that together cover the source, then the check, all through the Link API: the check says ok. <sub>`two_drafts_and_a_check_through_the_link_api`</sub>
 - Writes both drafted sheets as SVG for a look with a renderer (run by hand: `cargo test -p madake-mcp --test draft_api -- --ignored`). <sub>`export_the_drafted_sheets_as_svg`</sub>
+- planned_sheets is read by the MCP parameter type, including its hand-written reader, and a wrong type is refused. <sub>`planned_sheets_round_trips_through_the_mcp_params`</sub>
+- The draft tool description tells the caller to pass the names of all sheets so that tags keep room for them. <sub>`the_draft_tool_description_mentions_planned_sheets`</sub>
+- Through the Link API, planned_sheets reaches the planner: a blank entry is refused (400, and the planner's message names the field), and nothing changes. <sub>`the_link_api_reads_planned_sheets`</sub>
+- Through the Link API, drafting three sheets with planned_sheets leaves no tag outside the frame, and without it the check lists the tag and says layout_ok is false while ok stays true. <sub>`the_check_reports_tags_outside_the_frame_through_the_link_api`</sub>
 
 ### drawing_tools
 
@@ -2669,6 +2687,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - madake draft refuses a request file that is missing, is not JSON, or has no source_path, without calling the app. <sub>`draft_refuses_a_bad_request_file`</sub>
 - madake draft-check sends an absolute path and the repeated --ignore references, and succeeds when the sheets match. <sub>`draft_check_sends_the_path_and_the_ignored_references`</sub>
 - madake draft-check fails (non-zero exit) when the sheets do not match, and the error carries the report with the problem pins. <sub>`draft_check_fails_when_the_sheets_do_not_match`</sub>
+- madake draft-check also fails when the connections match but a tag flag leaves the frame, and the report lists the sheet, the net and the excess. <sub>`draft_check_fails_when_a_tag_leaves_the_frame`</sub>
+- madake draft sends planned_sheets from the request file unchanged. <sub>`draft_sends_planned_sheets`</sub>
 - madake undo tells the user when there is nothing to undo. <sub>`undo_reports_empty_history`</sub>
 - madake redo reports the new document revision on success. <sub>`redo_reports_revision`</sub>
 - madake save/open report the file path they acted on. <sub>`save_and_open_report_path`</sub>
