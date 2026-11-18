@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3945仕様項目**。
+全6領域・**3948仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -489,6 +489,7 @@
 - 隣り合うピンのタグは、ピン間隔が5mmでも2.5mmでも、互いに触れない。 <sub>`tags_on_adjacent_pins_do_not_touch`</sub>
 - 札は、後から中に書かれる他のシートの名前の場所を空けておく。配線が近づかない範囲は、10文字の行き先と、開いているプロジェクトの最も長いシート名を入れた旗を含む。 <sub>`a_tag_reserves_room_for_ten_characters_and_the_longest_sheet_name`</sub>
 - 行き先の名前の集合から作る最も広い文字は、1つならその名前、2つならつないだもの、3つ以上なら広い2つに「他」を付けたものになる。 <sub>`the_widest_destination_text_follows_the_flag_rules`</sub>
+- シートが最後にどの順に並んでも、旗に書かれる文字 (シート順で最初の2つの名前と、3つ以上なら「他」) は、確保した文字 (いちばん広い2つの名前をつないだもの) より広くならない。 <sub>`the_reserved_text_covers_every_order_the_export_can_print`</sub>
 - 名前だけの計画のシートは、どの札の行き先にもなりうる。自分の名前は数えず、10文字の下限は付けない。 <sub>`name_only_entries_reserve_for_every_tag_and_the_own_name_is_left_out`</sub>
 - 項目に機器とピンを書いた計画のシートは、そのピンを載せるネットの札だけの行き先になる。ネットAは他の1枚、Bは2枚、Cはどこへも行かない。 <sub>`an_object_entry_is_a_destination_only_for_the_nets_it_carries`</sub>
 - 名前だけの項目と機器つきの項目を混ぜると、名前だけの項目は全ての札に、機器つきの項目はそのネットの札にだけ加わる。 <sub>`object_and_name_only_entries_mix`</sub>
@@ -513,6 +514,7 @@
 - 同じ依頼を2回計画すると、ランダムな id を出てくる順の番号に置き換えれば、全く同じシートになる。 <sub>`planning_twice_gives_the_same_sheet`</sub>
 - シートの外へ出るネットはタグを持ち、そこへ行く配線はタグの短い線の先でちょうど止まるので、ピンとタグは1つのネットになる。 <sub>`a_leaving_net_with_two_pins_is_wired_to_its_tag`</sub>
 - 機器つきで3枚を計画すると、SIG_Aの札は他の2枚、SIG_Bは1枚、M1.1はどれも無い分の場所を空ける。3枚を下書きし終えると、書き出しと同じ行き先で描いた旗がどれも空けた場所に収まり、枠からはみ出す札も無い。 <sub>`per_net_reserves_hold_the_real_flags_of_three_drafted_sheets`</sub>
+- 計画した3枚をどの順で下書きしても (U2を1枚に載せても、pinsで2枚に分けても、1枚を名前だけで計画しても)、書き出しが描く旗はどれも、そのシートが空けた場所に収まり、検算も枠からはみ出す札を見つけない。 <sub>`every_drafting_order_keeps_each_flag_inside_its_reserve`</sub>
 - 出ていくネットをこのシートでも配線するとき、札の旗の上や脇を通る配線は無い。旗に触れるのは、札の点で止まる札自身の線だけ。ピン間隔5mmではほかの線は経路探索のすき間を空け、隣の旗どうしが0.25mmしか離れない2.5mmでも旗に触れる線は無い。 <sub>`no_wire_runs_through_or_along_a_tag_flag`</sub>
 - 札は線の行き止まりにある。札の点へ届く線はちょうど1本で、旗はほかの旗にも、機器の外形にも、印にも触れない。 <sub>`a_tag_hangs_at_a_free_end_clear_of_other_tags_boxes_and_marks`</sub>
 - 3本以上の線が会う点には必ず接点の丸がある。札への枝と相手への線がピンの短い線の先で分かれるところも同じ。 <sub>`every_point_where_three_wires_meet_has_a_junction`</sub>
@@ -530,6 +532,7 @@
 - 後のシートの名前を渡さないと、同じ左の札の旗は図枠の左端を越えて伸び、検算がそれを知らせる。つながりは合ったままである。 <sub>`without_planned_sheets_the_check_reports_the_flag_that_leaves_the_frame`</sub>
 - 旗のはみ出しは `ok` を変えない。`ok` はつながりが同じかどうかだけを表す。 <sub>`layout_ok_false_does_not_change_ok`</sub>
 - 既存の2枚の下書きでは、図枠の外へはみ出す札は無く、`layout_ok` は true になる。 <sub>`the_two_sheet_scenario_has_no_tag_outside_the_frame`</sub>
+- 旗が図枠の内側の左・右・上・下の縁を越える札、表題欄の中にある札は、はみ出した量 (mm) と一緒に挙がる。描画範囲の中の札は挙がらない。並びはシート順、次にネット名の自然順 (N2 は N10 より先)。 <sub>`tags_outside_are_found_on_every_side_and_in_the_title_block`</sub>
 - 枠からはみ出した札は、シートの並び順、次にネット名の自然順で並ぶ。 <sub>`tags_outside_are_sorted_by_sheet_then_net`</sub>
 - 元の図を全部合わせて写した2枚の下書きは、検算に通り、数えたネットがすべて一致する。 <sub>`a_full_set_of_drafted_sheets_passes`</sub>
 - どのシートにも描かれていないピンは、元のネットの名前つきで「足りない」と報告される。 <sub>`a_pin_on_no_sheet_is_missing`</sub>

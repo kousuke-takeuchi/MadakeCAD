@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3945 specification clauses** across 6 areas.
+**3948 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -489,6 +489,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Tags on adjacent pins do not touch, at 5 mm and at 2.5 mm pitch. <sub>`tags_on_adjacent_pins_do_not_touch`</sub>
 - A tag keeps room for the names other sheets add inside it later: its keep-out holds the flag with ten characters and with the longest sheet name of the open project. <sub>`a_tag_reserves_room_for_ten_characters_and_the_longest_sheet_name`</sub>
 - The widest destination text of a set of names: one name is that name, two are joined, three or more keep the two widest and the other marker. <sub>`the_widest_destination_text_follows_the_flag_rules`</sub>
+- Whatever order the sheets end up in, the text a flag prints (the first two names in sheet order, plus the other marker for three or more) is never wider than the reserved text, which joins the two widest names. <sub>`the_reserved_text_covers_every_order_the_export_can_print`</sub>
 - Name-only planned sheets are possible destinations of every tag, and the own name never counts; no minimum of ten characters is kept. <sub>`name_only_entries_reserve_for_every_tag_and_the_own_name_is_left_out`</sub>
 - An object entry is a destination only for the nets it carries a pin of: net A goes to one other sheet, net B to two, net C to none. <sub>`an_object_entry_is_a_destination_only_for_the_nets_it_carries`</sub>
 - Object and name-only entries mix: a name-only entry joins every tag, an object entry only its own nets. <sub>`object_and_name_only_entries_mix`</sub>
@@ -513,6 +514,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Planning the same request twice gives the same sheet once the random entity ids are replaced by their order of appearance. <sub>`planning_twice_gives_the_same_sheet`</sub>
 - A net that leaves the sheet keeps its tag, and the wire to the tag ends exactly on the tag's stub, so the pins and the tag are one net. <sub>`a_leaving_net_with_two_pins_is_wired_to_its_tag`</sub>
 - Three planned sheets given with their units: the tag of net SIG_A reserves room for two other sheets, SIG_B for one and M1.1 for none; once all three are drafted every flag, drawn with the destination the export prints, lies inside its reserve and no tag leaves the frame. <sub>`per_net_reserves_hold_the_real_flags_of_three_drafted_sheets`</sub>
+- For every order in which three planned sheets are drafted (with U2 kept on one sheet, or divided over two sheets by `pins`, and with one sheet planned by its name only), every flag the export prints fits inside the room its sheet reserved, and the check finds no tag outside the frame. <sub>`every_drafting_order_keeps_each_flag_inside_its_reserve`</sub>
 - Where a leaving net is also wired, no wire runs through or along a tag flag: only the tag's own wire touches its flag, at the tag's point. At a pitch of 5 mm every other wire keeps the router clearance; at 2.5 mm, where adjacent flags are only 0.25 mm apart, no other wire touches a flag. <sub>`no_wire_runs_through_or_along_a_tag_flag`</sub>
 - A tag sits at a free end: exactly one wire reaches its point, and its flag touches no other flag, no unit outline and no mark. <sub>`a_tag_hangs_at_a_free_end_clear_of_other_tags_boxes_and_marks`</sub>
 - Wherever three or more wire arms meet there is a junction dot, also where the wire to the peers leaves a tag's branch at a pin's stub. <sub>`every_point_where_three_wires_meet_has_a_junction`</sub>
@@ -530,6 +532,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Without the names of the later sheets, the flag of the same left tag grows past the left edge of the frame and the check reports it, while the connections still match. <sub>`without_planned_sheets_the_check_reports_the_flag_that_leaves_the_frame`</sub>
 - A layout problem does not change `ok`, which keeps meaning that the connections are equal. <sub>`layout_ok_false_does_not_change_ok`</sub>
 - The existing two-sheet scenario has no tag outside the frame, so `layout_ok` is true. <sub>`the_two_sheet_scenario_has_no_tag_outside_the_frame`</sub>
+- A tag whose flag pokes past the left, right, top or bottom edge of the inner frame, or lies in the title block, is listed with the overhang in mm; a tag inside the drawing area is not; the list follows sheet order, then net names in natural order (N2 before N10). <sub>`tags_outside_are_found_on_every_side_and_in_the_title_block`</sub>
 - The tags outside the frame are listed by sheet order, then by net name in natural order. <sub>`tags_outside_are_sorted_by_sheet_then_net`</sub>
 - Two drafted sheets that together cover the source pass the check, with every counted net matched. <sub>`a_full_set_of_drafted_sheets_passes`</sub>
 - A pin that is on no sheet is reported as missing, with the name of its source net. <sub>`a_pin_on_no_sheet_is_missing`</sub>

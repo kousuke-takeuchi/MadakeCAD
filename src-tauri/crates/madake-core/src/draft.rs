@@ -2936,6 +2936,37 @@ mod layout_tests {
         );
     }
 
+    /// Whatever order the sheets end up in, the text a flag prints (the first two names in sheet order, plus the other marker for three or more) is never wider than the reserved text, which joins the two widest names.
+    /// シートが最後にどの順に並んでも、旗に書かれる文字 (シート順で最初の2つの名前と、3つ以上なら「他」) は、確保した文字 (いちばん広い2つの名前をつないだもの) より広くならない。
+    #[test]
+    fn the_reserved_text_covers_every_order_the_export_can_print() {
+        let names = ["Ab", "Wide cabinet name", "M", "Second wide one", "漢字の盤"];
+        let set: BTreeSet<String> = names.iter().map(|s| s.to_string()).collect();
+        let reserved = widest_dest_text(&set).unwrap();
+        let mut order: Vec<String> = names.iter().map(|s| s.to_string()).collect();
+        // Heap's algorithm: every permutation of the five names
+        fn permute(k: usize, v: &mut Vec<String>, out: &mut Vec<Vec<String>>) {
+            if k == 1 {
+                out.push(v.clone());
+                return;
+            }
+            for i in 0..k {
+                permute(k - 1, v, out);
+                let j = if k % 2 == 0 { i } else { 0 };
+                v.swap(j, k - 1);
+            }
+        }
+        let mut all = Vec::new();
+        permute(order.len(), &mut order, &mut all);
+        assert_eq!(all.len(), 120);
+        for p in all {
+            for n in 1..=p.len() {
+                let printed = crate::xref::join_dest_names(&p[..n]).unwrap();
+                assert!(text_width(&printed, 1.0) <= text_width(&reserved, 1.0) + 1e-9, "{printed} is wider than {reserved}");
+            }
+        }
+    }
+
     /// A project with one sheet and a request that names the sheets it plans; the model of U1 and TB1 on two columns.
     fn planned_reserve(planned: Vec<PlannedSheet>) -> Reserve {
         let mut r = request(&[&["U1"], &["TB1"]]);
@@ -3874,6 +3905,78 @@ mod wire_tests {
         }
         let check = crate::draft_check::check_function_sheets(&fixture_source(), &open, &[]);
         assert!(check.tags_outside.is_empty(), "{:?}", check.tags_outside);
+    }
+
+    /// Drafts `requests` in the given order into an empty project; returns the project and, per sheet name, the room its tags reserved.
+    fn draft_in_order(requests: &[DraftRequest], order: &[usize]) -> (Project, BTreeMap<String, Reserve>) {
+        let mut open = Project::new("open");
+        open.sheets.clear();
+        let mut reserves = BTreeMap::new();
+        for &i in order {
+            let r = &requests[i];
+            let model = build_model(&fixture_source(), &open, r).unwrap();
+            reserves.insert(r.name.clone(), lay_out(&model, &open, r).unwrap().reserve);
+            let p = plan_function_sheet(&fixture_source(), &open, r).unwrap_or_else(|e| panic!("{}: {e}", r.name));
+            open.sheets.push(p.sheet);
+        }
+        (open, reserves)
+    }
+
+    /// For every order in which three planned sheets are drafted (with U2 kept on one sheet, or divided over two sheets by `pins`, and with one sheet planned by its name only), every flag the export prints fits inside the room its sheet reserved, and the check finds no tag outside the frame.
+    /// 計画した3枚をどの順で下書きしても (U2を1枚に載せても、pinsで2枚に分けても、1枚を名前だけで計画しても)、書き出しが描く旗はどれも、そのシートが空けた場所に収まり、検算も枠からはみ出す札を見つけない。
+    #[test]
+    fn every_drafting_order_keeps_each_flag_inside_its_reserve() {
+        let (a, b) = ("Cabinet B terminal side", "Spare relay panel number two");
+        let object = |name: &str, columns: &[&[&str]], pins: &[(&str, &[&str])]| {
+            let mut r = request();
+            r.name = name.into();
+            r.columns = columns.iter().map(|c| c.iter().map(|u| u.to_string()).collect()).collect();
+            r.pins = pins.iter().map(|(u, k)| (u.to_string(), k.iter().map(|x| x.to_string()).collect())).collect();
+            r.power_nets = Vec::new();
+            r
+        };
+        let detail = |r: &DraftRequest| {
+            PlannedSheet::Detailed(PlannedSheetDetail {
+                name: r.name.clone(),
+                units: r.columns.iter().flatten().cloned().collect(),
+                pins: r.pins.clone(),
+            })
+        };
+        let whole = vec![object("Main", &[&["U1"], &["TB1"]], &[]), object(a, &[&["R1"]], &[]), object(b, &[&["U2"]], &[("U2", &["3", "4"])])];
+        let divided = vec![
+            object("Main", &[&["U1"], &["TB1"]], &[]),
+            object(a, &[&["R1"], &["U2"]], &[("U2", &["3"])]),
+            object(b, &[&["U2"]], &[("U2", &["4"])]),
+        ];
+        let orders = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+        for (case, mut requests) in [("whole", whole.clone()), ("divided", divided), ("name only", whole)] {
+            let mut planned: Vec<PlannedSheet> = requests.iter().map(detail).collect();
+            if case == "name only" {
+                planned[2] = PlannedSheet::Name(b.into());
+            }
+            for r in &mut requests {
+                r.planned_sheets = planned.clone();
+            }
+            for order in &orders {
+                let (open, reserves) = draft_in_order(&requests, order);
+                for sheet in &open.sheets {
+                    let reserve = &reserves[&sheet.name];
+                    let dests = crate::xref::sheet_tag_dests(&open, sheet.id);
+                    for (l, _, real) in flags(sheet, &dests) {
+                        let font = crate::svg::LABEL_FONT * sheet.annotation_scale();
+                        let room = flag_rect(&l, font, sheet.xref_style, reserve.text(&l.name)).unwrap();
+                        assert!(
+                            room.min.x <= real.min.x + 1e-6 && room.max.x >= real.max.x - 1e-6,
+                            "case {case}, order {order:?}: {} on {}: the flag {real:?} is wider than its reserve {room:?}",
+                            l.name,
+                            sheet.name
+                        );
+                    }
+                }
+                let check = crate::draft_check::check_function_sheets(&fixture_source(), &open, &[]);
+                assert!(check.tags_outside.is_empty(), "case {case}, order {order:?}: {:?}", check.tags_outside);
+            }
+        }
     }
 
     /// The request whose two leaving nets (SIG_A, SIG_B) have two pins each on the sheet, so each gets a tag and a wire; U1 also carries its power and ground pins (marks).

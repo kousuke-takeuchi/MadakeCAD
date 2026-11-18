@@ -355,6 +355,57 @@ mod tests {
         assert!(c.ok && c.layout_ok && c.tags_outside.is_empty(), "{c:?}");
     }
 
+    /// A tag whose flag pokes past the left, right, top or bottom edge of the inner frame, or lies in the title block, is listed with the overhang in mm; a tag inside the drawing area is not; the list follows sheet order, then net names in natural order (N2 before N10).
+    /// 旗が図枠の内側の左・右・上・下の縁を越える札、表題欄の中にある札は、はみ出した量 (mm) と一緒に挙がる。描画範囲の中の札は挙がらない。並びはシート順、次にネット名の自然順 (N2 は N10 より先)。
+    #[test]
+    fn tags_outside_are_found_on_every_side_and_in_the_title_block() {
+        use crate::geometry::Point;
+        use crate::model::{NetLabel, Orientation, PaperSize, Sheet};
+        let mut open = Project::new("open");
+        open.sheets.clear();
+        open.sheets.push(Sheet::new("First", PaperSize::A3, Orientation::Landscape));
+        open.sheets.push(Sheet::new("Second", PaperSize::A3, Orientation::Landscape));
+        let template = crate::frame_template::for_project(&open);
+        let (frame, title) = crate::arrange::frame_areas(&template, &open.sheets[0]);
+        let font = crate::svg::LABEL_FONT * open.sheets[0].annotation_scale();
+        let style = open.sheets[0].xref_style;
+        let tag = |name: &str, dir: &str, at: Point| {
+            let mut attrs = std::collections::BTreeMap::new();
+            attrs.insert("tag".to_string(), dir.to_string());
+            NetLabel { id: uuid::Uuid::new_v4(), at, name: name.into(), rotation: 0, attrs }
+        };
+        // the flag's extent around its point, measured on a probe at the origin
+        let extent = |name: &str, dir: &str| {
+            let t = crate::net_tag::net_tag_with(&tag(name, dir, Point::new(0.0, 0.0)), font, style, None).unwrap();
+            let xs = t.points.iter().map(|p| p.x);
+            let ys = t.points.iter().map(|p| p.y);
+            (xs.clone().fold(f64::MAX, f64::min), ys.clone().fold(f64::MAX, f64::min), xs.fold(f64::MIN, f64::max), ys.fold(f64::MIN, f64::max))
+        };
+        let (mid_x, mid_y) = ((frame.0 + frame.2) / 2.0, (frame.1 + title.1) / 2.0);
+        let mut place = |sheet: usize, label: NetLabel| {
+            open.sheets[sheet].entities.insert(label.id, Entity::NetLabel(label));
+        };
+        let e = extent("N10", "left");
+        place(1, tag("N10", "left", Point::new(frame.0 - e.0 - 3.0, mid_y)));
+        let e = extent("N2", "right");
+        place(1, tag("N2", "right", Point::new(frame.2 - e.2 + 2.0, mid_y)));
+        let e = extent("N3", "left");
+        place(1, tag("N3", "left", Point::new(mid_x, frame.1 - e.1 - 1.5)));
+        let e = extent("Z1", "left");
+        place(0, tag("Z1", "left", Point::new(frame.0 + 10.0, frame.3 - e.3 + 4.0)));
+        place(0, tag("TB", "left", Point::new((title.0 + title.2) / 2.0, (title.1 + title.3) / 2.0)));
+        place(0, tag("OK", "left", Point::new(mid_x, mid_y)));
+        let c = check_function_sheets(&fixture_source(), &open, &[]);
+        let got: Vec<(&str, &str)> = c.tags_outside.iter().map(|t| (t.sheet.as_str(), t.net.as_str())).collect();
+        assert_eq!(got, [("First", "TB"), ("First", "Z1"), ("Second", "N2"), ("Second", "N3"), ("Second", "N10")]);
+        let excess = |net: &str| c.tags_outside.iter().find(|t| t.net == net).unwrap().excess_mm;
+        for (net, want) in [("Z1", 4.0), ("N2", 2.0), ("N3", 1.5), ("N10", 3.0)] {
+            assert!((excess(net) - want).abs() <= 0.1 + 1e-9, "{net}: {} vs {want}", excess(net));
+        }
+        assert!(excess("TB") > 0.0);
+        assert!(!c.layout_ok);
+    }
+
     /// The tags outside the frame are listed by sheet order, then by net name in natural order.
     /// 枠からはみ出した札は、シートの並び順、次にネット名の自然順で並ぶ。
     #[test]
