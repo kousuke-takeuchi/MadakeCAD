@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**4003仕様項目**。
+全6領域・**4017仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -560,8 +560,8 @@
 - 隣り合う2つの列の5つの機器にまたがる5ピンのネットは、幹1本と枝5本で描かれ、3本が会う枝ごとに接点の丸がある。通り道にそれ以外の線は無い。 <sub>`a_net_over_five_units_in_two_columns_is_one_trunk_with_five_drops`</sub>
 - 1つのネットの5ピンが3つの機器にあるとき (2つの機器は2ピンずつで棒になる)、幹1本と枝3本で描かれる。 <sub>`bars_count_as_one_terminal_each`</sub>
 - 両側の同じ高さにある2つの端は、短い線の先から先まで1本の横線になる。幹も接点も無い。 <sub>`terminals_at_one_height_are_one_straight_wire`</sub>
-- 端が通り道の外にあるネット (2つ先の列まで届く) は通り道を使えない。格子の経路探索が引き、つながりは変わらない。 <sub>`a_net_reaching_two_columns_over_goes_to_the_grid_router`</sub>
-- 札の枝を持つ出ていくネット (組が2つ) は通り道を使えず、格子の経路探索が引く。シートに組が1つだけの出ていくネットは配線そのものが無い。 <sub>`a_net_with_a_tag_branch_goes_to_the_grid_router`</sub>
+- 2つ先の列まで届くネットは、通り道の中で同じ高さを別のネットの枝が使っていると置ける位置が無い。格子の経路探索が引き、つながりは変わらない。 <sub>`a_net_reaching_two_columns_over_whose_row_is_taken_goes_to_the_grid_router`</sub>
+- 旗(他のシートの名前の分の余白を含む)が通り道に収まらない、組が2つの出ていくネットは、札をピンの枝に残し、格子の経路探索が引く。シートに組が1つだけの出ていくネットは配線そのものが無い。 <sub>`a_tag_that_does_not_fit_the_channel_stays_on_its_branch`</sub>
 - 通り道の幅は10mm + トラック1本につき2.5mmで、20mm以上。トラックは必ず収まる。 <sub>`the_channel_width_follows_the_track_count`</sub>
 - 同じ依頼を2回計画すると、ランダムなidを除けば、全く同じ配線になる。 <sub>`planning_twice_gives_the_same_channel_wires`</sub>
 - 通り道の配線がふさがれたネット (ここでは幹の上に立入禁止の領域を置く) は格子の経路探索に渡され、それでもつながり、つながりは変わらない。 <sub>`a_blocked_channel_net_is_taken_by_the_grid_router`</sub>
@@ -634,6 +634,23 @@
 - 見て確かめるために、棒の見本を下書きしたシートを MADAKE_DRAFT_SVG の場所へSVGで書き出す (--ignored で実行する)。 <sub>`write_the_bars_sheet_as_svg`</sub>
 - 見て確かめるために、積んだ見本を2通り (積んだ列がSYの前・最後の列) に下書きしたシートを、MADAKE_DRAFT_SVG_DIR のフォルダへSVGで書き出す (--ignored で実行する)。 <sub>`write_the_stacked_sheets_as_svg`</sub>
 - 手元のファイルの依頼を順に下書きして、シートをSVGで書き出し、見て確かめる (--ignored で実行。環境変数 MADAKE_DRAFT_REQUESTS と MADAKE_DRAFT_OUT を指定する。無ければ何もしない)。 <sub>`draft_requests_from_a_file_for_looking`</sub>
+
+### draft_span_tests
+
+- 見て確かめるために、通り道の幹と札の見本を下書きしたシートを、MADAKE_DRAFT_SVG_DIR のフォルダへSVGで書き出す (--ignored で実行する)。 <sub>`write_the_span_sheets_as_svg`</sub>
+- 3つの列に端があるバスは、列1と列2のあいだの通り道に幹1本で引かれ、端ごとに1本のまっすぐな横の枝が付く。どの箱の上も配線は通らない。 <sub>`a_bus_over_three_columns_is_one_trunk_with_straight_drops`</sub>
+- 2列目の箱が枝の高さに立ちふさがるときは、バスは幹で引かれない。格子の経路探索が引き、箱の上は通らず、つながりは変わらない。 <sub>`a_box_in_the_row_of_a_drop_sends_the_bus_to_the_grid_router`</sub>
+- 端が全て、通り道より前の列の機器の右辺か、後ろの列の機器の左辺にあるネットは、その通り道の候補になる。枝は間の通り道を通り抜ける。 <sub>`a_net_is_a_candidate_for_every_channel_that_all_its_terminals_face`</sub>
+- 候補の通り道が複数あるときは、番号が小さい通り道ではなく、枝の合計がいちばん短い通り道を使う。最後の列に積んだ2つの機器は隣の通り道、最初の列に積んだ2つは、その隣の通り道を使う。 <sub>`the_channel_with_the_shortest_drops_wins`</sub>
+- 枝の合計が同じなら小さい番号の通り道を選び、外された通り道は飛ばして次の通り道を選ぶ。 <sub>`equal_lengths_take_the_lower_channel_and_an_excluded_channel_is_skipped`</sub>
+- 他の通り道を通り抜ける枝は、その通り道の幹を途中で直角に横切るだけで、幹の端には乗らない。その通り道の幅は、その通り道自身のトラックの数のままになる。 <sub>`a_drop_through_another_channel_crosses_its_trunk_at_a_right_angle`</sub>
+- 通り道のトラックの割り当てでは、その通り道を通り抜ける枝は動かない線として数える。幹の端がその枝の高さになる位置は選べない。 <sub>`a_through_drop_is_a_fixed_line_in_the_track_assignment`</sub>
+- 同じ依頼を2回計画すると配線は全く同じで、決まった配置も同じになる。 <sub>`the_bus_sheet_is_the_same_every_time`</sub>
+- 出ていくネットが隣り合う列の2つの機器を結ぶとき、幹の端に札を付けて引く。ピンに札の枝は無く、旗は何にも触れず、シートのネットリストは両方のピンと札の名前をつなぐ。 <sub>`a_tagged_net_between_two_units_has_its_tag_at_the_end_of_the_trunk`</sub>
+- 札の位置は決まった順に試す(上5mmの右・左、下の右・左、次に10mmで同じ順)。他のネットの配線がじゃまな位置は飛ばす。いちばん上のネットでは上の位置だけが空いていて、順にふさぐと札は次の位置へ動き、全部ふさぐとピンの枝に残る。 <sub>`the_tag_positions_of_a_top_net_are_tried_in_order_and_the_branch_is_the_last_resort`</sub>
+- いちばん下のネットでは、下の位置が空いている。5mmの右・左、次に10mmの右・左の順で、全部ふさぐと札は枝に残る。 <sub>`the_tag_positions_of_a_bottom_net_are_tried_in_order`</sub>
+- 幹へ動かした札を、あとのネットは避ける。同じ2つの機器のあいだに、札付きのネット3本と普通のネット2本があっても、他のネットの配線は旗の0.5mm以内に近づかず、つながりは変わらない。 <sub>`later_nets_avoid_a_flag_that_moved_to_a_trunk`</sub>
+- 3枚の計画に完全な planned_sheets を付けてどの順に下書きしても、開いたプロジェクトの旗は全て図枠の中にあり、検算は「はみ出す札なし」で、元の図と同じつながりを返す。 <sub>`three_planned_sheets_drafted_in_every_order_keep_every_flag_inside`</sub>
 
 ### DXF連携 (AutoCAD Electrical / EPLAN)
 

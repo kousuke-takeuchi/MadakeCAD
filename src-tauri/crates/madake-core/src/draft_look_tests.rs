@@ -809,7 +809,9 @@ pub(super) fn wires_touching_flags(project: &Project, sheet: &Sheet) -> Vec<Stri
                 let (x0, x1, y0, y1) = (a.x.min(b.x), a.x.max(b.x), a.y.min(b.y), a.y.max(b.y));
                 let hit = x0 <= r.max.x + 1e-9 && x1 >= r.min.x - 1e-9 && y0 <= r.max.y + 1e-9 && y1 >= r.min.y - 1e-9;
                 let at_anchor = a.distance_to(&l.at) < 1e-6 || b.distance_to(&l.at) < 1e-6;
-                let own = at_anchor && y0 >= r.max.y - 1e-9;
+                // a trunk that ends at a flag put on its lower end runs along the flag's flat edge (x = the tag point)
+                let along = (a.x - l.at.x).abs() < 1e-6 && (b.x - l.at.x).abs() < 1e-6;
+                let own = at_anchor && (y0 >= r.max.y - 1e-9 || along);
                 if hit && !own {
                     bad.push(format!("{} {} flag {r:?}: segment {a:?}-{b:?}", sheet.name, l.name));
                 }

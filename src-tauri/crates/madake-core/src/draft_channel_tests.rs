@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 type Pairs<'a> = &'a [(&'a str, &'a [(&'a str, &'a str)])];
 
 /// The model, the layout and the plan of units (reference, number of pins) with the given nets, drafted in the given columns (no power or ground).
-fn drafted(units: &[(&str, usize)], nets: Pairs, columns: &[&[&str]], pitch: f64) -> (Project, DraftModel, DraftLayout, DraftPlan) {
+pub(super) fn drafted(units: &[(&str, usize)], nets: Pairs, columns: &[&[&str]], pitch: f64) -> (Project, DraftModel, DraftLayout, DraftPlan) {
     let src = source_of("draft-channel", units, nets);
     let req = stacked_request(columns, pitch);
     let m = build_model(&src, &open(), &req).expect("the request is valid");
@@ -19,8 +19,23 @@ fn drafted(units: &[(&str, usize)], nets: Pairs, columns: &[&[&str]], pitch: f64
     (src, m, l, p)
 }
 
+/// The layout the plan ends with: nets whose channel route fails go to another channel they could use, and the layout is made again (as `plan_in` does).
+pub(super) fn settled(m: &DraftModel, req: &DraftRequest) -> DraftLayout {
+    let template = crate::frame_template::for_project(&open());
+    let mut excluded: BTreeSet<(usize, usize)> = BTreeSet::new();
+    loop {
+        let l = lay_out_excluding(m, &open(), req, &template, &excluded).expect("the layout fits");
+        let (_, _, _, retry) = route_wires_try(m, &l, &RouteOptions::default());
+        let before = excluded.len();
+        excluded.extend(retry);
+        if excluded.len() == before {
+            return l;
+        }
+    }
+}
+
 /// The vertical wire segments that lie strictly inside channel k (between column k and column k+1): (x, top y, bottom y).
-fn trunks(sheet: &Sheet, l: &DraftLayout, k: usize) -> Vec<(f64, f64, f64)> {
+pub(super) fn trunks(sheet: &Sheet, l: &DraftLayout, k: usize) -> Vec<(f64, f64, f64)> {
     let (r, left) = (l.columns[k].right, l.columns[k + 1].left);
     let mut out = Vec::new();
     for w in wires_of(sheet) {
@@ -34,16 +49,16 @@ fn trunks(sheet: &Sheet, l: &DraftLayout, k: usize) -> Vec<(f64, f64, f64)> {
     out
 }
 
-fn on_grid(v: f64) -> bool {
+pub(super) fn on_grid(v: f64) -> bool {
     ((v / 2.5) - (v / 2.5).round()).abs() < 1e-6
 }
 
-fn names(m: &DraftModel, keys: impl Iterator<Item = usize>) -> BTreeSet<String> {
+pub(super) fn names(m: &DraftModel, keys: impl Iterator<Item = usize>) -> BTreeSet<String> {
     keys.map(|k| m.nets[k].name.clone()).collect()
 }
 
-fn chan_net(key: usize, name: &str, terms: &[(f64, bool)]) -> ChanNet {
-    ChanNet { key, name: name.into(), terms: terms.iter().map(|&(y, left)| ChanTerm { y, left }).collect() }
+pub(super) fn chan_net(key: usize, name: &str, terms: &[(f64, bool)]) -> ChanNet {
+    ChanNet { key, name: name.into(), terms: terms.iter().map(|&(y, left)| ChanTerm { y, left }).collect(), tagged: false }
 }
 
 fn track_of(a: &Assignment, key: usize) -> Option<usize> {
@@ -336,29 +351,29 @@ fn terminals_at_one_height_are_one_straight_wire() {
     assert_eq!(l.channels[0].tracks, 0);
 }
 
-/// A net with a terminal outside the channel (it reaches two columns over) is not channel-routable: the grid router draws it and the connections stay right.
-/// 端が通り道の外にあるネット (2つ先の列まで届く) は通り道を使えない。格子の経路探索が引き、つながりは変わらない。
+/// A net that reaches two columns over, whose row is taken by another net's drop in the channel, finds no free position there: the grid router draws it and the connections stay right.
+/// 2つ先の列まで届くネットは、通り道の中で同じ高さを別のネットの枝が使っていると置ける位置が無い。格子の経路探索が引き、つながりは変わらない。
 #[test]
-fn a_net_reaching_two_columns_over_goes_to_the_grid_router() {
+fn a_net_reaching_two_columns_over_whose_row_is_taken_goes_to_the_grid_router() {
     let (src, m, l, p) = drafted(&[("A", 2), ("B", 2), ("C", 2)], &[("N", &[("A", "1"), ("C", "1")]), ("M", &[("A", "2"), ("B", "1")])], &[&["A"], &["B"], &["C"]], 5.0);
     let placed = |l: &DraftLayout| names(&m, l.channels.iter().flat_map(|c| c.placed.iter().map(|p| p.key)));
-    assert_eq!(placed(&l), ["M".to_string()].into_iter().collect(), "only M is channel-routable");
+    assert_eq!(placed(&l), ["M".to_string()].into_iter().collect(), "only M finds a position: the row of N is the row of the drop of M");
     assert!(p.wired.contains(&"N".to_string()), "{:?}", p.wired);
     assert!(p.labelled.is_empty());
     assert_eq!(device_groups(&p.sheet, &["A", "B", "C"]), device_groups(&src.sheets[0], &["A", "B", "C"]));
 }
 
-/// A leaving net with two groups hangs its tag on a branch, so it is not channel-routable and the grid router draws it; a leaving net with only one group on the sheet has no wire at all.
-/// 札の枝を持つ出ていくネット (組が2つ) は通り道を使えず、格子の経路探索が引く。シートに組が1つだけの出ていくネットは配線そのものが無い。
+/// A leaving net with two groups whose tag flag (with the room kept for other sheets' names) does not fit the channel keeps its tag on the branch at the pin and the grid router draws it; a leaving net with only one group on the sheet has no wire at all.
+/// 旗(他のシートの名前の分の余白を含む)が通り道に収まらない、組が2つの出ていくネットは、札をピンの枝に残し、格子の経路探索が引く。シートに組が1つだけの出ていくネットは配線そのものが無い。
 #[test]
-fn a_net_with_a_tag_branch_goes_to_the_grid_router() {
+fn a_tag_that_does_not_fit_the_channel_stays_on_its_branch() {
     let src = source_of("draft-leaving", &[("A", 2), ("B", 2), ("C", 2)], &[("N", &[("A", "1"), ("B", "1"), ("C", "1")]), ("L", &[("A", "2"), ("C", "2")])]);
     let req = stacked_request(&[&["A"], &["B"]], 5.0);
-    let m = build_model(&src, &open(), &req).expect("valid");
-    let l = lay_out(&m, &open(), &req).expect("fits");
     let p = plan_function_sheet(&src, &open(), &req).expect("plan");
-    assert!(l.channels.iter().all(|c| c.placed.is_empty()), "N carries a tag branch: {:?}", l.channels);
     assert!(p.wired.contains(&"N".to_string()), "{:?}", p.wired);
+    let tag = labels_of(&p.sheet).into_iter().find(|l| l.name == "N").expect("N has its tag");
+    let end = stub_end(&p.sheet, "A", "1");
+    assert!(tag.at.distance_to(&Point::new(end.x + 5.0, end.y)) < 1e-6, "the tag hangs on the branch at the pin: {:?} {:?}", tag.at, end);
     assert_eq!(p.tagged.iter().map(|t| t.net.as_str()).collect::<Vec<_>>(), vec!["L", "N"].into_iter().filter(|n| p.tagged.iter().any(|t| t.net == *n)).collect::<Vec<_>>());
     assert!(wires_touching_flags(&with_sheet(&open(), &p.sheet), &p.sheet).is_empty());
 }
@@ -584,12 +599,13 @@ fn random_sources_keep_the_connections_and_every_track_inside_its_channel() {
 /// 格子の経路探索が引けないネットに後から付けた札のそばを通ってしまう通り道のネットは、格子の経路探索に渡される。トラックの上にはもう無いが配線はされ、旗に触れる配線は無く、つながりは変わらない。
 #[test]
 fn a_channel_net_near_a_later_fallback_tag_is_handed_to_the_grid_router() {
-    let (src, m, mut l, p) = drafted(
+    let (src, m, _, p) = drafted(
         &[("A", 3), ("B", 3), ("C", 2)],
         &[("N", &[("A", "1"), ("B", "3")]), ("G", &[("A", "2"), ("C", "1")]), ("X", &[("A", "3"), ("B", "1")]), ("Y", &[("B", "2"), ("C", "2")])],
         &[&["A"], &["B"], &["C"]],
         5.0,
     );
+    let mut l = settled(&m, &stacked_request(&[&["A"], &["B"], &["C"]], 5.0));
     let x_key = m.nets.iter().position(|n| n.name == "X").expect("X");
     let track = l.channels[0].placed.iter().find(|pl| pl.key == x_key).and_then(|pl| pl.track).expect("X is on a track");
     let x = l.channels[0].track_x(track);
@@ -614,7 +630,7 @@ fn a_channel_net_near_a_later_fallback_tag_is_handed_to_the_grid_router() {
 fn forty_nets_and_thirty_terminals_are_assigned_quickly() {
     let started = std::time::Instant::now();
     let mut nets: Vec<ChanNet> = (0..40).map(|i| chan_net(i, &format!("N{i}"), &[(i as f64 * 2.5, true), (400.0 - i as f64 * 2.5, true)])).collect();
-    nets.push(ChanNet { key: 40, name: "W".into(), terms: (0..30).map(|i| ChanTerm { y: 500.0 + 2.5 * i as f64, left: i % 2 == 0 }).collect() });
+    nets.push(ChanNet { key: 40, name: "W".into(), terms: (0..30).map(|i| ChanTerm { y: 500.0 + 2.5 * i as f64, left: i % 2 == 0 }).collect(), tagged: false });
     let a = assign_tracks(&nets);
     assert!(started.elapsed().as_secs_f64() < 1.0, "{:?}", started.elapsed());
     assert!(a.unplaced.is_empty(), "{a:?}");

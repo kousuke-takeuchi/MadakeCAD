@@ -1629,6 +1629,8 @@ pub(crate) struct DraftLayout {
     pub label_font: f64,
     /// 隣り合う列のあいだの通り道ごとの、トラックの割り当て (通り道k = 列kと列k+1のあいだ)。
     pub(crate) channels: Vec<channel::ChannelLayout>,
+    /// 通り道に選ばない (ネットの添字, 通り道の添字): 配線の検査に通らなかった通り道を、次の配置で避ける。
+    pub(crate) excluded: BTreeSet<(usize, usize)>,
 }
 
 /// 列1つの横の広がり (用紙のx座標)。
@@ -2521,6 +2523,17 @@ pub(crate) fn lay_out_in(
     req: &DraftRequest,
     template: &crate::frame_template::FrameTemplate,
 ) -> Result<DraftLayout, String> {
+    lay_out_excluding(model, open, req, template, &BTreeSet::new())
+}
+
+/// [`lay_out_in`] の、通り道に選ばない (ネットの添字, 通り道の添字) を渡せる版。
+pub(crate) fn lay_out_excluding(
+    model: &DraftModel,
+    open: &Project,
+    req: &DraftRequest,
+    template: &crate::frame_template::FrameTemplate,
+    excluded: &BTreeSet<(usize, usize)>,
+) -> Result<DraftLayout, String> {
     let pitch = req.pitch_mm;
     let reserve = Reserve::of(open, model, req);
     let units = &model.units;
@@ -2671,17 +2684,27 @@ pub(crate) fn lay_out_in(
         y
     };
     let assignments = {
+        // 通り道ごとの割り当ては端の高さだけで決まるが、ネットの通り道の選び (枝の長さの合計) は横の位置を使うので、
+        // 通り道を最小の幅にして詰めた仮の列の位置に仮に置く
+        let mut provisional_x = Vec::new();
+        let mut px = area_x0;
+        for w in &widths {
+            provisional_x.push(px);
+            px += w + MIN_CHANNEL_MM;
+        }
         let mut prov = new_sheet(Some(annotation));
         let mut prov_ids = Vec::new();
         for (u, unit) in units.iter().enumerate() {
             let k = columns.iter().position(|&c| c == unit.column).unwrap_or(0);
-            let inst = unit_instance(unit, &plans[u], pitch, Point::new(left_of[k], y_of[u]))?;
+            let inst = unit_instance(unit, &plans[u], pitch, Point::new(provisional_x[k] + left_of[k], y_of[u]))?;
             prov_ids.push(inst.id);
             prov.entities.insert(inst.id, Entity::Symbol(inst));
         }
         let prov_deco = decorate(model, &plans, &prov, &prov_ids, &defs, pitch)?;
         let cands = channel::candidates(model, &prov_deco.terminals);
-        channel::assign_all(&cands, columns.len().saturating_sub(1))
+        let trunk_x = |c: usize| provisional_x[c] + widths[c] + MIN_CHANNEL_MM / 2.0;
+        let chosen = channel::choose_channels(&cands, excluded, &trunk_x);
+        channel::assign_all(&cands, &chosen, columns.len().saturating_sub(1))
     };
     let channel = |k: usize| -> f64 {
         let tracks = assignments.get(k).map_or(0, |a| a.tracks);
@@ -2766,8 +2789,10 @@ pub(crate) fn lay_out_in(
                 right: column_x[k + 1],
                 tracks: a.tracks,
                 placed: a.placed,
+                unplaced: a.unplaced,
             })
             .collect(),
+        excluded: excluded.clone(),
     })
 }
 
@@ -2777,6 +2802,10 @@ mod channel;
 #[cfg(test)]
 #[path = "draft_look_tests.rs"]
 mod look_tests;
+
+#[cfg(test)]
+#[path = "draft_span_tests.rs"]
+mod span_tests;
 
 #[cfg(test)]
 #[path = "draft_channel_tests.rs"]
@@ -3606,8 +3635,17 @@ pub(crate) fn plan_in(
 ) -> Result<DraftPlan, String> {
     opts.validate()?;
     let model = build_model(source, open, req)?;
-    let layout = lay_out_in(&model, open, req, template)?;
-    let (mut sheet, wired, labelled) = route_wires(&model, &layout, opts);
+    // 通り道の検査に通らず、別の通り道の候補があるネットは、その通り道を外して配置からやり直す (外す組は増える一方なので終わる)
+    let mut excluded: BTreeSet<(usize, usize)> = BTreeSet::new();
+    let (layout, mut sheet, wired, labelled) = loop {
+        let layout = lay_out_excluding(&model, open, req, template, &excluded)?;
+        let (sheet, wired, labelled, retry) = route_wires_try(&model, &layout, opts);
+        let before = excluded.len();
+        excluded.extend(retry);
+        if excluded.len() == before {
+            break (layout, sheet, wired, labelled);
+        }
+    };
     sheet.title_block = req.new_title_block();
     Ok(DraftPlan {
         sheet,
@@ -3688,6 +3726,13 @@ fn touches_a_flag(emitted: &[Entity], flags: &[(Rect, Point, String)], net: &str
 
 /// 配線を引き、引けないネットは、各端に札 (行き先なし) を付けてつなぐ。返り値は完成したシートと、配線したネット名・札でつないだネット名 (どちらも自然順)。
 fn route_wires(model: &DraftModel, layout: &DraftLayout, opts: &RouteOptions) -> (Sheet, Vec<String>, Vec<String>) {
+    let (sheet, wired, labelled, _) = route_wires_try(model, layout, opts);
+    (sheet, wired, labelled)
+}
+
+/// [`route_wires`] の、通り道の検査に通らず、別の通り道の候補があるネット (ネットの添字, 通り道の添字) も返す版。
+/// 配置をやり直すときに、その通り道を選ばないようにするために使う。
+fn route_wires_try(model: &DraftModel, layout: &DraftLayout, opts: &RouteOptions) -> (Sheet, Vec<String>, Vec<String>, Vec<(usize, usize)>) {
     let mut sheet = layout.sheet.clone();
     let defs = sheet_symbol_defs(&sheet);
     let key_of = |l: &Vec<Point>| l.iter().map(|&p| quantised(p)).collect::<Vec<_>>();
@@ -3736,14 +3781,13 @@ fn route_wires(model: &DraftModel, layout: &DraftLayout, opts: &RouteOptions) ->
     let (fx0, fy0, fx1, fy1) = layout.frame;
     let (pw, ph) = sheet.paper_mm();
     let far = 10.0;
-    let mut blocked: Vec<Rect> = layout.keep_out.clone();
-    blocked.extend([
+    let frame_blocks: Vec<Rect> = vec![
         Rect::from_corners(Point::new(-far, -far), Point::new(fx0, ph + far)),
         Rect::from_corners(Point::new(fx1, -far), Point::new(pw + far, ph + far)),
         Rect::from_corners(Point::new(-far, -far), Point::new(pw + far, fy0)),
         Rect::from_corners(Point::new(-far, fy1), Point::new(pw + far, ph + far)),
         Rect::from_corners(Point::new(layout.title.0, layout.title.1), Point::new(layout.title.2, layout.title.3)),
-    ]);
+    ];
     // 全ての札の旗 (後から書かれる行き先の分まで): (旗, 基準点, ネット名)。どの配線も触れてはいけない
     let flag_of = |l: &NetLabel| flag_rect(l, layout.label_font, sheet.xref_style, layout.reserve.text(&l.name));
     let mut flags: Vec<(Rect, Point, String)> = sheet
@@ -3752,41 +3796,110 @@ fn route_wires(model: &DraftModel, layout: &DraftLayout, opts: &RouteOptions) ->
         .filter_map(|e| if let Entity::NetLabel(l) = e { flag_of(l).map(|r| (r, l.at, l.name.clone())) } else { None })
         .collect();
     flags.sort_by_key(|(_, at, _)| quantised(*at));
-
-    // 通り道のトラックで引けるネットを先に引く (格子の経路探索より前)。使える配線は動かない線・接点として渡す
-    let mut chan: BTreeMap<usize, channel::ChanRoute> = {
-        let mut grid = RouteGrid::build(&sheet, &defs, opts);
-        for r in &blocked {
+    // 札を下げた組の札 (枝の先): ネット → (札の位置, 旗)。札を幹の端へ動かしたネットの、この旗は無くなる
+    let mut branch_tag: BTreeMap<usize, (Point, Rect)> = BTreeMap::new();
+    for t in &layout.terminals {
+        if let (Some(at), Some((r, _, _))) = (t.tag_at, t.tag_at.and_then(|at| flags.iter().find(|(_, p, n)| p.distance_to(&at) < 1e-6 && *n == model.nets[t.net].name))) {
+            branch_tag.insert(t.net, (at, *r));
+        }
+    }
+    let moved_nets = |chan: &BTreeMap<usize, channel::ChanRoute>| -> BTreeSet<usize> {
+        chan.iter().filter(|(_, r)| r.tag.is_some()).map(|(&i, _)| order[i]).collect()
+    };
+    // 回ごとの立入禁止: 札と印と、図枠・表題欄、札つなぎの旗、札を幹へ動かしたネットの新しい旗。幹へ動かしたネットの、枝の先の旗は無い
+    let blocks_of = |chan: &BTreeMap<usize, channel::ChanRoute>, fallback: &[Rect]| -> Vec<Rect> {
+        let moved = moved_nets(chan);
+        let skip: Vec<Rect> = moved.iter().filter_map(|n| branch_tag.get(n).map(|(_, r)| *r)).collect();
+        layout
+            .keep_out
+            .iter()
+            .filter(|r| !skip.iter().any(|k| k.min == r.min && k.max == r.max))
+            .cloned()
+            .chain(frame_blocks.iter().cloned())
+            .chain(chan.values().filter_map(|r| r.tag.as_ref().map(|(_, f)| *f)))
+            .chain(fallback.iter().cloned())
+            .collect()
+    };
+    let build_grid = |sheet: &Sheet, blocks: &[Rect]| {
+        let mut grid = RouteGrid::build(sheet, &defs, opts);
+        for r in blocks {
             grid.block_area(r);
         }
-        let routes = channel::route_channels(model, layout, &grid, &fixed_lines, &fixed_spots);
-        order.iter().enumerate().filter_map(|(i, n)| routes.get(n).map(|r| (i, r.clone()))).collect()
+        grid
     };
+    let near = |a: Point, b: Point, f: &Rect| {
+        let g = opts.clearance_mm - 1e-6;
+        a.x.max(b.x) > f.min.x - g && a.x.min(b.x) < f.max.x + g && a.y.max(b.y) > f.min.y - g && a.y.min(b.y) < f.max.y + g
+    };
+    let route_near = |r: &channel::ChanRoute, f: &Rect| {
+        r.segments().iter().any(|&(a, b)| near(a, b, f))
+            || r.tag.as_ref().is_some_and(|(_, t)| t.min.x < f.max.x + opts.clearance_mm && f.min.x < t.max.x + opts.clearance_mm && t.min.y < f.max.y + opts.clearance_mm && f.min.y < t.max.y + opts.clearance_mm)
+    };
+
+    // 通り道のトラックで引けるネットを先に引く (格子の経路探索より前)。使える配線は動かない線・接点として渡す。
+    // 札を幹へ動かすネットが居るので、枝の先の旗は通り道の検査では立入禁止にしない
+    let (mut chan, retry): (BTreeMap<usize, channel::ChanRoute>, Vec<(usize, usize)>) = {
+        let skip: Vec<Rect> = branch_tag.values().map(|(_, r)| *r).collect();
+        let blocks: Vec<Rect> = layout
+            .keep_out
+            .iter()
+            .filter(|r| !skip.iter().any(|k| k.min == r.min && k.max == r.max))
+            .cloned()
+            .chain(frame_blocks.iter().cloned())
+            .collect();
+        // 札を幹へ動かすなら枝の先の札は無くなるので、通り道の検査の格子には枝の先の札の点を入れない
+        let mut no_tags = sheet.clone();
+        no_tags.entities.retain(|_, e| !matches!(e, Entity::NetLabel(l) if branch_tag.values().any(|(at, _)| at.distance_to(&l.at) < 1e-6)));
+        let grid = build_grid(&no_tags, &blocks);
+        let (routes, retry) = channel::route_channels(model, layout, &grid, &fixed_lines, &fixed_spots);
+        (order.iter().enumerate().filter_map(|(i, n)| routes.get(n).map(|r| (i, r.clone()))).collect(), retry)
+    };
+    // 札を幹へ動かせなかったネットの、枝の先の旗は元の場所に残る。通り道の配線がそれに近いなら、そのネットは格子の経路探索に回す
+    loop {
+        let moved = moved_nets(&chan);
+        let live: Vec<Rect> = branch_tag.iter().filter(|(n, _)| !moved.contains(n)).map(|(_, (_, r))| *r).collect();
+        let demoted: Vec<usize> = chan.iter().filter(|(_, r)| live.iter().any(|f| route_near(r, f))).map(|(&i, _)| i).collect();
+        if demoted.is_empty() {
+            break;
+        }
+        for i in demoted {
+            chan.remove(&i);
+        }
+    }
 
     // 回ごとに、引けていないネット以外を全て引く。引けないネット (旗に触れる経路も引けないものとする) は札でつなぎ、
     // その札の旗を次の回から通れない場所に足し、札の点と端は動かない点にする。新しく引けないネットが出なくなったら終わる
     let mut failed: BTreeSet<usize> = BTreeSet::new();
     let mut fallback: BTreeMap<usize, Vec<Entity>> = BTreeMap::new();
+    let mut fallback_blocks: Vec<Rect> = Vec::new();
+    let mut fallback_flags: Vec<(Rect, Point, String)> = Vec::new();
     let mut extra_lines: Vec<Vec<Point>> = Vec::new();
     let mut extra_spots: Vec<Point> = Vec::new();
     let mut outcome: Vec<Option<crate::route::UnitRoute>> = (0..units.len()).map(|_| None).collect();
     for _ in 0..=2 * units.len() + 2 {
-        let mut grid = RouteGrid::build(&sheet, &defs, opts);
-        for r in &blocked {
-            grid.block_area(r);
-        }
+        let grid = build_grid(&sheet, &blocks_of(&chan, &fallback_blocks));
+        // 触れてはいけない旗: 枝の先の旗 (動かしたネットのものを除く)、札つなぎの旗、動かした新しい旗
+        let moved = moved_nets(&chan);
+        let skip_at: Vec<(Point, &String)> = moved.iter().filter_map(|n| branch_tag.get(n).map(|(at, _)| (*at, &model.nets[*n].name))).collect();
+        let round_flags: Vec<(Rect, Point, String)> = flags
+            .iter()
+            .filter(|(_, at, name)| !skip_at.iter().any(|(p, n)| p.distance_to(at) < 1e-6 && *n == name))
+            .cloned()
+            .chain(fallback_flags.iter().cloned())
+            .chain(chan.values().filter_map(|r| r.tag.as_ref().map(|(l, f)| (*f, l.at, l.name.clone()))))
+            .collect();
         let todo: Vec<usize> = (0..units.len()).filter(|i| !failed.contains(i) && !chan.contains_key(i)).collect();
         let mut batch: Vec<RouteUnit> = todo.iter().map(|&i| units[i].clone()).collect();
         let lines: Vec<Vec<Point>> =
             fixed_lines.iter().chain(&extra_lines).cloned().chain(chan.values().flat_map(|r| r.wires.iter().cloned())).collect();
         let spots: Vec<Point> =
             fixed_spots.iter().chain(&extra_spots).copied().chain(chan.values().flat_map(|r| r.spots())).collect();
-        let flags_before = blocked.len();
+        let flags_before = fallback_blocks.len();
         let results = crate::route::route_units(&grid, &mut batch, lines, spots);
         let mut new_failed = Vec::new();
         for (&i, r) in todo.iter().zip(results) {
             match r {
-                Ok(route) if !touches_a_flag(&emit(&units[i], &route), &flags, &units[i].net) => outcome[i] = Some(route),
+                Ok(route) if !touches_a_flag(&emit(&units[i], &route), &round_flags, &units[i].net) => outcome[i] = Some(route),
                 _ => {
                     outcome[i] = None;
                     new_failed.push(i);
@@ -3802,8 +3915,8 @@ fn route_wires(model: &DraftModel, layout: &DraftLayout, opts: &RouteOptions) ->
             for t in terms_of[i].iter().filter(|t| !t.is_tag && t.tag.is_none()) {
                 let tag = tag_label(&units[i].net, t.top, t.dir, None);
                 if let Some(r) = flag_of(&tag) {
-                    blocked.push(r);
-                    flags.push((r, tag.at, tag.name.clone()));
+                    fallback_blocks.push(r);
+                    fallback_flags.push((r, tag.at, tag.name.clone()));
                 }
                 extra_spots.push(t.top);
                 es.push(Entity::NetLabel(tag));
@@ -3812,17 +3925,10 @@ fn route_wires(model: &DraftModel, layout: &DraftLayout, opts: &RouteOptions) ->
             extra_lines.extend(own);
             fallback.insert(i, es);
         }
-        // 通り道の配線が、今回の札つなぎの旗に近づいたら、そのネットは格子の経路探索に回す
+        // 通り道の配線 (動かした旗も) が、今回の札つなぎの旗に近づいたら、そのネットは格子の経路探索に回す
         let demoted: Vec<usize> = chan
             .iter()
-            .filter(|(_, r)| {
-                r.segments().iter().any(|&(a, b)| {
-                    blocked[flags_before..].iter().any(|f| {
-                        let g = opts.clearance_mm - 1e-6;
-                        a.x.max(b.x) > f.min.x - g && a.x.min(b.x) < f.max.x + g && a.y.max(b.y) > f.min.y - g && a.y.min(b.y) < f.max.y + g
-                    })
-                })
-            })
+            .filter(|(_, r)| fallback_blocks[flags_before..].iter().any(|f| route_near(r, f)))
             .map(|(&i, _)| i)
             .collect();
         for i in &demoted {
@@ -3833,6 +3939,22 @@ fn route_wires(model: &DraftModel, layout: &DraftLayout, opts: &RouteOptions) ->
         }
     }
 
+    // 札を幹へ動かしたネットは、枝の先の札を外して、幹の端の札を入れる
+    for (i, route) in &chan {
+        let Some((label, _)) = &route.tag else { continue };
+        if let Some((at, _)) = branch_tag.get(&order[*i]) {
+            let old: Vec<crate::model::EntityId> = sheet
+                .entities
+                .iter()
+                .filter(|(_, e)| matches!(e, Entity::NetLabel(l) if l.at.distance_to(at) < 1e-6 && l.name == label.name))
+                .map(|(id, _)| *id)
+                .collect();
+            for id in old {
+                sheet.entities.remove(&id);
+            }
+        }
+        sheet.entities.insert(label.id, Entity::NetLabel(label.clone()));
+    }
     let mut wired = Vec::new();
     let mut labelled = Vec::new();
     for (i, u) in units.iter().enumerate() {
@@ -3866,7 +3988,7 @@ fn route_wires(model: &DraftModel, layout: &DraftLayout, opts: &RouteOptions) ->
     add_junctions(&mut sheet);
     wired.sort_by(|a, b| natural_cmp(a, b));
     labelled.sort_by(|a, b| natural_cmp(a, b));
-    (sheet, wired, labelled)
+    (sheet, wired, labelled, retry)
 }
 
 #[cfg(test)]

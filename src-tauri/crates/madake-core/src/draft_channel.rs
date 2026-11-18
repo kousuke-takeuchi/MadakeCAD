@@ -6,6 +6,7 @@
 //! 部品の座標は自分で計算せず、配置の段 (`draft.rs`) が決めた端の位置を受け取る。
 use super::*;
 use crate::route::RouteGrid;
+use std::cell::RefCell;
 
 /// 通り道の外へ伸びる枝の、抽象的な座標の端 (どの実際の座標よりも遠い)。
 const FAR: f64 = 1.0e4;
@@ -18,6 +19,8 @@ pub(crate) const SPAN_MARGIN_MM: f64 = 5.0;
 /// 端の短い線に触れる区間を検査から外す長さ (mm): 枝は端から出るので、端で触れるのは当たり前。
 const TERMINAL_SKIP_MM: f64 = 1.25;
 const EPS: f64 = 1e-6;
+/// 札を幹の端につけるとき、幹を最も上(下)の端から伸ばす長さの上限 (mm)。5mm、だめなら10mm。
+pub(crate) const TAG_EXTENSION_MM: f64 = 10.0;
 
 /// 通り道で見た端1つ: 高さと、通り道の左側 (列kの右辺) にあるか。
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -32,6 +35,8 @@ pub(crate) struct ChanNet {
     pub key: usize,
     pub name: String,
     pub terms: Vec<ChanTerm>,
+    /// 札を幹の端につけるネット: 端が同じ高さの2つだけでも、札のために幹が要る (トラックを使う)。
+    pub tagged: bool,
 }
 
 /// 割り当てた結果1つ: `track` が `None` なら、トラックを使わない1本の横線。
@@ -104,8 +109,8 @@ fn span_of(terms: &[ChanTerm]) -> (f64, f64) {
 }
 
 /// ネットの線分 (抽象的な座標: 左の端は -FAR、右の端は +FAR から、トラック `x` まで)。
-fn abstract_segments(terms: &[ChanTerm], x: f64) -> Vec<(Point, Point)> {
-    if is_straight(terms) {
+fn abstract_segments(terms: &[ChanTerm], x: f64, straight: bool) -> Vec<(Point, Point)> {
+    if straight {
         let y = terms[0].y;
         return vec![(Point::new(-FAR, y), Point::new(FAR, y))];
     }
@@ -123,6 +128,12 @@ fn abstract_segments(terms: &[ChanTerm], x: f64) -> Vec<(Point, Point)> {
 /// 開く位置) のうち、すでに置いた線との交差がいちばん少ない位置へ置く。同数なら、新しいトラックを開かず相乗りする位置、それも同じなら左の位置。触れる・重なる位置 (短絡) は選べない。
 /// 相乗りできるのは、幹の範囲を両側に5mm広げたものが重ならないときだけ。どの位置も選べないネットは `unplaced`。
 pub(crate) fn assign_tracks(nets: &[ChanNet]) -> Assignment {
+    assign_tracks_with(nets, &[])
+}
+
+/// [`assign_tracks`] の、この通り道を横いっぱいに通り抜ける他の通り道のネットの枝 (高さ `fixed_h` の横線) も、動かない線として
+/// 数える版: 幹がその枝と交差する数に入り、枝の高さが幹の端や他の枝と同じになる位置 (触れる・重なる位置) は選べない。
+pub(crate) fn assign_tracks_with(nets: &[ChanNet], fixed_h: &[f64]) -> Assignment {
     struct Track {
         members: Vec<usize>,
     }
@@ -139,17 +150,20 @@ pub(crate) fn assign_tracks(nets: &[ChanNet]) -> Assignment {
     let mut done: Vec<Done> = Vec::new();
     let mut out = Assignment::default();
     for net in order {
-        let straight = is_straight(&net.terms);
+        let straight = !net.tagged && is_straight(&net.terms);
         let span = span_of(&net.terms);
+        // 札を幹の端につけるネットは、幹が上下へ最大 TAG_EXTENSION_MM 伸びるので、相乗りの判定にその分を足す
+        let span = if net.tagged { (span.0 - TAG_EXTENSION_MM, span.1 + TAG_EXTENSION_MM) } else { span };
         // 抽象的な位置は整数の並び: i番目のトラックは 2i+1、i番目のトラックの左に開く新しいトラックは 2i。
         // 新しいトラックを開くたびに付け直すので、何本開いても位置が近づきすぎない (半分ずつにすると丸めで重なる)
-        let segs_of_done: Vec<Vec<(Point, Point)>> = done
+        let mut segs_of_done: Vec<Vec<(Point, Point)>> = done
             .iter()
             .map(|d| {
                 let x = if d.straight { 0.0 } else { (2 * tracks.iter().position(|t| t.members.contains(&d.key)).expect("a placed net has a track") + 1) as f64 };
-                abstract_segments(d.terms, x)
+                abstract_segments(d.terms, x, d.straight)
             })
             .collect();
+        segs_of_done.extend(fixed_h.iter().map(|&y| vec![(Point::new(-FAR, y), Point::new(FAR, y))]));
         // 候補の位置 (左から右)。(抽象的な位置, 相乗りする既存のトラックの添字, 新しいトラックを差し込む添字)
         let mut candidates: Vec<(f64, Option<usize>, usize)> = Vec::new();
         for i in 0..=tracks.len() {
@@ -172,7 +186,7 @@ pub(crate) fn assign_tracks(nets: &[ChanNet]) -> Assignment {
                     continue;
                 }
             }
-            let mine = abstract_segments(&net.terms, x);
+            let mine = abstract_segments(&net.terms, x, straight);
             let (mut crossings, mut short) = (0usize, false);
             'pairs: for d in &segs_of_done {
                 for a in &mine {
@@ -230,6 +244,8 @@ pub(crate) struct ChanTermAt {
 pub(crate) struct ChanRoute {
     pub wires: Vec<Vec<Point>>,
     pub junctions: Vec<Point>,
+    /// 札を幹の端へ動かしたネットなら、その札 (基準点は幹の端) と旗の外形 (後から書かれる行き先の分まで)。
+    pub tag: Option<(NetLabel, Rect)>,
 }
 
 impl ChanRoute {
@@ -250,14 +266,25 @@ impl ChanRoute {
 /// 端と、トラックの位置 `x` (横線なら `None`) から、実際の座標の配線を作る。端から幹まで横に枝を出し、
 /// 幹は最も上の端から最も下の端まで。
 pub(crate) fn route_geometry(terms: &[ChanTermAt], x: Option<f64>) -> ChanRoute {
+    route_geometry_ext(terms, x, None)
+}
+
+/// [`route_geometry`] の、幹を札のために伸ばせる版: `ext` = (上へ伸ばすか, 伸ばす長さ mm)。伸ばした幹の端が札の位置で、
+/// 幹の端の高さ (最も上か最も下の端の高さ) では幹が通り抜けるので、枝が1本でもあれば3本が会って接点になる。
+pub(crate) fn route_geometry_ext(terms: &[ChanTermAt], x: Option<f64>, ext: Option<(bool, f64)>) -> ChanRoute {
     let Some(x) = x else {
         let mut ends: Vec<Point> = terms.iter().map(|t| t.at).collect();
         ends.sort_by(|a, b| a.x.total_cmp(&b.x));
-        return ChanRoute { wires: vec![ends], junctions: Vec::new() };
+        return ChanRoute { wires: vec![ends], junctions: Vec::new(), tag: None };
     };
     let lo = terms.iter().map(|t| t.at.y).fold(f64::MAX, f64::min);
     let hi = terms.iter().map(|t| t.at.y).fold(f64::MIN, f64::max);
-    let mut wires = vec![vec![Point::new(x, lo), Point::new(x, hi)]];
+    let (top, bottom) = match ext {
+        Some((true, e)) => (lo - e, hi),
+        Some((false, e)) => (lo, hi + e),
+        None => (lo, hi),
+    };
+    let mut wires = vec![vec![Point::new(x, top), Point::new(x, bottom)]];
     for t in terms {
         wires.push(vec![t.at, Point::new(x, t.at.y)]);
     }
@@ -267,12 +294,12 @@ pub(crate) fn route_geometry(terms: &[ChanTermAt], x: Option<f64>) -> ChanRoute 
     let mut junctions = Vec::new();
     for y in ys {
         let drops = terms.iter().filter(|t| (t.at.y - y).abs() < EPS).count();
-        let trunk = if (y - lo).abs() < EPS || (y - hi).abs() < EPS { 1 } else { 2 };
+        let trunk = if (y - top).abs() < EPS || (y - bottom).abs() < EPS { 1 } else { 2 };
         if drops + trunk >= 3 {
             junctions.push(Point::new(x, y));
         }
     }
-    ChanRoute { wires, junctions }
+    ChanRoute { wires, junctions, tag: None }
 }
 
 /// 配線が避けるもの。
@@ -344,6 +371,8 @@ pub(crate) struct ChannelLayout {
     pub right: f64,
     pub tracks: usize,
     pub placed: Vec<Placed>,
+    /// この通り道に選ばれたが、どの位置も他の線とぶつかり置けなかったネット。
+    pub unplaced: Vec<usize>,
 }
 
 impl ChannelLayout {
@@ -355,13 +384,17 @@ impl ChannelLayout {
     }
 }
 
-/// 通り道を通れるネット1本: どの通り道か、端 (位置と側)。
+/// 通り道を通れるネット1本ぶんの1つの通り道の候補: どの通り道か、端 (位置と、幹から見た側)。
 #[derive(Debug, Clone)]
 pub(crate) struct Candidate {
     pub channel: usize,
     pub net: usize,
     pub name: String,
     pub terms: Vec<ChanTermAt>,
+    /// 札を幹の端につけられるネットか (出ていくネットで組が2つ以上)。
+    pub tagged: bool,
+    /// 枝が横いっぱいに通り抜ける他の通り道: (通り道の添字, 枝の高さ)。
+    pub through: Vec<(usize, f64)>,
 }
 
 /// 列の番号 → 機器のある列の並びの中の位置。
@@ -372,8 +405,9 @@ pub(crate) fn column_positions(model: &DraftModel) -> BTreeMap<usize, usize> {
     c.into_iter().enumerate().map(|(k, c)| (c, k)).collect()
 }
 
-/// 通り道を通れるネット: 端が全て、ある列の右辺か、その右隣の列の左辺にある。端は2つ以上。札の枝を持つネット (札を下げた
-/// 組が配線もあるネット) は、枝と旗が枝の行にあり、枝が端から幹へ向かう向きと重なるので通れない。
+/// 通り道を通れるネットの候補 (ネット × 通り道)。端は2つ以上 (札の位置の端は数えない)。通り道cの候補になるのは、端が全て
+/// 列c以前の機器の右辺か、列c+1以降の機器の左辺にあるとき。枝は端の高さを横に通り、間の通り道を横切り、間の列の機器の
+/// すき間を通る (通れるかは配線の検査が決める)。札を下げた組の端は、札の枝を持たないものとして数える。
 pub(crate) fn candidates(model: &DraftModel, terminals: &[Terminal]) -> Vec<Candidate> {
     let pos = column_positions(model);
     let ncols = pos.len();
@@ -382,81 +416,241 @@ pub(crate) fn candidates(model: &DraftModel, terminals: &[Terminal]) -> Vec<Cand
         by_net.entry(t.net).or_default().push(t);
     }
     let mut out = Vec::new();
-    for (net, terms) in by_net {
-        if terms.len() < 2 || terms.iter().any(|t| t.tag_at.is_some() || t.is_tag) {
+    for (net, all) in by_net {
+        let tagged = all.iter().any(|t| t.is_tag);
+        let terms: Vec<&Terminal> = all.into_iter().filter(|t| !t.is_tag).collect();
+        if terms.len() < 2 || ncols < 2 {
             continue;
         }
-        let mut channel: Option<usize> = None;
-        let mut at = Vec::new();
+        // (列の位置, 右辺か)
+        let mut ends = Vec::new();
         let mut ok = true;
         for t in &terms {
             let k = pos[&model.units[t.u].column];
-            let (c, left) = match t.dir {
-                Dir::E if k + 1 < ncols => (k, true),
-                Dir::W if k >= 1 => (k - 1, false),
+            match t.dir {
+                Dir::E => ends.push((k, true, t.at)),
+                Dir::W => ends.push((k, false, t.at)),
                 _ => {
                     ok = false;
                     break;
                 }
-            };
-            if channel.is_some_and(|prev| prev != c) {
-                ok = false;
-                break;
             }
-            channel = Some(c);
-            at.push(ChanTermAt { at: t.at, left });
         }
-        if let (true, Some(channel)) = (ok, channel) {
-            out.push(Candidate { channel, net, name: model.nets[net].name.clone(), terms: at });
+        if !ok {
+            continue;
+        }
+        for c in 0..ncols - 1 {
+            // 右辺 (E) は列 <= c、左辺 (W) は列 >= c+1
+            if !ends.iter().all(|&(k, east, _)| if east { k <= c } else { k >= c + 1 }) {
+                continue;
+            }
+            let mut through = Vec::new();
+            for &(k, east, at) in &ends {
+                if east {
+                    through.extend((k..c).map(|j| (j, at.y)));
+                } else {
+                    through.extend((c + 1..k).map(|j| (j, at.y)));
+                }
+            }
+            out.push(Candidate {
+                channel: c,
+                net,
+                name: model.nets[net].name.clone(),
+                terms: ends.iter().map(|&(_, east, at)| ChanTermAt { at, left: east }).collect(),
+                tagged,
+                through,
+            });
         }
     }
     out
 }
 
-/// 候補を通り道ごとに割り当てる (通り道の数だけの割り当て)。
-pub(crate) fn assign_all(cands: &[Candidate], channels: usize) -> Vec<Assignment> {
+/// ネットごとに通り道を1つ選ぶ (`excluded` の (ネット, 通り道) は選ばない): 枝の長さの合計 (端から、通り道の中ほどの幹までの
+/// 横の距離の和。`trunk_x` が通り道の幹のxの見積り) が短い順、同じなら通り道の番号が小さい順で最初のもの。
+pub(crate) fn choose_channels(cands: &[Candidate], excluded: &BTreeSet<(usize, usize)>, trunk_x: &dyn Fn(usize) -> f64) -> BTreeMap<usize, usize> {
+    let mut best: BTreeMap<usize, (f64, usize)> = BTreeMap::new();
+    for c in cands.iter().filter(|c| !excluded.contains(&(c.net, c.channel))) {
+        let x = trunk_x(c.channel);
+        let len: f64 = c.terms.iter().map(|t| (t.at.x - x).abs()).sum();
+        let key = ((len * 1000.0).round(), c.channel);
+        let better = best.get(&c.net).map_or(true, |&(l, ch)| (key.0, key.1) < (l, ch));
+        if better {
+            best.insert(c.net, key);
+        }
+    }
+    best.into_iter().map(|(net, (_, ch))| (net, ch)).collect()
+}
+
+/// 選んだ通り道ごとに割り当てる (通り道の数だけの割り当て)。他の通り道を選んだネットの、この通り道を通り抜ける枝は動かない線として数える。
+pub(crate) fn assign_all(cands: &[Candidate], chosen: &BTreeMap<usize, usize>, channels: usize) -> Vec<Assignment> {
     (0..channels)
         .map(|k| {
-            let nets: Vec<ChanNet> = cands
+            let mine: Vec<&Candidate> = cands.iter().filter(|c| chosen.get(&c.net) == Some(&c.channel) && c.channel == k).collect();
+            let nets: Vec<ChanNet> = mine
                 .iter()
-                .filter(|c| c.channel == k)
                 .map(|c| ChanNet {
                     key: c.net,
                     name: c.name.clone(),
                     terms: c.terms.iter().map(|t| ChanTerm { y: t.at.y, left: t.left }).collect(),
+                    tagged: c.tagged,
                 })
                 .collect();
-            assign_tracks(&nets)
+            let mut fixed: Vec<f64> = cands
+                .iter()
+                .filter(|c| chosen.get(&c.net) == Some(&c.channel) && c.channel != k)
+                .flat_map(|c| c.through.iter().filter(|(j, _)| *j == k).map(|(_, y)| *y))
+                .collect();
+            fixed.sort_by(|a, b| a.total_cmp(b));
+            fixed.dedup_by(|a, b| (*a - *b).abs() < EPS);
+            assign_tracks_with(&nets, &fixed)
         })
         .collect()
 }
 
+/// 旗 (の外形) が使えるか: 通れない場所 (箱・文字・図枠・表題欄・立入禁止) と、動かない線・接点・札の枝・すでに使うと決めた
+/// 配線・動かした他の札に、すき間 `gap` 以内で近づかず、自分の枝にも触れず、通り道の中 (`lane`) に収まる。
+struct FlagCheck<'a> {
+    grid: &'a RouteGrid,
+    gap: f64,
+    lane: (f64, f64),
+    others: &'a RefCell<Vec<Rect>>,
+}
+
+fn near_rect(r: &Rect, a: Point, b: Point, gap: f64) -> bool {
+    a.x.max(b.x) > r.min.x - gap && a.x.min(b.x) < r.max.x + gap && a.y.max(b.y) > r.min.y - gap && a.y.min(b.y) < r.max.y + gap
+}
+
+fn flag_is_valid(flag: &Rect, route: &ChanRoute, obs: &Obstacles, accepted: &[&ChanRoute], check: &FlagCheck) -> bool {
+    if flag.min.x < check.lane.0 - EPS || flag.max.x > check.lane.1 + EPS || !check.grid.rect_free(flag) {
+        return false;
+    }
+    let g = check.gap - EPS;
+    let touches = |a: Point, b: Point| near_rect(flag, a, b, g);
+    if obs.fixed_lines.iter().any(|l| l.windows(2).any(|s| touches(s[0], s[1]))) {
+        return false;
+    }
+    if obs.fixed_spots.iter().any(|&p| touches(p, p)) || obs.branches.iter().any(|b| touches(b.0, b.1)) {
+        return false;
+    }
+    if accepted.iter().any(|r| r.segments().iter().any(|s| touches(s.0, s.1))) {
+        return false;
+    }
+    // 自分の枝には触れない (幹は、旗の平らな辺で基準点につながるので除く)
+    if route.wires.iter().skip(1).any(|w| w.windows(2).any(|s| touches(s[0], s[1]))) {
+        return false;
+    }
+    !check.others.borrow().iter().any(|o| {
+        o.min.x < flag.max.x + g && flag.min.x < o.max.x + g && o.min.y < flag.max.y + g && flag.min.y < o.max.y + g
+    })
+}
+
+/// 札のネットラベル: 旗は幹の端から右 (`right`) か左へ伸び、先端は幹から遠い側を向く (`tag_flow` = `out`)。
+pub(crate) fn trunk_tag(name: &str, at: Point, right: bool, dest: Option<&String>) -> NetLabel {
+    let mut attrs = BTreeMap::new();
+    attrs.insert(crate::net_tag::TAG_ATTR.to_string(), if right { "left" } else { "right" }.to_string());
+    attrs.insert(crate::net_tag::FLOW_ATTR.to_string(), "out".to_string());
+    if let Some(dest) = dest {
+        attrs.insert(crate::net_tag::DEST_ATTR.to_string(), dest.clone());
+    }
+    NetLabel { id: uuid::Uuid::new_v4(), at, name: name.to_string(), rotation: 0, attrs }
+}
+
 /// 割り当てに従って全ての通り道のネットを引き、使える配線だけを返す (ネットの添字 → 配線)。
-/// 使えないネット (避けるものに触れる・短絡する) は含めない。それは格子の経路探索が引く。
+/// 避けるものに触れる・短絡するネット、札の置き場所が無いネットは含めない。返り値の2番目にその (ネット, 通り道) を入れる
+/// (次の配置では別の通り道を選ぶ。他に通り道が無ければ、そのネットは通り道に置かず、格子の経路探索が引く)。
+/// 通り道をまたぐ枝があるので、受け入れた配線は全ての通り道で共有して短絡を調べる。
 pub(crate) fn route_channels(
     model: &DraftModel,
     layout: &DraftLayout,
     grid: &RouteGrid,
     fixed_lines: &[Vec<Point>],
     fixed_spots: &[Point],
-) -> BTreeMap<usize, ChanRoute> {
+) -> (BTreeMap<usize, ChanRoute>, Vec<(usize, usize)>) {
     let cands = candidates(model, &layout.terminals);
-    let branches: Vec<(Point, Point)> = layout.terminals.iter().filter_map(|t| t.tag_at.map(|tag| (t.at, tag))).collect();
-    let free = |a: Point, b: Point| grid.segment_free(a, b);
-    let obstacles = Obstacles { fixed_lines, fixed_spots, branches: &branches, free: &free };
+    let branches: Vec<(usize, Point, Point)> = layout.terminals.iter().filter_map(|t| t.tag_at.map(|tag| (t.net, t.at, tag))).collect();
+    let moved: RefCell<Vec<Rect>> = RefCell::new(Vec::new());
+    let gap = grid.opts.clearance_mm;
+    let free = |a: Point, b: Point| {
+        grid.segment_free(a, b) && !moved.borrow().iter().any(|f| near_rect(f, a, b, gap - EPS))
+    };
     let mut out: BTreeMap<usize, ChanRoute> = BTreeMap::new();
+    let mut retry: Vec<(usize, usize)> = Vec::new();
+    // 受け入れた配線 (ネットの添字, 配線)。通り道をまたぐ枝があるので、全ての通り道で共有して短絡を調べる
+    let mut accepted: Vec<(usize, ChanRoute)> = Vec::new();
+    // 札を幹の端へ動かすネット: (通り道, 候補)。他の全てのネットの配線を受け入れたあとで、札の位置を決める
+    let mut pending: Vec<(usize, &Candidate)> = Vec::new();
+    let others_of = |net: usize| -> Vec<(Point, Point)> { branches.iter().filter(|b| b.0 != net).map(|b| (b.1, b.2)).collect() };
     for (k, ch) in layout.channels.iter().enumerate() {
-        let mut accepted: Vec<ChanRoute> = Vec::new();
-        for placed in &ch.placed {
-            let Some(c) = cands.iter().find(|c| c.channel == k && c.net == placed.key) else { continue };
-            let route = route_geometry(&c.terms, placed.track.map(|i| ch.track_x(i)));
-            let refs: Vec<&ChanRoute> = accepted.iter().collect();
-            let why = invalid_reason(&route, &c.terms, &obstacles, &refs);
-            if why.is_none() {
-                accepted.push(route.clone());
-                out.insert(c.net, route);
+        // 置けなかったネットは、他の通り道の候補があるときだけ、その通り道を外す (他の線が外れれば、次の配置で置けるかもしれない)
+        for &net in &ch.unplaced {
+            if cands.iter().any(|c| c.net == net && c.channel != k && !layout.excluded.contains(&(net, c.channel))) {
+                retry.push((net, k));
             }
         }
+        for placed in &ch.placed {
+            let Some(c) = cands.iter().find(|c| c.channel == k && c.net == placed.key) else { continue };
+            let x = placed.track.map(|i| ch.track_x(i));
+            let refs: Vec<&ChanRoute> = accepted.iter().map(|(_, r)| r).collect();
+            // 札の枝は、そのネット自身のものを除く (札を幹へ動かすなら枝は無くなる。動かせなければ格子の経路探索が引く)
+            let others = others_of(c.net);
+            let obstacles = Obstacles { fixed_lines, fixed_spots, branches: &others, free: &free };
+            let route = route_geometry(&c.terms, x);
+            if invalid_reason(&route, &c.terms, &obstacles, &refs).is_some() {
+                retry.push((c.net, k));
+                continue;
+            }
+            if c.tagged {
+                pending.push((k, c));
+            }
+            accepted.push((c.net, route));
+        }
     }
-    out
+    // 札を幹の端へ: 上に5mm 右・左、下に5mm 右・左、次に10mm で同じ順。最初に全てが通る位置。他のネットの配線は先に決めてあるので、
+    // 札は他のネットの配線を押しのけない。置き場所が無ければ、そのネットは通り道に置かない (札はピンの枝のまま、格子の経路探索が引く)
+    for (k, c) in pending {
+        let ch = &layout.channels[k];
+        let Some(x) = ch.placed.iter().find(|p| p.key == c.net).and_then(|p| p.track).map(|i| ch.track_x(i)) else {
+            accepted.retain(|(n, _)| *n != c.net);
+            retry.push((c.net, k));
+            continue;
+        };
+        let refs: Vec<&ChanRoute> = accepted.iter().filter(|(n, _)| *n != c.net).map(|(_, r)| r).collect();
+        let others = others_of(c.net);
+        let obstacles = Obstacles { fixed_lines, fixed_spots, branches: &others, free: &free };
+        let check = FlagCheck { grid, gap, lane: (ch.left, ch.right), others: &moved };
+        let dest = model.nets[c.net].dest.as_ref();
+        let mut found: Option<ChanRoute> = None;
+        'positions: for ext in [5.0, TAG_EXTENSION_MM] {
+            for top in [true, false] {
+                for right in [true, false] {
+                    let mut route = route_geometry_ext(&c.terms, Some(x), Some((top, ext)));
+                    if invalid_reason(&route, &c.terms, &obstacles, &refs).is_some() {
+                        continue;
+                    }
+                    let at = if top { route.wires[0][0] } else { route.wires[0][1] };
+                    let label = trunk_tag(&c.name, at, right, dest);
+                    let Some(flag) = flag_rect(&label, layout.label_font, layout.sheet.xref_style, layout.reserve.text(&label.name)) else { continue };
+                    if flag_is_valid(&flag, &route, &obstacles, &refs, &check) {
+                        route.tag = Some((label, flag));
+                        found = Some(route);
+                        break 'positions;
+                    }
+                }
+            }
+        }
+        accepted.retain(|(n, _)| *n != c.net);
+        match found {
+            Some(route) => {
+                if let Some((_, flag)) = &route.tag {
+                    moved.borrow_mut().push(*flag);
+                }
+                accepted.push((c.net, route));
+            }
+            None => retry.push((c.net, k)),
+        }
+    }
+    for (net, route) in accepted {
+        out.insert(net, route);
+    }
+    (out, retry)
 }

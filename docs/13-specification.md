@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**4003 specification clauses** across 6 areas.
+**4017 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -560,8 +560,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A net of five pins on five units in two adjacent columns is drawn as one trunk with five drops and a junction at each drop where three ends meet; nothing else is drawn in the channel. <sub>`a_net_over_five_units_in_two_columns_is_one_trunk_with_five_drops`</sub>
 - Five pins of one net on three units (two units with two pins each, which form bars) are drawn with one trunk and three drops. <sub>`bars_count_as_one_terminal_each`</sub>
 - Two terminals at the same height on the two sides are one straight horizontal wire from stub end to stub end, with no trunk and no junction. <sub>`terminals_at_one_height_are_one_straight_wire`</sub>
-- A net with a terminal outside the channel (it reaches two columns over) is not channel-routable: the grid router draws it and the connections stay right. <sub>`a_net_reaching_two_columns_over_goes_to_the_grid_router`</sub>
-- A leaving net with two groups hangs its tag on a branch, so it is not channel-routable and the grid router draws it; a leaving net with only one group on the sheet has no wire at all. <sub>`a_net_with_a_tag_branch_goes_to_the_grid_router`</sub>
+- A net that reaches two columns over, whose row is taken by another net's drop in the channel, finds no free position there: the grid router draws it and the connections stay right. <sub>`a_net_reaching_two_columns_over_whose_row_is_taken_goes_to_the_grid_router`</sub>
+- A leaving net with two groups whose tag flag (with the room kept for other sheets' names) does not fit the channel keeps its tag on the branch at the pin and the grid router draws it; a leaving net with only one group on the sheet has no wire at all. <sub>`a_tag_that_does_not_fit_the_channel_stays_on_its_branch`</sub>
 - The channel is 10 mm plus 2.5 mm per track and at least 20 mm wide, so the tracks always fit. <sub>`the_channel_width_follows_the_track_count`</sub>
 - Planning the same request twice gives the same wires once the random ids are left out. <sub>`planning_twice_gives_the_same_channel_wires`</sub>
 - A net whose channel wire is blocked (here by a keep-out area over its trunk) is handed to the grid router, which still joins it, and the connections stay the same. <sub>`a_blocked_channel_net_is_taken_by_the_grid_router`</sub>
@@ -634,6 +634,23 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Writes the bars fixture as a drafted sheet to the path in MADAKE_DRAFT_SVG (run with --ignored). <sub>`write_the_bars_sheet_as_svg`</sub>
 - Writes the stacked fixture drafted twice (the stack before SY, and the stack in the last column) as SVG files into the directory in MADAKE_DRAFT_SVG_DIR (run with --ignored). <sub>`write_the_stacked_sheets_as_svg`</sub>
 - Drafts the requests of a JSON file one after another and writes the sheets as SVG for a look (run with --ignored; set MADAKE_DRAFT_REQUESTS and MADAKE_DRAFT_OUT). <sub>`draft_requests_from_a_file_for_looking`</sub>
+
+### draft_span_tests
+
+- Writes every picture of the span work as SVG into the directory in MADAKE_DRAFT_SVG_DIR (run with --ignored). <sub>`write_the_span_sheets_as_svg`</sub>
+- A bus with terminals in three columns is drawn as one trunk in the channel between columns 1 and 2, with one straight horizontal drop per terminal, and no wire runs over a box. <sub>`a_bus_over_three_columns_is_one_trunk_with_straight_drops`</sub>
+- When a box of column 2 stands in the row of a drop, the bus is not drawn on a trunk: the grid router takes it, nothing runs over a box, and the connections stay the same. <sub>`a_box_in_the_row_of_a_drop_sends_the_bus_to_the_grid_router`</sub>
+- A net is a candidate for a channel when every terminal is on the right side of a unit in that column or before, or on the left side of a unit after it; its drops run through the channels in between. <sub>`a_net_is_a_candidate_for_every_channel_that_all_its_terminals_face`</sub>
+- Of several candidate channels the one with the shortest drops is taken, not the lowest: two stacked units in the last column use the channel next to them; in the first column, the channel next to that. <sub>`the_channel_with_the_shortest_drops_wins`</sub>
+- With equal drop lengths the lower channel wins, and a channel that was ruled out is skipped for the next one. <sub>`equal_lengths_take_the_lower_channel_and_an_excluded_channel_is_skipped`</sub>
+- A drop that crosses another channel crosses that channel's trunk at a right angle, in the middle of it, and never ends on a trunk position; the width of that channel still follows its own tracks. <sub>`a_drop_through_another_channel_crosses_its_trunk_at_a_right_angle`</sub>
+- In the track assignment of a channel, a drop that passes through it is a fixed line: it counts as a crossing, and a trunk may not end at its height. <sub>`a_through_drop_is_a_fixed_line_in_the_track_assignment`</sub>
+- The same request planned twice gives the same wires, and so does the settled layout. <sub>`the_bus_sheet_is_the_same_every_time`</sub>
+- A leaving net that joins two units in adjacent columns is drawn on a trunk with its tag at the trunk's end: no tag branch at the pin, the flag clear of everything, and the sheet's netlist joins both pins and the tag name. <sub>`a_tagged_net_between_two_units_has_its_tag_at_the_end_of_the_trunk`</sub>
+- The tag positions are tried in a fixed order (top 5 mm right, top left, bottom right, bottom left, then the same four at 10 mm); a position where another net's wire is in the way is skipped. For a net at the top the free ones are the top positions; blocking each in turn moves the tag to the next, and with all blocked it stays on its branch at the pin. <sub>`the_tag_positions_of_a_top_net_are_tried_in_order_and_the_branch_is_the_last_resort`</sub>
+- For the lowest net the bottom positions are the free ones: right then left at 5 mm, then at 10 mm; with all blocked the tag stays on its branch. <sub>`the_tag_positions_of_a_bottom_net_are_tried_in_order`</sub>
+- Later nets keep clear of a tag that was moved to a trunk: with three tagged nets and two plain ones between the same two units, no wire of another net comes within 0.5 mm of any flag, and the connections stay the same. <sub>`later_nets_avoid_a_flag_that_moved_to_a_trunk`</sub>
+- With complete planned_sheets on a three-sheet plan drafted in every order, every flag of the open project is inside the frame, and the check lists no tag outside and finds the same connections as the source. <sub>`three_planned_sheets_drafted_in_every_order_keep_every_flag_inside`</sub>
 
 ### DXF interop (AutoCAD Electrical / EPLAN)
 
