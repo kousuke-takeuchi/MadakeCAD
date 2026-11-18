@@ -1533,7 +1533,7 @@ A mark needs no reference designator: the checks for missing and repeated design
 
 **What closed it.** A person or an AI chooses the units and their columns; the application draws the sheet: boxes with only the pins in use, pin sides and order by the position of their peers, wires, tags that name the other sheets, power and ground marks, all on the grid. One unit may be shown on several sheets (blocks with `block_view`). A second command checks that all sheets together carry the same connections as the source and reports missing pins, extra pins, split nets and merged nets. A draft is one edit and the source file is only read.
 
-**Remaining difference.** The choice of which units go on a sheet and the splitting of a sheet that is too full stay with the caller; layout of board schematics made of library symbols is placed, wired and checked but does not read like a hand-drawn schematic; cables and port contacts in the source are refused; a drafted sheet is not updated when the source changes (draft again after deleting the sheet).
+**Remaining difference.** The choice of which units go on a sheet and the splitting of a sheet that is too full stay with the caller; layout of board schematics made of library symbols is placed, wired and checked but does not read like a hand-drawn schematic; cables and port contacts in the source are refused; a drafted sheet is not updated when the source changes (draft again after deleting the sheet). A pin whose peers on the sheet are on both sides of its box is put on one side only (the side with more peers), so its wire to the other side runs round the box (a known limit accepted for this version).
 
 ## Summary by impact
 

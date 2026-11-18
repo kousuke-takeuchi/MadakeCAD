@@ -86,7 +86,7 @@ For each source net that touches a carried pin:
 
 1. **Power or ground** (name in `power_nets` or `ground_nets`): no wire. Each carried pin gets its own mark on a 5 mm stub: `power_rail` with the net name as value for power; for ground, the net mark symbol that the source uses on that net, or the library ground mark when the source has none.
 2. **Internal**: every pin of the net is carried on this sheet. The pins are joined by wires.
-3. **Leaving**: some pins are not on this sheet. The carried pins are joined by wires when there are two or more, and one tag (a net label with `tag`) is placed at the pin that comes first in column order, on a 5 mm stub.
+3. **Leaving**: some pins are not on this sheet. The carried pins are joined by wires when there are two or more, and one tag (a net label with `tag`) is placed at the pin that comes first in column order. With one carried pin the tag sits at the end of a 5 mm stub. With two or more, the tag hangs on its own branch: the pin's 5 mm stub, then 5 mm more on the same row to the tag, with the flag pointing away from the box; the wire to the other pins leaves the branch before the flag, so the tag is a free end and no wire runs through or along a flag. The pin, the tag and the other pins are one net.
 
 The tag name is the source net's label name. A source net without a label gets the name `<reference>.<pin>` of the pin that comes first when all pins of the net are sorted by reference and pin key in natural order. The rule uses the whole source net, so every sheet that shows the net computes the same name.
 
@@ -104,13 +104,14 @@ The new sheet has `xref_style` = `sheet_name`, so a tag shows the names of the o
 - The drawing area is the frame's inner area minus the title block.
 - Columns are spread evenly over the width. Units in a column are stacked top to bottom in the given order, with a gap of at least four pitches.
 - Box width holds the longest pin name on both sides plus the reference; `block_pin_text` is chosen so that names are at least 2.2 mm high.
-- Tag text size is chosen so that tags on adjacent pins do not touch (flag height at most pitch minus 1 mm).
-- Everything is on the 2.5 mm grid.
+- Tag text size is chosen so that tags on adjacent pins do not touch (flag height at most pitch minus 1 mm; at a pitch of 2.5 mm the text cannot be smaller than the smallest annotation size, so the flag is taller and adjacent flags are only 0.25 mm apart).
+- A tag's width reserves room for the names of other sheets that appear inside it later: the wider of its `tag_dest`, the longest sheet name of the open project and 10 characters.
+- Symbols, pins, the ends of stubs, tags and marks are on the 2.5 mm grid. The bends of routed wires may lie on the router's 1.25 mm grid.
 - A column that is taller than the drawing area, or columns that do not fit the width with a routing channel of at least 15 mm between them, refuse the draft. The message names the column and the excess in mm, so that the caller can move units to another sheet. Nothing is created.
 
 ### Wires
 
-Internal wires are planned with the existing router (`route.rs`) on the new sheet's geometry: orthogonal, off symbols and text, right-angle crossings only, junctions where three or more ends meet. A net the router cannot place is joined by a pair of net labels with the net name instead and listed in the result (`labelled`).
+Internal wires are planned with the existing router (`route.rs`) on the new sheet's geometry: orthogonal, off symbols and text, right-angle crossings only, junctions where three or more ends meet. Every tag flag (with the reserved destination width) and every mark with its text is an obstacle kept at the router's clearance, and wires stay inside the frame's inner area and out of the title block with its revision rows, as `arrange::frame_areas` reports them for the open project's frame template. A net the router cannot place is joined by a pair of net labels with the net name instead and listed in the result (`labelled`).
 
 ### Result
 
@@ -174,6 +175,7 @@ Each refusal changes nothing and states the cause: source file missing or unread
 - An overview sheet with a sheet index.
 - Updating a function sheet after the source changed (draft again after deleting the sheet).
 - Per-sheet frame templates and fonts; a terminal-block common bar; one tag for several wires.
+- A pin whose peers on the sheet are on both sides of its box goes on one side only (the side with more peers), so its wire to the other side runs round the box.
 
 ## Testing
 
