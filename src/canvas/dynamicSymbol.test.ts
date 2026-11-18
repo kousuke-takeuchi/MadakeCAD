@@ -15,6 +15,7 @@ import {
   pinGroupPaperBoxes,
   resolveSymbolDef,
   symbolBounds,
+  throughPinKey,
   transformLocal,
 } from "./dynamicSymbol";
 import { symbolTopY } from "./renderer";
@@ -165,6 +166,29 @@ describe("dynamicSymbol", () => {
     expect(def).not.toBeNull();
     expect(def!.pins.every((p) => /^[0-9]+$/.test(p.number))).toBe(true);
     expect(new Set(def!.pins.map((p) => p.number)).size).toBe(8);
+  });
+});
+
+describe("throughPinKey", () => {
+  const contact = { id: "connector_contact", through: true, pins: [{ number: "1" }, { number: "1" }] } as unknown as SymbolDef;
+  const plain = { id: "resistor", pins: [{ number: "1" }, { number: "2" }] } as unknown as SymbolDef;
+  const inst = (value: string) => ({ symbol_id: "x", value }) as unknown as SymbolInstance;
+
+  // ja: コネクタ接点のピンの鍵は、値 (極の番号) の前後の空白を除いたもの
+  it("uses the trimmed value as the pin key of a through symbol", () => {
+    expect(throughPinKey(inst("5"), contact, "1")).toBe("5");
+    expect(throughPinKey(inst(" 5 "), contact, "1")).toBe("5");
+  });
+
+  // ja: 値が空 (空白だけ) の接点は、これまでどおり定義のピン番号 1 のまま
+  it("keeps the definition's pin number when the contact has no pole", () => {
+    expect(throughPinKey(inst(""), contact, "1")).toBe("1");
+    expect(throughPinKey(inst("   "), contact, "1")).toBe("1");
+  });
+
+  // ja: 貫通でないシンボルは、値があってもピン番号そのまま
+  it("leaves every other symbol's pin number alone", () => {
+    expect(throughPinKey(inst("10k"), plain, "2")).toBe("2");
   });
 });
 

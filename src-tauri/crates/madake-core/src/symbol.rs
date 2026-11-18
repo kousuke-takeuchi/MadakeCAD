@@ -1753,7 +1753,33 @@ pub fn instance_symbol_def<'a>(
     }
     defs.iter()
         .find(|d| d.id == inst.symbol_id)
-        .map(std::borrow::Cow::Borrowed)
+        .map(|d| keyed_def(inst, d))
+}
+
+/// ピンの鍵 (ネットリスト・`get_pins`・`connect_pins`・電線リストが使う番号) を決める。
+/// 貫通のシンボル (コネクタの接点) は、インスタンスの値 (極の番号) の前後の空白を除いたものが鍵で、
+/// 値が空なら定義のピン番号 (今までの 1) のまま。ほかのシンボルは定義のピン番号そのもの。
+/// 参照記号 (コネクタ名) が同じ接点どうしを、極の番号で区別するための唯一の決め方で、全ての呼び出し側がこれを通る。
+pub fn through_pin_key(inst: &crate::model::SymbolInstance, def: &SymbolDef, pin_no: &str) -> String {
+    if def.through {
+        let pole = inst.value.trim();
+        if !pole.is_empty() {
+            return pole.to_string();
+        }
+    }
+    pin_no.to_string()
+}
+
+/// インスタンスに合わせてピン番号を [`through_pin_key`] にした定義。貫通でない定義や極の無い接点は借りたまま返す。
+fn keyed_def<'a>(inst: &crate::model::SymbolInstance, def: &'a SymbolDef) -> std::borrow::Cow<'a, SymbolDef> {
+    if !def.through || inst.value.trim().is_empty() {
+        return std::borrow::Cow::Borrowed(def);
+    }
+    let mut own = def.clone();
+    for pin in &mut own.pins {
+        pin.number = through_pin_key(inst, def, &pin.number);
+    }
+    std::borrow::Cow::Owned(own)
 }
 
 /// シンボル定義の索引。`symbol_id`引きを速くしつつ、ブロックだけはインスタンスの
@@ -1769,7 +1795,16 @@ impl<'a> DefIndex<'a> {
         }
     }
 
-    /// 配置済みシンボルの定義。
+    /// 登録された定義そのもの (ピン番号を極の番号にしていない)。ブロックは対象外で`None`。
+    /// KiCad・DXFへの書き出しが、1つのライブラリ記号を全インスタンスで共有するために使う。
+    pub fn library_def(&self, inst: &crate::model::SymbolInstance) -> Option<&'a SymbolDef> {
+        if inst.symbol_id == crate::block::BLOCK_SYMBOL_ID {
+            return None;
+        }
+        self.by_id.get(inst.symbol_id.as_str()).copied()
+    }
+
+    /// 配置済みシンボルの定義。貫通のシンボルは、ピン番号を極の番号にした写し。
     pub fn get(
         &self,
         inst: &crate::model::SymbolInstance,
@@ -1786,7 +1821,7 @@ impl<'a> DefIndex<'a> {
             own.net = Some(inst.value.trim().to_string());
             return Some(std::borrow::Cow::Owned(own));
         }
-        Some(std::borrow::Cow::Borrowed(def))
+        Some(keyed_def(inst, def))
     }
 
     /// `symbol_id`だけで引く(ブロックは見本の定義になる)。

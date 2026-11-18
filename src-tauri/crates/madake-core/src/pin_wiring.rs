@@ -530,6 +530,26 @@ mod tests {
         assert_eq!(both.pins[0].dir, PinDir::Down);
     }
 
+    /// A connector contact is reached by its pole: "J7.5#1" is the contact whose value is 5, and get_pins lists that contact's pins under the key 5.
+    /// コネクタの接点は極の番号で指せる。「J7.5#1」は値が5の接点を指し、get_pins もその接点のピンを鍵 5 で並べる。
+    #[test]
+    fn connect_pins_reaches_a_contact_by_its_pole() {
+        let mut first = inst("connector_contact", 50.0, 40.0, 0, false, "J7");
+        first.value = "2".into();
+        let mut second = inst("connector_contact", 50.0, 80.0, 0, false, "J7");
+        second.value = "5".into();
+        let second_id = second.id;
+        let sheet = sheet_with(vec![first, second]);
+        let defs = sheet_symbol_defs(&sheet);
+        let hit = resolve_pin(&sheet, &defs, "J7.5#1").expect("pole 5 resolves");
+        assert_eq!((hit.entity_id, hit.pin.number.as_str()), (second_id, "5"));
+        assert_eq!((hit.pin.x, hit.pin.y), (47.5, 80.0));
+        let parts = find_parts(&sheet, &defs, &second_id.to_string());
+        let keys: Vec<&str> = parts[0].pins.iter().map(|p| p.number.as_str()).collect();
+        assert_eq!(keys, ["5", "5"]);
+        assert!(resolve_pin(&sheet, &defs, "J7.1#1").is_err(), "no contact has the pole 1");
+    }
+
     /// A block's named pins are reported with their numbers, names, outside positions and the rounded outline.
     /// ブロックの名前付きピンは番号・名前・外側の位置で返り、外形は丸めた後の大きさで返る。
     #[test]

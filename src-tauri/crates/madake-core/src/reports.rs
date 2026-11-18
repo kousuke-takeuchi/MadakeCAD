@@ -1243,6 +1243,26 @@ mod tests {
         assert!(csv.contains("\"RLY-24V, 24VDC\""), "カンマ入りはクォート: {csv}");
     }
 
+    /// A wire end that lands on a connector contact is written with the connector and the pole (for example J7:5), not always J7:1.
+    /// コネクタの接点に届いているワイヤの端は、いつも J7:1 ではなく、コネクタと極の番号 (例 J7:5) で書かれる。
+    #[test]
+    fn the_wire_list_names_a_contact_by_its_pole() {
+        let mut project = Project::new("t");
+        let sid = project.sheets[0].id;
+        let sheet = project.sheet_mut(sid).unwrap();
+        let mut contact = sym("J7", "5");
+        if let Entity::Symbol(s) = &mut contact {
+            s.symbol_id = "connector_contact".into();
+            s.at = Point::new(120.0, 50.0);
+        }
+        // R1のピン2 (107.5) から接点の左のピン (117.5) まで
+        for e in [resistor("R1", 100.0, 50.0), contact, wire_between((107.5, 50.0), (117.5, 50.0))] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let row = data_rows(&wire_list_csv(&project))[0].clone();
+        assert_eq!(&row[1..3], ["J7:5", "R1:2"]);
+    }
+
     /// The wire list is a From-To list: every row starts with the sheet name and the two ends of the wire, followed by the mate and remark columns (G14/G18), and the older column order (sheet, wire number, harness, ...) is no longer produced.
     /// 電線リストはFrom-To形式で、各行はシート名とワイヤ両端の接続先、続いて嵌合相手・備考列 (G14/G18) が並ぶ。旧来の列順 (シート・線番・ハーネス…) はもう出力されない。
     #[test]

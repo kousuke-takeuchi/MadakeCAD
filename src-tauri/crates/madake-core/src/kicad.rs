@@ -1233,8 +1233,8 @@ mod tests {
         assert_eq!(text.matches("(label ").count(), 2, "{text}");
     }
 
-    /// A connector contact is written with both of its same-numbered pins and imports back as the same symbol with its designator and pole.
-    /// コネクタ接点は、同じ番号の左右2ピンつきで書き出され、読み戻すと参照記号と極の番号を持つ同じシンボルになる。
+    /// A connector contact is written with both of its same-numbered pins and imports back as the same symbol with its designator and pole, and the pole is still its pin key afterwards.
+    /// コネクタ接点は、同じ番号の左右2ピンつきで書き出され、読み戻すと参照記号と極の番号を持つ同じシンボルになり、極の番号はその後もピンの鍵のままである。
     #[test]
     fn a_connector_contact_round_trips_through_kicad() {
         let mut sheet = Sheet::new("Sheet1", PaperSize::A4, Orientation::Landscape);
@@ -1254,6 +1254,10 @@ mod tests {
             })
             .expect("the contact comes back");
         assert_eq!((back.symbol_id.as_str(), back.reference.as_str(), back.value.as_str()), ("connector_contact", "J7", "3"));
+        // 読み戻した接点のピンの鍵も、書き出す前と同じ極の番号になる
+        let def = crate::symbol::resolve_symbol("connector_contact").unwrap();
+        let keys: Vec<String> = crate::netlist::pin_positions(back, &def).into_iter().map(|(n, _)| n).collect();
+        assert_eq!(keys, ["3", "3"]);
     }
 
     /// The KiCad export report counts the electrical kinds it wrote and names the kinds it does not write at all (shapes, the wire part legend and the panel layout entities), so nothing is dropped without a word.

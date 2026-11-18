@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3734 specification clauses** across 6 areas.
+**3748 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -584,7 +584,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Unbalanced parentheses and unterminated strings are reported as syntax errors with a position. <sub>`syntax_errors_are_reported`</sub>
 - The KiCad export writes a label with the symbol's net name at the pin of every ground mark, so the marks stay connected in KiCad. <sub>`the_kicad_export_writes_a_label_at_each_ground_mark_pin`</sub>
 - The KiCad export writes a label named after the value at the pin of every power rail, so rails with the same value stay connected in KiCad and a blank value writes no label. <sub>`power_rails_are_written_as_labels_named_by_their_values`</sub>
-- A connector contact is written with both of its same-numbered pins and imports back as the same symbol with its designator and pole. <sub>`a_connector_contact_round_trips_through_kicad`</sub>
+- A connector contact is written with both of its same-numbered pins and imports back as the same symbol with its designator and pole, and the pole is still its pin key afterwards. <sub>`a_connector_contact_round_trips_through_kicad`</sub>
 - The KiCad export report counts the electrical kinds it wrote and names the kinds it does not write at all (shapes, the wire part legend and the panel layout entities), so nothing is dropped without a word. <sub>`the_kicad_export_report_names_the_kinds_it_cannot_write`</sub>
 - Exporting a sheet to .kicad_sch and importing it back keeps paper, title block, symbols (id, reference, value, rotation, mirror), wires, junctions, labels and text. <sub>`export_then_import_round_trips_the_sheet`</sub>
 - A wire drawn as a polyline is exported as one two-point KiCad wire per segment. <sub>`polyline_wires_are_split_into_segments`</sub>
@@ -745,6 +745,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A power rail with a blank value has no net name: it joins nothing, and a value of only spaces counts as blank. <sub>`a_power_rail_with_a_blank_value_joins_nothing`</sub>
 - A power rail joins a net label of the same name and a fixed-net mark of the same name into one net. <sub>`a_power_rail_joins_a_label_and_a_fixed_net_mark_of_the_same_name`</sub>
 - A connector contact on a wire is a pass-through: the wires on its left and right are one net, and the net lists the contact once under its designator and pole. <sub>`a_connector_contact_passes_the_wire_through_and_is_listed_once`</sub>
+- Two contacts of one connector on different nets are listed by their poles, so the netlist shows J7:2 on one net and J7:5 on the other instead of J7:1 twice. <sub>`two_contacts_of_one_connector_are_listed_by_their_poles`</sub>
+- A contact whose value is empty or only spaces keeps the pin key 1, as before. <sub>`a_contact_without_a_pole_keeps_the_key_one`</sub>
+- The pole is written with the spaces around it removed, so " 5 " and "5" are the same pole. <sub>`spaces_around_a_pole_are_ignored`</sub>
 - Every pin of a rotated two-pin symbol with a net name joins that net at its rotated position. <sub>`a_rotated_two_pin_net_symbol_joins_both_pins`</sub>
 - A net-name symbol that touches no wire does not pull any other part's pin into a net. <sub>`a_lone_net_symbol_joins_no_other_part`</sub>
 - A plain wire labelled J7.2 on a sheet that also has a port labelled J7 stays an ordinary net named J7.2 when the port has no contact 2, and the port's nets do not take its pins. <sub>`a_dotted_label_with_no_matching_contact_is_an_ordinary_net_name`</sub>
@@ -869,6 +872,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 ### pin_wiring
 
 - A plug's pin is reported at its paper position, and its direction follows rotation and mirror. <sub>`pin_direction_follows_rotation_and_mirror`</sub>
+- A connector contact is reached by its pole: "J7.5#1" is the contact whose value is 5, and get_pins lists that contact's pins under the key 5. <sub>`connect_pins_reaches_a_contact_by_its_pole`</sub>
 - A block's named pins are reported with their numbers, names, outside positions and the rounded outline. <sub>`block_pins_and_outline_are_reported`</sub>
 - Looking up a reference returns every part that carries it, and an entity id finds exactly that part. <sub>`parts_are_found_by_reference_or_entity_id`</sub>
 - A pin specifier finds the pin by number first and by name second, splitting at the last dot. <sub>`a_pin_is_resolved_by_number_then_by_name`</sub>
@@ -1042,6 +1046,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - An accessory without a part number, or one the terminal check cannot read, adds no row to the BOM. <sub>`bom_skips_accessories_without_a_part_number_or_that_cannot_be_read`</sub>
 - When the only wires whose part number cannot be resolved have no length, the BOM adds no "(unassigned) 0.00 m" row. <sub>`bom_adds_no_unassigned_row_when_those_wires_have_no_length`</sub>
 - BOM fields containing commas are quoted so the CSV stays valid. <sub>`bom_escapes_fields_with_commas`</sub>
+- A wire end that lands on a connector contact is written with the connector and the pole (for example J7:5), not always J7:1. <sub>`the_wire_list_names_a_contact_by_its_pole`</sub>
 - The wire list is a From-To list: every row starts with the sheet name and the two ends of the wire, followed by the mate and remark columns (G14/G18), and the older column order (sheet, wire number, harness, ...) is no longer produced. <sub>`wire_list_is_a_from_to_list`</sub>
 - An end of a wire that lands on a symbol pin is written as "reference:pin number" (for example K1:A1). <sub>`a_wire_end_on_a_pin_is_written_as_reference_and_pin_number`</sub>
 - A wire end on a block pin is written with the pin's name (for example CTRL1:OUT1), and the block itself is counted in the parts list. <sub>`a_wire_end_on_a_block_pin_uses_the_pin_name_and_the_block_is_in_the_parts_list`</sub>
@@ -1734,6 +1739,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A power rail with a blank value (or only spaces) gets one erc.empty_net_name warning; with a value it gets none. <sub>`a_power_rail_without_a_value_is_warned`</sub>
 - Power rails need no reference designator and may share one: they are marks, not parts. <sub>`power_rails_need_no_reference_and_may_share_one`</sub>
 - Several connector contacts of one designator are not duplicates, a contact with no designator is still reported, and a contact sharing a designator with an ordinary part is a duplicate. <sub>`connector_contacts_share_one_designator`</sub>
+- Two contacts of one connector with the same pole on different nets are an error that names both contacts, because J7:2 would then mean two different places. <sub>`the_same_pole_on_two_nets_is_reported`</sub>
+- The same pole drawn twice on one net is the same contact shown twice, so it is not reported. <sub>`the_same_pole_twice_on_one_net_is_allowed`</sub>
+- Contacts of one connector with different poles on different nets are fine, and so is the same pole of two different connectors. <sub>`different_poles_or_different_connectors_are_not_reported`</sub>
 - A wire joining a ground mark (net name GND) to a net label with a different name is reported as a label conflict. <sub>`a_ground_mark_and_a_different_label_on_one_net_conflict`</sub>
 - A wire joining two marks with different net names (GND and PE) is reported as a label conflict. <sub>`two_marks_with_different_net_names_on_one_net_conflict`</sub>
 - A ground mark and a net label of the same name on one net are not a conflict. <sub>`a_ground_mark_and_a_same_named_label_do_not_conflict`</sub>
@@ -2657,6 +2665,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - draws a bar across the landed pins and a fan to each breakout wire <sub>`多芯ケーブル`</sub>
 - is picked by clicking near its run <sub>`多芯ケーブル`</sub>
 - draws no bar when every core of a side lands on one port pin <sub>`多芯ケーブル`</sub>
+- finds a connector contact's pin by its pole <sub>`pinEndPosition`</sub>
+- still finds a contact without a pole by the pin number 1 <sub>`pinEndPosition`</sub>
 
 ### caption
 
@@ -2697,6 +2707,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - a terminal block with a level count outside 1-3 returns null <sub>`dynamicSymbol`</sub>
 - rejects the one-level alias spelling of a single-level terminal block <sub>`dynamicSymbol`</sub>
 - the plain single-level terminal block id keeps its numeric-only pin numbers <sub>`dynamicSymbol`</sub>
+- uses the trimmed value as the pin key of a through symbol <sub>`throughPinKey`</sub>
+- keeps the definition's pin number when the contact has no pole <sub>`throughPinKey`</sub>
+- leaves every other symbol's pin number alone <sub>`throughPinKey`</sub>
 - static definitions win; unknown ids fall back to dynamic generation <sub>`resolveSymbolDef`</sub>
 - puts named pins on both sides of the box, 5 mm apart on the 2.5 mm grid <sub>`blockSymbol`</sub>
 - draws pin numbers outside the outline and pin names inside it <sub>`blockSymbol`</sub>
@@ -3170,6 +3183,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - offers a short at the pin nearest the pointer on a part <sub>`simulation right-click menu`</sub>
 - also offers to remove a short the case already has on that part <sub>`simulation right-click menu`</sub>
 - offers nothing on empty canvas or on other kinds of entities <sub>`simulation right-click menu`</sub>
+- picks a connector contact by its pole <sub>`simulation right-click menu`</sub>
 - offers no pin short for a part without a definition or pins <sub>`simulation right-click menu`</sub>
 
 ### simOverlay

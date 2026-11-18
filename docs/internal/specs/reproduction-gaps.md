@@ -1505,6 +1505,8 @@ A mark needs no reference designator: the checks for missing and repeated design
 
 **What closed it.** A small circle with two same-numbered pins is one node (the netlist already joined same-numbered pins; a definition property now declares it, and user symbols may use it). Its designator is the connector and its value is the pole; contacts of one designator are not duplicates, a blank designator is still reported, and the parts list counts one connector per designator. The simulation treats it as a zero-ohm bridge.
 
+**Follow-up 2026-11-18 (pin key).** At first every contact had the pin key `1`, so two contacts of connector `J7` on different nets both appeared as `J7:1`. The pin key of a `through` symbol is now its value (the pole), or `1` when the value is blank, in the netlist, `get_pins`, `connect_pins` (`J7.5#1`), the wire list and the exports; the same pole of one connector on two nets is the error `erc.contact_pole_repeated`.
+
 **Remaining difference.** The designator and the pole number are drawn by the common caption rule: at label size, above the circle, not small beside it. A symbol definition cannot place or size its own value text; a placed contact can, through its `caption_layout` attribute (offset, size, anchor per line).
 
 ### G52 — Common semiconductor symbols are missing from the library · quality

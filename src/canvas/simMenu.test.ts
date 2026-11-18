@@ -63,6 +63,14 @@ describe("simulation right-click menu", () => {
     expect(simMenuItems("j1", sheet, resolve, at(0, 0), null)).toEqual([]);
   });
 
+  // ja: コネクタ接点の上では、ピン番号ではなく極の番号がピンとして選ばれる
+  it("picks a connector contact by its pole", () => {
+    const contact = { id: "connector_contact", through: true, pins: [{ number: "1", at: { x: -2.5, y: 0 } }, { number: "1", at: { x: 2.5, y: 0 } }] } as unknown as SymbolDef;
+    const inst = { ...sym, symbol_id: "connector_contact", value: "5", at: { x: 0, y: 0 } } as unknown as SymbolInstance;
+    expect(nearestPin(inst, contact, at(2, 0))).toBe("5");
+    expect(nearestPin({ ...inst, value: "" } as SymbolInstance, contact, at(2, 0))).toBe("1");
+  });
+
   // ja: 定義の引けない部品やピンの無い部品では短絡を出さない
   it("offers no pin short for a part without a definition or pins", () => {
     expect(nearestPin(sym, { ...def, pins: [] } as SymbolDef, at(0, 10))).toBeNull();

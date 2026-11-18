@@ -436,6 +436,19 @@ export function transformLocal(p: Point, inst: SymbolInstance): Point {
 }
 
 /**
+ * ピンの鍵 (ネットリスト・get_pins・connect_pins・電線リストが使う番号)。Rust側 **symbol::through_pin_key** と同一。
+ * 貫通のシンボル (コネクタの接点) は、値 (極の番号) の前後の空白を除いたものが鍵で、値が空なら定義のピン番号のまま。
+ * それ以外のシンボルは定義のピン番号そのもの。
+ */
+export function throughPinKey(inst: SymbolInstance, def: SymbolDef, pinNo: string): string {
+  if (def.through) {
+    const pole = (inst.value ?? "").trim();
+    if (pole !== "") return pole;
+  }
+  return pinNo;
+}
+
+/**
  * 配置後のシンボル外形の囲み矩形(用紙座標)。円・弧は回転対称なので中心±rで安全側に
  * 評価し、配置基準点も必ず含める。Rust側 **svg::symbol_bounds** と同一
  * (文字プリミティブは基準点だけを見る。文字の幅・高さまで含める tidy::symbol_bounds とは別物)。

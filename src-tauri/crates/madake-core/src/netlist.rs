@@ -51,7 +51,7 @@ pub fn transform_local(p: Point, inst: &SymbolInstance) -> Point {
 pub fn pin_positions(inst: &SymbolInstance, def: &SymbolDef) -> Vec<(String, Point)> {
     def.pins
         .iter()
-        .map(|pin| (pin.number.clone(), transform_local(pin.at, inst)))
+        .map(|pin| (crate::symbol::through_pin_key(inst, def, &pin.number), transform_local(pin.at, inst)))
         .collect()
 }
 
@@ -1953,7 +1953,70 @@ mod tests {
         assert!(net.pins.iter().any(|p| p.reference == "R2" && p.pin == "1"), "{net:?}");
         let contacts: Vec<_> = net.pins.iter().filter(|p| p.reference == "J7").collect();
         assert_eq!(contacts.len(), 1, "{net:?}");
-        assert_eq!(contacts[0].pin, "1");
+        assert_eq!(contacts[0].pin, "3");
+    }
+
+    /// Two contacts of one connector on different nets are listed by their poles, so the netlist shows J7:2 on one net and J7:5 on the other instead of J7:1 twice.
+    /// 同じコネクタの2つの接点が別々のネットにあるとき、ネットリストは極の番号で J7:2 と J7:5 のように区別して載せ、J7:1 が2つ並ぶことはない。
+    #[test]
+    fn two_contacts_of_one_connector_are_listed_by_their_poles() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        for e in [
+            symbol("resistor", "R1", 100.0, 50.0),
+            with_value(symbol("connector_contact", "J7", 120.0, 50.0), "2"),
+            symbol("resistor", "R2", 150.0, 50.0),
+            wire(&[(107.5, 50.0), (117.5, 50.0)]),
+            wire(&[(122.5, 50.0), (142.5, 50.0)]),
+            symbol("resistor", "R3", 100.0, 100.0),
+            with_value(symbol("connector_contact", "J7", 120.0, 100.0), "5"),
+            symbol("resistor", "R4", 150.0, 100.0),
+            wire(&[(107.5, 100.0), (117.5, 100.0)]),
+            wire(&[(122.5, 100.0), (142.5, 100.0)]),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let nets = extract_netlist(&sheet, &builtin_symbols());
+        let upper = net_of(&nets, "R1:2");
+        let lower = net_of(&nets, "R3:2");
+        let keys = |n: &Net| n.pins.iter().filter(|p| p.reference == "J7").map(|p| p.pin.clone()).collect::<Vec<_>>();
+        assert_eq!(keys(upper), ["2"], "{upper:?}");
+        assert_eq!(keys(lower), ["5"], "{lower:?}");
+    }
+
+    /// A contact whose value is empty or only spaces keeps the pin key 1, as before.
+    /// 値が空 (または空白だけ) の接点は、これまでどおりピンの鍵が 1 のままになる。
+    #[test]
+    fn a_contact_without_a_pole_keeps_the_key_one() {
+        for value in ["", "   "] {
+            let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+            for e in [
+                symbol("resistor", "R1", 100.0, 50.0),
+                with_value(symbol("connector_contact", "J7", 120.0, 50.0), value),
+                wire(&[(107.5, 50.0), (117.5, 50.0)]),
+            ] {
+                sheet.entities.insert(e.id(), e);
+            }
+            let nets = extract_netlist(&sheet, &builtin_symbols());
+            let net = net_of(&nets, "R1:2");
+            assert!(net.pins.iter().any(|p| p.reference == "J7" && p.pin == "1"), "{value:?}: {net:?}");
+        }
+    }
+
+    /// The pole is written with the spaces around it removed, so " 5 " and "5" are the same pole.
+    /// 極の番号は前後の空白を除いて使うので、「 5 」と「5」は同じ極になる。
+    #[test]
+    fn spaces_around_a_pole_are_ignored() {
+        let mut sheet = Sheet::new("t", PaperSize::A4, Orientation::Landscape);
+        for e in [
+            symbol("resistor", "R1", 100.0, 50.0),
+            with_value(symbol("connector_contact", "J7", 120.0, 50.0), " 5 "),
+            wire(&[(107.5, 50.0), (117.5, 50.0)]),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let nets = extract_netlist(&sheet, &builtin_symbols());
+        let net = net_of(&nets, "R1:2");
+        assert!(net.pins.iter().any(|p| p.reference == "J7" && p.pin == "5"), "{net:?}");
     }
 
     /// Every pin of a rotated two-pin symbol with a net name joins that net at its rotated position.

@@ -1176,7 +1176,11 @@ pub fn export_def<'a>(
 ) -> Option<std::borrow::Cow<'a, SymbolDef>> {
     let def = index.get(inst)?;
     if inst.symbol_id != BLOCK_SYMBOL_ID {
-        return Some(def);
+        // 貫通のシンボル (コネクタの接点) はピン番号を極の番号にした写しが返るが、書き出す記号は全インスタンスで共有するので定義そのものを使う
+        return Some(match index.library_def(inst) {
+            Some(lib) if lib.through => std::borrow::Cow::Borrowed(lib),
+            _ => def,
+        });
     }
     let mut def = def.into_owned();
     def.id = block_export_id(&def);

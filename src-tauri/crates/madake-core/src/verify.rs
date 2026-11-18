@@ -107,6 +107,9 @@ const MATE_HALF: &str = "mate_half";
 /// 貫通のシンボル (コネクタの接点) の分類の印。参照記号の重複の検査で、同じ参照記号を分け合える種類を表す。
 const THROUGH_KIND: &str = "through";
 
+/// 同じコネクタの同じ極の接点が別々のネットにある、の診断コード。
+pub const CONTACT_POLE_REPEATED: &str = "erc.contact_pole_repeated";
+
 /// 浮きネットラベル (配線にもピンにも載っていない) の診断コード。
 pub const DANGLING_LABEL: &str = "erc.dangling_label";
 
@@ -522,6 +525,38 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
         .iter()
         .flat_map(|n| n.pins.iter().map(|p| (p.entity_id, p.pin.as_str())))
         .collect();
+
+    // 同じコネクタ (参照記号) の同じ極の接点が別々のネットにある: ネットリストの J7:2 がどこを指すか決まらない。
+    // 同じネットに同じ極を2回描くのは同じ接点を2回描いただけなので指摘しない。
+    let mut pole_nets: BTreeMap<(&str, &str), BTreeMap<usize, Vec<EntityId>>> = BTreeMap::new();
+    for (ni, net) in nets.iter().enumerate() {
+        for p in &net.pins {
+            if p.reference.trim().is_empty() {
+                continue;
+            }
+            let Some(Entity::Symbol(s)) = sheet.entities.get(&p.entity_id) else { continue };
+            if !defs.get(s).is_some_and(|d| d.through) {
+                continue;
+            }
+            let ids = pole_nets.entry((p.reference.as_str(), p.pin.as_str())).or_default().entry(ni).or_default();
+            if !ids.contains(&p.entity_id) {
+                ids.push(p.entity_id);
+            }
+        }
+    }
+    for ((reference, pole), by_net) in &pole_nets {
+        if by_net.len() >= 2 {
+            diags.push(diag(
+                Severity::Error,
+                CONTACT_POLE_REPEATED,
+                format!(
+                    "コネクタ {reference} の極 {pole} の接点が、別々の{}つのネットにあります。極の番号を変えるか、同じネットにつなぐ",
+                    by_net.len()
+                ),
+                by_net.values().flatten().copied().collect(),
+            ));
+        }
+    }
 
     // 未接続ピン(シンボル単位に集約)+空参照
     for e in sheet.entities.values() {
@@ -1532,6 +1567,59 @@ mod tests {
         assert_eq!(empties(&d), 1, "{d:?}");
         let d = contacts(&["J7"], vec![symbol("resistor", "J7", 50.0, 50.0)]);
         assert_eq!(dups(&d), 1, "{d:?}");
+    }
+
+    /// Two contacts of one connector with the same pole on different nets are an error that names both contacts, because J7:2 would then mean two different places.
+    /// 同じコネクタの同じ極の接点が別々のネットにあると、J7:2 がどこを指すか決まらないので、両方の接点を挙げてエラーにする。
+    #[test]
+    fn the_same_pole_on_two_nets_is_reported() {
+        let a = with_ref_value(mark("connector_contact", 20.0, 10.0), "J7", "2");
+        let b = with_ref_value(mark("connector_contact", 20.0, 60.0), "J7", "2");
+        let (ida, idb) = (a.id(), b.id());
+        let sheet = sheet_with(vec![
+            wire(&[(0.0, 10.0), (17.5, 10.0)]),
+            wire(&[(22.5, 10.0), (40.0, 10.0)]),
+            a,
+            wire(&[(0.0, 60.0), (17.5, 60.0)]),
+            wire(&[(22.5, 60.0), (40.0, 60.0)]),
+            b,
+        ]);
+        let hits: Vec<_> = run(&sheet).into_iter().filter(|d| d.code == "erc.contact_pole_repeated").collect();
+        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert_eq!(hits[0].severity, Severity::Error);
+        assert!(hits[0].entity_ids.contains(&ida) && hits[0].entity_ids.contains(&idb), "{hits:?}");
+    }
+
+    /// The same pole drawn twice on one net is the same contact shown twice, so it is not reported.
+    /// 同じ極を同じネットの上に2回描いても、同じ接点を2回描いただけなので指摘しない。
+    #[test]
+    fn the_same_pole_twice_on_one_net_is_allowed() {
+        let sheet = sheet_with(vec![
+            wire(&[(0.0, 10.0), (17.5, 10.0)]),
+            with_ref_value(mark("connector_contact", 20.0, 10.0), "J7", "2"),
+            wire(&[(22.5, 10.0), (57.5, 10.0)]),
+            with_ref_value(mark("connector_contact", 60.0, 10.0), "J7", "2"),
+            wire(&[(62.5, 10.0), (80.0, 10.0)]),
+        ]);
+        assert!(!run(&sheet).iter().any(|d| d.code == "erc.contact_pole_repeated"));
+    }
+
+    /// Contacts of one connector with different poles on different nets are fine, and so is the same pole of two different connectors.
+    /// 同じコネクタでも極が違う接点が別々のネットにあるのは正しく、別のコネクタの同じ極も指摘しない。
+    #[test]
+    fn different_poles_or_different_connectors_are_not_reported() {
+        let sheet = sheet_with(vec![
+            wire(&[(0.0, 10.0), (17.5, 10.0)]),
+            with_ref_value(mark("connector_contact", 20.0, 10.0), "J7", "2"),
+            wire(&[(22.5, 10.0), (40.0, 10.0)]),
+            wire(&[(0.0, 60.0), (17.5, 60.0)]),
+            with_ref_value(mark("connector_contact", 20.0, 60.0), "J7", "5"),
+            wire(&[(22.5, 60.0), (40.0, 60.0)]),
+            wire(&[(0.0, 110.0), (17.5, 110.0)]),
+            with_ref_value(mark("connector_contact", 20.0, 110.0), "J8", "2"),
+            wire(&[(22.5, 110.0), (40.0, 110.0)]),
+        ]);
+        assert!(!run(&sheet).iter().any(|d| d.code == "erc.contact_pole_repeated"));
     }
 
     fn mark(symbol_id: &str, x: f64, y: f64) -> Entity {

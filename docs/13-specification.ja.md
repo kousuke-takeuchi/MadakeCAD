@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3734仕様項目**。
+全6領域・**3748仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -584,7 +584,7 @@
 - 括弧の不整合や閉じていない文字列は、位置付きの構文エラーとして報告される。 <sub>`syntax_errors_are_reported`</sub>
 - KiCad書き出しは、接地の印それぞれのピンの位置にシンボルのネット名のラベルを書くので、KiCadでも印どうしのつながりが残る。 <sub>`the_kicad_export_writes_a_label_at_each_ground_mark_pin`</sub>
 - KiCad書き出しは、電源の印それぞれのピンの位置に値の名前のラベルを書くので、同じ値の印どうしのつながりがKiCadでも残る。値が空の印にはラベルを書かない。 <sub>`power_rails_are_written_as_labels_named_by_their_values`</sub>
-- コネクタ接点は、同じ番号の左右2ピンつきで書き出され、読み戻すと参照記号と極の番号を持つ同じシンボルになる。 <sub>`a_connector_contact_round_trips_through_kicad`</sub>
+- コネクタ接点は、同じ番号の左右2ピンつきで書き出され、読み戻すと参照記号と極の番号を持つ同じシンボルになり、極の番号はその後もピンの鍵のままである。 <sub>`a_connector_contact_round_trips_through_kicad`</sub>
 - KiCad書き出しの内訳は、書いた電気要素の件数と、まったく書かない種別(図形・電線品番凡例・盤レイアウト)を挙げるので、黙って落ちるものが無い。 <sub>`the_kicad_export_report_names_the_kinds_it_cannot_write`</sub>
 - シートを.kicad_schへ書き出して読み戻すと、用紙・表題欄・シンボル(種類・参照記号・型番・回転・ミラー)・配線・ジャンクション・ラベル・注記が保たれる。 <sub>`export_then_import_round_trips_the_sheet`</sub>
 - 折れ線で描いた配線は、セグメントごとに2点のKiCad wireとして書き出される。 <sub>`polyline_wires_are_split_into_segments`</sub>
@@ -745,6 +745,9 @@
 - 値が空の電源の印はネット名を持たず、何ともつながらない。空白だけの値も空とみなす。 <sub>`a_power_rail_with_a_blank_value_joins_nothing`</sub>
 - 電源の印は、同じ名前のネットラベルとも、同じ名前を固定で持つ印とも、1つのネットにまとまる。 <sub>`a_power_rail_joins_a_label_and_a_fixed_net_mark_of_the_same_name`</sub>
 - 配線の途中のコネクタ接点は素通しで、左右の配線は1つのネットになり、ネットには接点が参照記号とピン1つ分だけ載る。 <sub>`a_connector_contact_passes_the_wire_through_and_is_listed_once`</sub>
+- 同じコネクタの2つの接点が別々のネットにあるとき、ネットリストは極の番号で J7:2 と J7:5 のように区別して載せ、J7:1 が2つ並ぶことはない。 <sub>`two_contacts_of_one_connector_are_listed_by_their_poles`</sub>
+- 値が空 (または空白だけ) の接点は、これまでどおりピンの鍵が 1 のままになる。 <sub>`a_contact_without_a_pole_keeps_the_key_one`</sub>
+- 極の番号は前後の空白を除いて使うので、「 5 」と「5」は同じ極になる。 <sub>`spaces_around_a_pole_are_ignored`</sub>
 - 回転して置いた2ピンのネット名付きシンボルは、回転後の位置にあるどちらのピンもその名前のネットにつながる。 <sub>`a_rotated_two_pin_net_symbol_joins_both_pins`</sub>
 - どの配線にも触れていないネット名付きシンボルは、ほかの部品のピンをネットへ引き込まない。 <sub>`a_lone_net_symbol_joins_no_other_part`</sub>
 - J7 というラベルのポートがあるシートでも、ポートに接点2が無ければ、普通の配線の J7.2 ラベルは J7.2 という普通のネットのままで、ポートのネットにその配線のピンは入らない。 <sub>`a_dotted_label_with_no_matching_contact_is_an_ordinary_net_name`</sub>
@@ -869,6 +872,7 @@
 ### pin_wiring
 
 - プラグのピンは用紙上の位置で返り、向きは回転と反転に合わせて変わる。 <sub>`pin_direction_follows_rotation_and_mirror`</sub>
+- コネクタの接点は極の番号で指せる。「J7.5#1」は値が5の接点を指し、get_pins もその接点のピンを鍵 5 で並べる。 <sub>`connect_pins_reaches_a_contact_by_its_pole`</sub>
 - ブロックの名前付きピンは番号・名前・外側の位置で返り、外形は丸めた後の大きさで返る。 <sub>`block_pins_and_outline_are_reported`</sub>
 - 参照記号で引くとその参照記号の部品を全部返し、entity id で引くとその部品だけを返す。 <sub>`parts_are_found_by_reference_or_entity_id`</sub>
 - ピン指定は最後の「.」で分け、ピン番号で探してから名前で探す。 <sub>`a_pin_is_resolved_by_number_then_by_name`</sub>
@@ -1042,6 +1046,7 @@
 - 型番の無い付属品や、端子台チェックが読めない付属品の項は、部品表に行を作らない。 <sub>`bom_skips_accessories_without_a_part_number_or_that_cannot_be_read`</sub>
 - 品番を引けない配線に使用長が1本も入っていないときは、「(未割当) 0.00 m」の行を出さない。 <sub>`bom_adds_no_unassigned_row_when_those_wires_have_no_length`</sub>
 - カンマを含む項目は引用符で囲まれ、CSVが壊れない。 <sub>`bom_escapes_fields_with_commas`</sub>
+- コネクタの接点に届いているワイヤの端は、いつも J7:1 ではなく、コネクタと極の番号 (例 J7:5) で書かれる。 <sub>`the_wire_list_names_a_contact_by_its_pole`</sub>
 - 電線リストはFrom-To形式で、各行はシート名とワイヤ両端の接続先、続いて嵌合相手・備考列 (G14/G18) が並ぶ。旧来の列順 (シート・線番・ハーネス…) はもう出力されない。 <sub>`wire_list_is_a_from_to_list`</sub>
 - シンボルのピンに届いているワイヤの端は「参照記号:ピン番号」(例 K1:A1) と書かれる。 <sub>`a_wire_end_on_a_pin_is_written_as_reference_and_pin_number`</sub>
 - ブロックのピンに届いたワイヤの端はピン名つき(例 CTRL1:OUT1)で書かれ、ブロック自体も部品表に数えられる。 <sub>`a_wire_end_on_a_block_pin_uses_the_pin_name_and_the_block_is_in_the_parts_list`</sub>
@@ -1734,6 +1739,9 @@
 - 値が空 (空白だけも同じ) の電源の印には erc.empty_net_name の警告が1件付く。値があれば付かない。 <sub>`a_power_rail_without_a_value_is_warned`</sub>
 - 電源の印は参照記号が無くてよく、同じ参照記号を持っても重複とは指摘しない (印は部品ではない)。 <sub>`power_rails_need_no_reference_and_may_share_one`</sub>
 - 同じ参照記号 (コネクタ名) のコネクタ接点を何個置いても重複とは指摘しない。参照記号が無い接点は指摘し、普通の部品と参照記号を分け合えば重複になる。 <sub>`connector_contacts_share_one_designator`</sub>
+- 同じコネクタの同じ極の接点が別々のネットにあると、J7:2 がどこを指すか決まらないので、両方の接点を挙げてエラーにする。 <sub>`the_same_pole_on_two_nets_is_reported`</sub>
+- 同じ極を同じネットの上に2回描いても、同じ接点を2回描いただけなので指摘しない。 <sub>`the_same_pole_twice_on_one_net_is_allowed`</sub>
+- 同じコネクタでも極が違う接点が別々のネットにあるのは正しく、別のコネクタの同じ極も指摘しない。 <sub>`different_poles_or_different_connectors_are_not_reported`</sub>
 - 接地の印 (ネット名 GND) と別の名前のネットラベルを配線でつなぐと、ラベルの衝突として指摘される。 <sub>`a_ground_mark_and_a_different_label_on_one_net_conflict`</sub>
 - ネット名の違う2つの印 (GND と PE) を配線でつなぐと、ラベルの衝突として指摘される。 <sub>`two_marks_with_different_net_names_on_one_net_conflict`</sub>
 - 接地の印と同じ名前のネットラベルが1つのネットにあっても、衝突にはならない。 <sub>`a_ground_mark_and_a_same_named_label_do_not_conflict`</sub>
@@ -2657,6 +2665,8 @@
 - 部品に着く端は着いたピンの先を結ぶ棒、分岐の端は区間の端から各芯の配線の端への扇になる <sub>`多芯ケーブル`</sub>
 - 区間ケーブルは区間の線の近くをクリックすると掴める <sub>`多芯ケーブル`</sub>
 - 区間の片側の芯が全部1つのポートのピンに着くと、その側には横棒を描かない (Rust の run_bars と同じ) <sub>`多芯ケーブル`</sub>
+- 芯の端がコネクタ接点を指すときは、極の番号で接点のピンを探す (定義のピン番号 1 ではない) <sub>`pinEndPosition`</sub>
+- 極の無い接点は、これまでどおりピン 1 で探せる <sub>`pinEndPosition`</sub>
 
 ### caption
 
@@ -2697,6 +2707,9 @@
 - 段数が0や4(1〜3の範囲外)の端子台は、極数が範囲外のときと同様にnullになる <sub>`dynamicSymbol`</sub>
 - `terminal_block_8p_1l`は`terminal_block_8p`の別名として受け付けずnullになる (Task 3。単段端子台のsymbol_idの綴りは1通りだけ、Rust側resolve_symbolと同じ規則) <sub>`dynamicSymbol`</sub>
 - 単段の端子台id(terminal_block_{n}p)は多段対応の追加後も数字だけのピン番号のままで、既存プロジェクトとの互換を保つ <sub>`dynamicSymbol`</sub>
+- コネクタ接点のピンの鍵は、値 (極の番号) の前後の空白を除いたもの <sub>`throughPinKey`</sub>
+- 値が空 (空白だけ) の接点は、これまでどおり定義のピン番号 1 のまま <sub>`throughPinKey`</sub>
+- 貫通でないシンボルは、値があってもピン番号そのまま <sub>`throughPinKey`</sub>
 - 静的定義を優先し、無ければ動的生成にフォールバックする <sub>`resolveSymbolDef`</sub>
 - ブロックのピンは箱の左右に5mmピッチ・2.5mmグリッド上で中央揃えに並ぶ(Rust側と同じ座標) <sub>`blockSymbol`</sub>
 - ピン番号は外形の外側に、ピン名は内側に描かれる <sub>`blockSymbol`</sub>
@@ -3170,6 +3183,7 @@
 - 部品の上では、マウスに一番近いピンで「ピン N で短絡」が出る <sub>`simulation right-click menu`</sub>
 - ケースに既にその部品のピンの短絡があれば「この条件を外す」も出る <sub>`simulation right-click menu`</sub>
 - 何も無い所や、電線・部品以外 (接続点など) では何も出さない <sub>`simulation right-click menu`</sub>
+- コネクタ接点の上では、ピン番号ではなく極の番号がピンとして選ばれる <sub>`simulation right-click menu`</sub>
 - 定義の引けない部品やピンの無い部品では短絡を出さない <sub>`simulation right-click menu`</sub>
 
 ### simOverlay

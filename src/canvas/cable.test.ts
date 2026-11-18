@@ -1,6 +1,6 @@
 // 多芯ケーブル (M4 §5) の作図領域側の仕様テスト。芯線割当そのものはRust側のテストが正。
 import { describe, expect, it } from "vitest";
-import type { Cable, CableCore, Entity, Sheet } from "../ipc";
+import type { Cable, CableCore, CoreEnd, Entity, Sheet, SymbolDef } from "../ipc";
 import {
   cableAddCommand,
   cableHit,
@@ -9,6 +9,7 @@ import {
   coreEndPin,
   isCable,
   nextCableReference,
+  pinEndPosition,
   runBars,
   runCountAt,
   runFans,
@@ -141,5 +142,28 @@ describe("多芯ケーブル", () => {
     const c = s.entities.w45 as Cable;
     c.cores = c.cores.map((k) => ({ ...k, end_b: { kind: "pin" as const, part: "usb", pin: "1", contact: k.core } }));
     expect(runBars(s, c, new Map())).toEqual([]);
+  });
+});
+
+describe("pinEndPosition", () => {
+  const contactDef = {
+    id: "connector_contact",
+    through: true,
+    pins: [{ number: "1", at: { x: -2.5, y: 0 } }, { number: "1", at: { x: 2.5, y: 0 } }],
+  } as unknown as SymbolDef;
+  const defs = new Map([["connector_contact", contactDef]]);
+  const contactSheet = (value: string) =>
+    sheet({ j7: { kind: "symbol", id: "j7", symbol_id: "connector_contact", at: { x: 50, y: 40 }, rotation: 0, mirror: false, reference: "J7", value, attrs: {} } as unknown as Entity });
+  const end = (pin: string): CoreEnd => ({ kind: "pin", part: "j7", pin });
+
+  // ja: 芯の端がコネクタ接点を指すときは、極の番号で接点のピンを探す (定義のピン番号 1 ではない)
+  it("finds a connector contact's pin by its pole", () => {
+    expect(pinEndPosition(contactSheet("5"), end("5"), defs)).toEqual({ x: 47.5, y: 40 });
+    expect(pinEndPosition(contactSheet("5"), end("1"), defs)).toBeNull();
+  });
+
+  // ja: 極の無い接点は、これまでどおりピン 1 で探せる
+  it("still finds a contact without a pole by the pin number 1", () => {
+    expect(pinEndPosition(contactSheet(""), end("1"), defs)).toEqual({ x: 47.5, y: 40 });
   });
 });

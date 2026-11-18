@@ -7,7 +7,7 @@
 
 import { wireWeightMm } from "./wireStyle";
 import type { Cable, CableCore, Command, CoreEnd, Entity, Point, Sheet, SymbolDef, Wire } from "../ipc";
-import { resolveInstanceDef, transformLocal } from "./dynamicSymbol";
+import { resolveInstanceDef, throughPinKey, transformLocal } from "./dynamicSymbol";
 import { theme } from "./theme";
 import type { Viewport } from "./viewport";
 import { drawingText, setDrawingFont } from "./textSize";
@@ -125,7 +125,7 @@ export function pinEndPosition(sheet: Sheet, end: CoreEnd, defs: ReadonlyMap<str
   const part = sheet.entities[end.part];
   if (!part || part.kind !== "symbol") return null;
   const def = resolveInstanceDef(part, defs);
-  const pins = (def?.pins ?? []).filter((p) => p.number === end.pin);
+  const pins = (def?.pins ?? []).filter((p) => (def ? throughPinKey(part, def, p.number) : p.number) === end.pin);
   const pin = pins[Math.max(0, (end.index ?? 1) - 1)];
   return pin ? transformLocal(pin.at, part) : null;
 }

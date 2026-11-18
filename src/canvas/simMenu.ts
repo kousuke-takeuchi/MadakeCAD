@@ -2,7 +2,7 @@
 // 右クリックした電線・部品と、選んでいる計算ケースから、出す項目を決める純ロジック。
 
 import type { Point, Sheet, SimCase, SimFault, SymbolDef, SymbolInstance } from "../ipc";
-import { transformLocal } from "./dynamicSymbol";
+import { throughPinKey, transformLocal } from "./dynamicSymbol";
 
 export type SimMenuItem =
   | { kind: "short_wire"; wireId: string }
@@ -18,7 +18,7 @@ export function nearestPin(inst: SymbolInstance, def: SymbolDef, world: Point): 
     const p = transformLocal(pin.at, inst);
     const d = Math.hypot(p.x - world.x, p.y - world.y);
     if (d < bestDist) {
-      best = pin.number;
+      best = throughPinKey(inst, def, pin.number);
       bestDist = d;
     }
   }
