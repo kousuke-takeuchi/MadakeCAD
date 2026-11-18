@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3954 specification clauses** across 6 areas.
+**3960 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -576,7 +576,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - With few nets the channel is 20 mm, and a single column sits at the left edge, not in the middle. <sub>`a_single_column_sits_at_the_left_edge`</sub>
 - The marks of a unit do not touch the unit's own caption or the caption of the next unit below, and the gap stays at least four pitches. <sub>`marks_keep_clear_of_the_captions_and_the_gap_stays_four_pitches`</sub>
 - A pin whose peers on the sheet are all in its own column goes on the right side, except in the last column, where it goes on the left. <sub>`a_pin_with_peers_only_in_its_own_column_goes_right_except_in_the_last_column`</sub>
-- In a mixed case same-column peers count as peers on the right (on the left in the last column): one peer to the left and two in the own column put the pin on the right. <sub>`same_column_peers_count_as_right_in_a_mixed_case`</sub>
+- In a mixed case the peers in the own column do not vote: one peer to the left and two in the own column put the pin on the left, also in the last column. <sub>`same_column_peers_do_not_vote_in_a_mixed_case`</sub>
 - The channel to the right of a column also counts the nets that join units of that column (they run in that channel), so it is 10 mm + 2.5 mm per net there. <sub>`the_channel_counts_the_nets_inside_a_column`</sub>
 - Drafting the stacked fixture, the core fixture and the bars fixture keeps the connections: the device pin groups of the sheet are those of the source, at both pitches, also when the router gives up. <sub>`the_pin_groups_of_drafted_sheets_equal_the_source`</sub>
 - No wire crosses or touches a tag flag, drawn with the destination the export prints, on the stacked fixture (units stacked in one column wired to each other, tags with two sheet names) and on the core fixture, at both pitches and when the router gives up on nets (fallback tags are obstacles too). <sub>`no_wire_crosses_or_touches_a_tag_flag`</sub>
@@ -584,6 +584,12 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The router terminal of every group is the bar end nearest to its peers: the upper end when all peers lie above or level, the lower end when all lie below, the middle (on the grid) when they lie above and below. <sub>`every_group_terminal_is_the_bar_end_nearest_to_its_peers`</sub>
 - The printed text of each mark is clear of every wire (bars, stubs, mark leads, routed wires) and of every pin number, and no two marks touch, for power and ground groups, at pitch 5.0 and 2.5, also with two power and two ground groups on one side. <sub>`mark_texts_are_clear_of_wires_and_pin_numbers`</sub>
 - On a drafted sheet no printed pin number touches the outline of its box or any pin name, also with a six-character number and at pitch 2.5 (the boxes end their numbers at the box edge). <sub>`no_pin_number_touches_the_box_outline_or_a_pin_name`</sub>
+- Two pins of one net on one unit whose peers lie in columns on both sides go on the same side, in adjacent rows, joined by one bar: no pin of the net is on the other side of the box. <sub>`pins_of_one_net_on_one_unit_share_one_side_and_one_bar`</sub>
+- With peers in other columns, only those decide: all to the left goes left, all to the right goes right. <sub>`the_side_follows_the_peers_in_other_columns`</sub>
+- With peers on both sides the side with more peers wins, and a tie goes left. <sub>`the_side_with_more_peers_wins_and_a_tie_goes_left`</sub>
+- A pin whose peers are all in the unit's own column goes right, and left in the last column. <sub>`peers_only_in_the_own_column_put_the_pin_right_or_left_in_the_last_column`</sub>
+- Peers in another column decide even when more peers stand in the own column: two stacked units whose net also reaches a unit to the left are both on the left side. <sub>`own_column_peers_do_not_vote_when_another_column_has_a_peer`</sub>
+- A jumper inside one unit (a net whose pins are all on that unit) keeps today's side: left, or right in the last column. <sub>`a_jumper_inside_one_unit_goes_left_or_right_in_the_last_column`</sub>
 - Writes the bars fixture as a drafted sheet to the path in MADAKE_DRAFT_SVG (run with --ignored). <sub>`write_the_bars_sheet_as_svg`</sub>
 - Writes the stacked fixture drafted twice (the stack before SY, and the stack in the last column) as SVG files into the directory in MADAKE_DRAFT_SVG_DIR (run with --ignored). <sub>`write_the_stacked_sheets_as_svg`</sub>
 - Drafts the requests of a JSON file one after another and writes the sheets as SVG for a look (run with --ignored; set MADAKE_DRAFT_REQUESTS and MADAKE_DRAFT_OUT). <sub>`draft_requests_from_a_file_for_looking`</sub>

@@ -1715,17 +1715,43 @@ fn grouped(unit: &DraftUnit, pins: Vec<usize>) -> Vec<Group> {
     groups
 }
 
-/// 機器ごとに、ピンの辺と組を決める (信号の組の並びは自然順のまま)。`mark_gap` はネットごとの、印のために空ける行数。
-fn plan_units(model: &DraftModel, defs: &[SymbolDef], pitch: f64, mark_gap: &[usize]) -> Result<Vec<UnitPlan>, String> {
+/// 機器 `unit` の、ネット `net` の組 (その機器にあるこのネットのピン全部) をどちらの辺に置くか。ピンごとではなく
+/// (機器, ネット) ごとに決めるので、同じネットのピンは必ず同じ辺の1つの組 (棒) になる。決めるのは、同じネットの
+/// 「ほかの機器」のピンだけ (その機器自身のピンは相手ではない):
+/// - ほかの列に相手がいれば、その相手だけで決める: 全て左の列なら左、全て右の列なら右、両方にいれば多い方 (同数は左)。
+///   同じ列のほかの機器の相手は数えない (同じ列の機器は、ほかの列の相手が同じなら同じ辺に並び、1つの通り道を使える)。
+/// - ほかの機器の相手が全て同じ列にいれば右 (最後の列では左)。右の通り道を通るので、札の並ぶ左の余白を通らない。
+/// - ほかの機器に相手がいなければ (機器の中のジャンパ、ほかのシートへ出るピンだけ) 最後の列は右、それ以外は左。
+fn net_side(model: &DraftModel, unit: usize, net: usize) -> Side {
     let last_column = model.units.iter().map(|u| u.column).max().unwrap_or(0);
-    let th = pin_text_mm(pitch);
-    // ネットごとの、このシートのピン (機器の添字, ピンの添字)
-    let mut by_net: BTreeMap<usize, Vec<(usize, usize)>> = BTreeMap::new();
-    for (u, unit) in model.units.iter().enumerate() {
-        for (p, pin) in unit.pins.iter().enumerate() {
-            by_net.entry(pin.net).or_default().push((u, p));
+    let column = model.units[unit].column;
+    let (mut to_left, mut to_right, mut own) = (0usize, 0usize, 0usize);
+    for other in model.units.iter().enumerate().filter(|(u2, _)| *u2 != unit).map(|(_, o)| o) {
+        let n = other.pins.iter().filter(|p| p.net == net).count();
+        match other.column.cmp(&column) {
+            Ordering::Less => to_left += n,
+            Ordering::Greater => to_right += n,
+            Ordering::Equal => own += n,
         }
     }
+    match (to_left, to_right) {
+        (0, 0) if own > 0 => {
+            if column == last_column { Side::Left } else { Side::Right }
+        }
+        (0, 0) => {
+            if column == last_column { Side::Right } else { Side::Left }
+        }
+        (_, 0) => Side::Left,
+        (0, _) => Side::Right,
+        (l, r) => {
+            if r > l { Side::Right } else { Side::Left }
+        }
+    }
+}
+
+/// 機器ごとに、ピンの辺と組を決める (信号の組の並びは自然順のまま)。`mark_gap` はネットごとの、印のために空ける行数。
+fn plan_units(model: &DraftModel, defs: &[SymbolDef], pitch: f64, mark_gap: &[usize]) -> Result<Vec<UnitPlan>, String> {
+    let th = pin_text_mm(pitch);
     let mut plans = Vec::new();
     for (ui, unit) in model.units.iter().enumerate() {
         let mut plan = UnitPlan {
@@ -1759,33 +1785,7 @@ fn plan_units(model: &DraftModel, defs: &[SymbolDef], pitch: f64, mark_gap: &[us
                     Side::Left
                 }
                 NetClass::Internal | NetClass::Leaving => {
-                    // 相手の数: 左の列・右の列。同じ列の (別の機器の) 相手は右に数える (最後の列では左)。
-                    // 同じ列の機器どうしの配線が、札の並ぶ左の余白ではなく右の通り道を通るように
-                    let (mut to_left, mut to_right) = (0usize, 0usize);
-                    for &(u2, _) in by_net.get(&pin.net).into_iter().flatten() {
-                        match model.units[u2].column.cmp(&unit.column) {
-                            Ordering::Less => to_left += 1,
-                            Ordering::Greater => to_right += 1,
-                            Ordering::Equal if u2 != ui => {
-                                if unit.column == last_column {
-                                    to_left += 1
-                                } else {
-                                    to_right += 1
-                                }
-                            }
-                            Ordering::Equal => {}
-                        }
-                    }
-                    let side = match (to_left, to_right) {
-                        (0, 0) => {
-                            if unit.column == last_column { Side::Right } else { Side::Left }
-                        }
-                        (_, 0) => Side::Left,
-                        (0, _) => Side::Right,
-                        (l, r) => {
-                            if r > l { Side::Right } else { Side::Left }
-                        }
-                    };
+                    let side = net_side(model, ui, pin.net);
                     match side {
                         Side::Left => left.push(p),
                         Side::Right => right.push(p),

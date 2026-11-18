@@ -842,14 +842,14 @@ fn a_pin_with_peers_only_in_its_own_column_goes_right_except_in_the_last_column(
     }
 }
 
-/// In a mixed case same-column peers count as peers on the right (on the left in the last column): one peer to the left and two in the own column put the pin on the right.
-/// 相手が混ざるときは、同じ列の相手を右の相手として数える (最後の列では左)。左に1つ・同じ列に2つの相手を持つピンは右に置く。
+/// In a mixed case the peers in the own column do not vote: one peer to the left and two in the own column put the pin on the left, also in the last column.
+/// 相手が混ざるときは、同じ列の相手は数えない。左に1つ・同じ列に2つの相手を持つピンは、最後の列でも左に置く。
 #[test]
-fn same_column_peers_count_as_right_in_a_mixed_case() {
+fn same_column_peers_do_not_vote_in_a_mixed_case() {
     // SB.4 (K7): SY on the left, SC.5 and SD.5 in its own column; SX makes the stack not the last column
     let req = stacked_request(&[&["SY"], &STACK, &["SX"]], 5.0);
     let p = plan_function_sheet(&stacked_source(), &stacked_open(), &req).expect("fits");
-    assert_eq!(side_of(&p.sheet, "SB", "4"), "right");
+    assert_eq!(side_of(&p.sheet, "SB", "4"), "left", "K7: SY is in another column, so the own-column peers do not vote");
     assert_eq!(side_of(&p.sheet, "SA", "5"), "left", "K6 has its only peer to the left");
     let req = stacked_request(&[&["SY"], &STACK], 5.0);
     let p = plan_function_sheet(&stacked_source(), &stacked_open(), &req).expect("fits");
@@ -1088,6 +1088,79 @@ fn no_pin_number_touches_the_box_outline_or_a_pin_name() {
             }
         }
     }
+}
+
+// ---- side per (unit, net)
+
+/// A source of three units A, B, C (four pins each) and the given nets, drafted in the given columns without power or ground nets.
+fn sides_of(nets: &[(&str, &[(&str, &str)])], columns: &[&[&str]]) -> DraftPlan {
+    let src = source_of("draft-sides", &[("A", 4), ("B", 4), ("C", 4), ("D", 4)], nets);
+    plan_function_sheet(&src, &open(), &stacked_request(columns, 5.0)).expect("the units fit")
+}
+
+/// Two pins of one net on one unit whose peers lie in columns on both sides go on the same side, in adjacent rows, joined by one bar: no pin of the net is on the other side of the box.
+/// 左の列にも右の列にも相手がいるネットの、1つの機器にある2本のピンは、同じ辺の隣の行に並んで1本の棒でつながる。反対側の辺にそのネットのピンは出ない。
+#[test]
+fn pins_of_one_net_on_one_unit_share_one_side_and_one_bar() {
+    let p = sides_of(&[("N", &[("A", "1"), ("B", "1"), ("B", "2"), ("C", "1")]), ("M", &[("B", "3"), ("C", "2")])], &[&["A"], &["B"], &["C"]]);
+    let (s1, s2) = (side_of(&p.sheet, "B", "1"), side_of(&p.sheet, "B", "2"));
+    assert_eq!(s1, s2);
+    let (e1, e2) = (stub_end(&p.sheet, "B", "1"), stub_end(&p.sheet, "B", "2"));
+    assert!(on_a_bar(&p.sheet, e1, e2), "one bar joins the two stub ends");
+    assert!((pin_pt(&p.sheet, "B", "2").y - pin_pt(&p.sheet, "B", "1").y - 5.0).abs() < 1e-6, "adjacent rows");
+}
+
+/// With peers in other columns, only those decide: all to the left goes left, all to the right goes right.
+/// 相手がほかの列にいるときは、その相手だけで決める。全て左の列なら左、全て右の列なら右に置く。
+#[test]
+fn the_side_follows_the_peers_in_other_columns() {
+    let p = sides_of(&[("N", &[("A", "1"), ("B", "1")]), ("M", &[("B", "2"), ("C", "1")])], &[&["A"], &["B"], &["C"]]);
+    assert_eq!(side_of(&p.sheet, "B", "1"), "left");
+    assert_eq!(side_of(&p.sheet, "B", "2"), "right");
+}
+
+/// With peers on both sides the side with more peers wins, and a tie goes left.
+/// 左右の両方に相手がいるときは、相手の多い側に置き、同数なら左に置く。
+#[test]
+fn the_side_with_more_peers_wins_and_a_tie_goes_left() {
+    let more_right = sides_of(&[("N", &[("B", "1"), ("A", "1"), ("C", "1"), ("C", "2")]), ("M", &[("A", "2"), ("B", "2")])], &[&["A"], &["B"], &["C"]]);
+    assert_eq!(side_of(&more_right.sheet, "B", "1"), "right");
+    let tie = sides_of(&[("N", &[("B", "1"), ("A", "1"), ("C", "1")]), ("M", &[("A", "2"), ("B", "2")])], &[&["A"], &["B"], &["C"]]);
+    assert_eq!(side_of(&tie.sheet, "B", "1"), "left");
+}
+
+/// A pin whose peers are all in the unit's own column goes right, and left in the last column.
+/// 相手が全て同じ列の機器にあるピンは右に置く。最後の列では左に置く。
+#[test]
+fn peers_only_in_the_own_column_put_the_pin_right_or_left_in_the_last_column() {
+    let nets: &[(&str, &[(&str, &str)])] = &[("N", &[("A", "1"), ("B", "1")]), ("M", &[("C", "1"), ("C", "2"), ("A", "2")])];
+    let p = sides_of(nets, &[&["A", "B"], &["C"]]);
+    assert_eq!((side_of(&p.sheet, "A", "1"), side_of(&p.sheet, "B", "1")), ("right", "right"));
+    let p = sides_of(&[("N", &[("A", "1"), ("B", "1")]), ("M", &[("C", "1"), ("C", "2")])], &[&["C"], &["A", "B"]]);
+    assert_eq!((side_of(&p.sheet, "A", "1"), side_of(&p.sheet, "B", "1")), ("left", "left"));
+}
+
+/// Peers in another column decide even when more peers stand in the own column: two stacked units whose net also reaches a unit to the left are both on the left side.
+/// 同じ列の相手の方が多くても、ほかの列の相手が決める。積んだ2つの機器のネットが左の列の機器にも届くなら、2つとも左の辺に置く。
+#[test]
+fn own_column_peers_do_not_vote_when_another_column_has_a_peer() {
+    let nets: &[(&str, &[(&str, &str)])] = &[("N", &[("A", "1"), ("B", "1"), ("C", "1"), ("C", "2")])];
+    let p = sides_of(nets, &[&["A"], &["B", "C"]]);
+    assert_eq!((side_of(&p.sheet, "B", "1"), side_of(&p.sheet, "C", "2")), ("left", "left"));
+    let with_d: &[(&str, &[(&str, &str)])] = &[("N", &[("A", "1"), ("B", "1"), ("C", "1"), ("C", "2")]), ("M", &[("A", "2"), ("D", "1")])];
+    let p = sides_of(with_d, &[&["A"], &["B", "C"], &["D"]]);
+    assert_eq!((side_of(&p.sheet, "B", "1"), side_of(&p.sheet, "C", "2")), ("left", "left"), "not the last column: the own-column peers still do not vote");
+}
+
+/// A jumper inside one unit (a net whose pins are all on that unit) keeps today's side: left, or right in the last column.
+/// 1つの機器の中だけのジャンパ (ネットのピンが全てその機器にある) は従来どおりの辺に置く。左で、最後の列では右。
+#[test]
+fn a_jumper_inside_one_unit_goes_left_or_right_in_the_last_column() {
+    let nets: &[(&str, &[(&str, &str)])] = &[("J", &[("B", "1"), ("B", "2")]), ("N", &[("A", "1"), ("C", "1")])];
+    let p = sides_of(nets, &[&["A"], &["B"], &["C"]]);
+    assert_eq!((side_of(&p.sheet, "B", "1"), side_of(&p.sheet, "B", "2")), ("left", "left"));
+    let p = sides_of(&[("J", &[("B", "1"), ("B", "2")]), ("N", &[("A", "1"), ("C", "1")])], &[&["A"], &["C"], &["B"]]);
+    assert_eq!((side_of(&p.sheet, "B", "1"), side_of(&p.sheet, "B", "2")), ("right", "right"));
 }
 
 // ---- the picture

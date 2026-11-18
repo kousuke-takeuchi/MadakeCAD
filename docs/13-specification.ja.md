@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3954仕様項目**。
+全6領域・**3960仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -576,7 +576,7 @@
 - ネットが少ないときの通り道は20mmで、列が1つだけでも描画範囲の中央ではなく左端に置く。 <sub>`a_single_column_sits_at_the_left_edge`</sub>
 - 機器の印は、その機器自身の参照記号の文字にも、下に積んだ次の機器の参照記号の文字にも触れず、すき間はピン間隔4つぶん以上ある。 <sub>`marks_keep_clear_of_the_captions_and_the_gap_stays_four_pitches`</sub>
 - シートの上の相手が全て同じ列にあるピンは右の辺に置く。ただし最後の列では左の辺に置く。 <sub>`a_pin_with_peers_only_in_its_own_column_goes_right_except_in_the_last_column`</sub>
-- 相手が混ざるときは、同じ列の相手を右の相手として数える (最後の列では左)。左に1つ・同じ列に2つの相手を持つピンは右に置く。 <sub>`same_column_peers_count_as_right_in_a_mixed_case`</sub>
+- 相手が混ざるときは、同じ列の相手は数えない。左に1つ・同じ列に2つの相手を持つピンは、最後の列でも左に置く。 <sub>`same_column_peers_do_not_vote_in_a_mixed_case`</sub>
 - 列の右の通り道は、その列の機器どうしをつなぐネット (その通り道を通る) も数えるので、10mm + そこを通るネット1本につき2.5mm の幅になる。 <sub>`the_channel_counts_the_nets_inside_a_column`</sub>
 - 積んだ見本・基本の見本・棒の見本を下書きしても、つながりは変わらない。シートの機器のピンのまとまりは、どちらのピン間隔でも、経路をあきらめたときも、元の図と同じ。 <sub>`the_pin_groups_of_drafted_sheets_equal_the_source`</sub>
 - 札の旗 (書き出しが書く行き先を入れたもの) を横切る配線も触れる配線も無い。1つの列に積んで互いに配線した機器と2枚のシート名を持つ札の見本でも、基本の見本でも、どちらのピン間隔でも、経路をあきらめたネットがあるとき (代わりの札も障害物) でも同じ。 <sub>`no_wire_crosses_or_touches_a_tag_flag`</sub>
@@ -584,6 +584,12 @@
 - どの組の配線の端も、相手にいちばん近い棒の端になる。相手が全て上か同じ高さなら上の端、全て下なら下の端、上にも下にもあれば真ん中 (格子の上)。 <sub>`every_group_terminal_is_the_bar_end_nearest_to_its_peers`</sub>
 - どの印の文字も、全ての配線 (棒・短い線・印の引き出し・引いた配線) とピン番号にかからず、印どうしも触れない。電源の組でも接地の組でも、ピン間隔5.0でも2.5でも、1つの辺に電源と接地の組が2つずつあっても同じ。 <sub>`mark_texts_are_clear_of_wires_and_pin_numbers`</sub>
 - 下書きのシートでは、印字されたピン番号が箱の外形にもピン名にも触れない。6文字の番号でも、ピン間隔2.5でも同じ (箱は番号を辺の外で終わらせる)。 <sub>`no_pin_number_touches_the_box_outline_or_a_pin_name`</sub>
+- 左の列にも右の列にも相手がいるネットの、1つの機器にある2本のピンは、同じ辺の隣の行に並んで1本の棒でつながる。反対側の辺にそのネットのピンは出ない。 <sub>`pins_of_one_net_on_one_unit_share_one_side_and_one_bar`</sub>
+- 相手がほかの列にいるときは、その相手だけで決める。全て左の列なら左、全て右の列なら右に置く。 <sub>`the_side_follows_the_peers_in_other_columns`</sub>
+- 左右の両方に相手がいるときは、相手の多い側に置き、同数なら左に置く。 <sub>`the_side_with_more_peers_wins_and_a_tie_goes_left`</sub>
+- 相手が全て同じ列の機器にあるピンは右に置く。最後の列では左に置く。 <sub>`peers_only_in_the_own_column_put_the_pin_right_or_left_in_the_last_column`</sub>
+- 同じ列の相手の方が多くても、ほかの列の相手が決める。積んだ2つの機器のネットが左の列の機器にも届くなら、2つとも左の辺に置く。 <sub>`own_column_peers_do_not_vote_when_another_column_has_a_peer`</sub>
+- 1つの機器の中だけのジャンパ (ネットのピンが全てその機器にある) は従来どおりの辺に置く。左で、最後の列では右。 <sub>`a_jumper_inside_one_unit_goes_left_or_right_in_the_last_column`</sub>
 - 見て確かめるために、棒の見本を下書きしたシートを MADAKE_DRAFT_SVG の場所へSVGで書き出す (--ignored で実行する)。 <sub>`write_the_bars_sheet_as_svg`</sub>
 - 見て確かめるために、積んだ見本を2通り (積んだ列がSYの前・最後の列) に下書きしたシートを、MADAKE_DRAFT_SVG_DIR のフォルダへSVGで書き出す (--ignored で実行する)。 <sub>`write_the_stacked_sheets_as_svg`</sub>
 - 手元のファイルの依頼を順に下書きして、シートをSVGで書き出し、見て確かめる (--ignored で実行。環境変数 MADAKE_DRAFT_REQUESTS と MADAKE_DRAFT_OUT を指定する。無ければ何もしない)。 <sub>`draft_requests_from_a_file_for_looking`</sub>

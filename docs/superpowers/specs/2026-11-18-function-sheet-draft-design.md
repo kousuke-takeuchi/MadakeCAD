@@ -97,9 +97,10 @@ The new sheet has `xref_style` = `sheet_name`, so a tag shows the names of the o
 
 ### Pin sides and order
 
-- A pin whose peers on this sheet are all in columns to the left goes on the left side; all to the right, on the right side; both, on the side with more peers (left on a tie).
-- A pin whose peers on this sheet are all in its own column (other units of the same column) goes on the right side, except in the last column, where it goes on the left. In mixed cases the majority rule above holds, with the peers in the own column counted as peers on the right (on the left in the last column). Units stacked in one column then join each other through the channel to their right, not through the left margin where the tags sit.
-- A pin with no peer on this sheet (leaving nets with one carried pin): right side for a unit in the last column, otherwise left side.
+- The side is decided per unit and net, not per pin: all carried pins of one net on one unit go on the same side and form one group (bar). The decision uses only the net's peers on other units (a unit's own pins of the net are not peers):
+  - If there are peers in other columns, only those decide: all in columns to the left, left; all to the right, right; both, the side with more peers (left on a tie). Peers in the unit's own column do not vote. Units stacked in one column that share a net with the same other-column peers therefore land on the same side, so such a net (a bus over two stacked units and a unit in the neighbouring column, say) lies in one channel.
+  - If all other-unit peers are in the unit's own column, right, except in the last column, where it is left. Units stacked in one column then join each other through the channel to their right, not through the left margin where the tags sit.
+  - If no other unit carries the net (a jumper inside one unit, or a pin whose other pins are on other sheets), right for a unit in the last column, otherwise left.
 - Power pins are the first rows of the left side, ground pins the last rows of the left side, each group separated from the signal pins by one spacer row (`{"gap": 1}`).
 - Signal groups on a side are ordered to reduce crossings: two sweeps of the barycentre method over the vertical positions of their peers (a group moves as one item; its barycentre is the mean of its pins'), ties broken by natural order of the first pin key. Power groups come first and ground groups last, each ordered by the key of its first pin. The result must not depend on hash order: the same input gives the same sheet.
 
@@ -195,7 +196,7 @@ The reply also lists the tags whose flag does not fit its sheet:
 - An overview sheet with a sheet index.
 - Updating a function sheet after the source changed (draft again after deleting the sheet).
 - Per-sheet frame templates and fonts; a terminal-block common bar; one tag for several wires.
-- A pin whose peers on the sheet are on both sides of its box goes on one side only (the side with more peers), so its wire to the other side runs round the box.
+- A net whose peers on the sheet are on both sides of a unit is drawn on one side of that unit only (the side with more peers), so its wire to the peers on the other side runs round the box.
 - Wires between units of one column cross the stubs of other nets at right angles near the box; the rule allows it, but a stacked column reads less well than one unit per column.
 
 ## Testing
