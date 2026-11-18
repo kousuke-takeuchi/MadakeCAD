@@ -40,8 +40,8 @@
 <text x="316" y="276.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">    日付 </text>
 <text x="292" y="284.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">設計</text>
 <text x="316" y="284.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">  製図   検図   承認 </text>
-<circle cx="196.250" cy="40" r="0.600" fill="#000"/>
-<circle cx="196.250" cy="45" r="0.600" fill="#000"/>
+<circle cx="81.250" cy="40" r="0.600" fill="#000"/>
+<circle cx="81.250" cy="45" r="0.600" fill="#000"/>
 <polygon points="35,85 50,85 50,105 35,105" fill="none" stroke="#000" stroke-width="0.300"/>
 <polyline points="35,90 32.500,90" fill="none" stroke="#000" stroke-width="0.300"/>
 <text x="33.750" y="88.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">1</text>
@@ -50,14 +50,14 @@
 <text x="33.750" y="98.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">2</text>
 <text x="38.750" y="101.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">GND</text>
 <text x="42.500" y="80.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">M1</text>
-<polygon points="375,27.500 390,27.500 390,47.500 375,47.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<polyline points="375,32.500 372.500,32.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<text x="373.750" y="31.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">1</text>
-<text x="378" y="33.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">L+</text>
-<polyline points="375,42.500 372.500,42.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<text x="373.750" y="41.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">2</text>
-<text x="377.250" y="43.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">S</text>
-<text x="382.500" y="23" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">TB1</text>
+<polygon points="142.500,27.500 157.500,27.500 157.500,47.500 142.500,47.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="142.500,32.500 140,32.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="141.250" y="31.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">1</text>
+<text x="145.500" y="33.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">L+</text>
+<polyline points="142.500,42.500 140,42.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="141.250" y="41.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">2</text>
+<text x="144.750" y="43.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">S</text>
+<text x="150" y="23" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">TB1</text>
 <polygon points="32.500,27.500 52.500,27.500 52.500,57.500 32.500,57.500" fill="none" stroke="#000" stroke-width="0.300"/>
 <polyline points="32.500,32.500 30,32.500" fill="none" stroke="#000" stroke-width="0.300"/>
 <text x="31.250" y="31.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">1</text>
@@ -75,75 +75,75 @@
 <text x="53.750" y="43.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">5</text>
 <text x="49.500" y="46.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">TX</text>
 <text x="42.500" y="23" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">U1</text>
-<polygon points="207.500,27.500 222.500,27.500 222.500,72.500 207.500,72.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<polyline points="207.500,32.500 205,32.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<text x="206.250" y="31.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">1</text>
-<text x="211.250" y="33.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">VCC</text>
-<polyline points="207.500,42.500 205,42.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<text x="206.250" y="41.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">4</text>
-<text x="212" y="43.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">IN_B</text>
-<polyline points="207.500,47.500 205,47.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<text x="206.250" y="46.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">3</text>
-<text x="212" y="48.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">IN_A</text>
-<polyline points="207.500,52.500 205,52.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<text x="206.250" y="51.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">9</text>
-<text x="210.500" y="53.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">X1</text>
-<polyline points="207.500,57.500 205,57.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<text x="206.250" y="56.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">10</text>
-<text x="210.500" y="58.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">X2</text>
-<polyline points="207.500,67.500 205,67.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<text x="206.250" y="66.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">2</text>
-<text x="211.250" y="68.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">GND</text>
-<text x="215" y="23" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">U2</text>
-<polyline points="200,67.500 200,70" fill="none" stroke="#000" stroke-width="0.300"/>
-<polyline points="203,70 197,70" fill="none" stroke="#000" stroke-width="0.300"/>
-<text x="200" y="66.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">GND</text>
+<polygon points="95,27.500 110,27.500 110,72.500 95,72.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="95,32.500 92.500,32.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="93.750" y="31.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">1</text>
+<text x="98.750" y="33.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">VCC</text>
+<polyline points="95,42.500 92.500,42.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="93.750" y="41.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">4</text>
+<text x="99.500" y="43.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">IN_B</text>
+<polyline points="95,47.500 92.500,47.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="93.750" y="46.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">3</text>
+<text x="99.500" y="48.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">IN_A</text>
+<polyline points="95,52.500 92.500,52.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="93.750" y="51.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">9</text>
+<text x="98" y="53.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">X1</text>
+<polyline points="95,57.500 92.500,57.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="93.750" y="56.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">10</text>
+<text x="98" y="58.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">X2</text>
+<polyline points="95,67.500 92.500,67.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="93.750" y="66.250" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">2</text>
+<text x="98.750" y="68.750" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">GND</text>
+<text x="102.500" y="23" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">U2</text>
+<polyline points="162.500,77.500 162.500,80" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="165.500,80 159.500,80" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="162.500" y="76.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">GND</text>
 <polyline points="25,52.500 25,55" fill="none" stroke="#000" stroke-width="0.300"/>
 <polyline points="28,55 22,55" fill="none" stroke="#000" stroke-width="0.300"/>
 <text x="25" y="51.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">GND</text>
 <polyline points="27.500,100 27.500,102.500" fill="none" stroke="#000" stroke-width="0.300"/>
 <polyline points="30.500,102.500 24.500,102.500" fill="none" stroke="#000" stroke-width="0.300"/>
 <text x="27.500" y="99" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">GND</text>
-<polyline points="395,77.500 395,80" fill="none" stroke="#000" stroke-width="0.300"/>
-<polyline points="398,80 392,80" fill="none" stroke="#000" stroke-width="0.300"/>
-<text x="395" y="76.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">GND</text>
-<polyline points="200,32.500 200,30" fill="none" stroke="#000" stroke-width="0.300"/>
-<polyline points="197,30 203,30" fill="none" stroke="#000" stroke-width="0.300"/>
-<text x="200" y="29" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">P24X</text>
+<polyline points="85,67.500 85,70" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="88,70 82,70" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="85" y="66.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">GND</text>
+<polyline points="135,32.500 135,30" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="132,30 138,30" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="135" y="29" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">P24X</text>
 <polyline points="25,32.500 25,30" fill="none" stroke="#000" stroke-width="0.300"/>
 <polyline points="22,30 28,30" fill="none" stroke="#000" stroke-width="0.300"/>
 <text x="25" y="29" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">P24X</text>
-<polyline points="367.500,32.500 367.500,30" fill="none" stroke="#000" stroke-width="0.300"/>
-<polyline points="364.500,30 370.500,30" fill="none" stroke="#000" stroke-width="0.300"/>
-<text x="367.500" y="29" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">P24X</text>
-<polygon points="377.500,75.500 387.500,75.500 387.500,79.500 377.500,79.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<polyline points="375,77.500 377.500,77.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<polyline points="387.500,77.500 390,77.500" fill="none" stroke="#000" stroke-width="0.300"/>
-<text x="382.500" y="71" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">R1</text>
-<text x="382.500" y="74.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">10k</text>
-<polyline points="196.250,40 196.250,25 223.750,25 223.750,42.500 367.500,42.500" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="196.250,40 200,40 200,42.500" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="196.250,45 196.250,77.500 370,77.500" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="196.250,45 200,45 200,47.500" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="200,52.500 200,57.500" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="205,32.500 200,32.500" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="205,42.500 200,42.500" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="205,47.500 200,47.500" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="205,52.500 200,52.500" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="205,57.500 200,57.500" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="205,67.500 200,67.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="85,32.500 85,30" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="82,30 88,30" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="85" y="29" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">P24X</text>
+<polygon points="145,75.500 155,75.500 155,79.500 145,79.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="142.500,77.500 145,77.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<polyline points="155,77.500 157.500,77.500" fill="none" stroke="#000" stroke-width="0.300"/>
+<text x="150" y="71" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">R1</text>
+<text x="150" y="74.500" font-size="2.500" fill="#000" text-anchor="middle" font-family="sans-serif">10k</text>
+<polyline points="140,32.500 135,32.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="140,42.500 135,42.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="142.500,77.500 137.500,77.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="157.500,77.500 162.500,77.500" fill="none" stroke="#000000" stroke-width="0.350"/>
 <polyline points="25,42.500 21.250,42.500 21.250,90 27.500,90" fill="none" stroke="#000000" stroke-width="0.350"/>
 <polyline points="30,32.500 25,32.500" fill="none" stroke="#000000" stroke-width="0.350"/>
 <polyline points="30,42.500 25,42.500" fill="none" stroke="#000000" stroke-width="0.350"/>
 <polyline points="30,52.500 25,52.500" fill="none" stroke="#000000" stroke-width="0.350"/>
 <polyline points="32.500,100 27.500,100" fill="none" stroke="#000000" stroke-width="0.350"/>
 <polyline points="32.500,90 27.500,90" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="372.500,32.500 367.500,32.500" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="372.500,42.500 367.500,42.500" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="375,77.500 370,77.500" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="390,77.500 395,77.500" fill="none" stroke="#000000" stroke-width="0.350"/>
 <polyline points="55,40 60,40" fill="none" stroke="#000000" stroke-width="0.350"/>
 <polyline points="55,45 60,45" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="60,40 196.250,40" fill="none" stroke="#000000" stroke-width="0.350"/>
-<polyline points="60,45 196.250,45" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="60,40 81.250,40" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="60,45 81.250,45" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="81.250,40 81.250,25 111.250,25 111.250,42.500 135,42.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="81.250,40 85,40 85,42.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="81.250,45 81.250,77.500 137.500,77.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="81.250,45 85,45 85,47.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="85,52.500 85,57.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="92.500,32.500 85,32.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="92.500,42.500 85,42.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="92.500,47.500 85,47.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="92.500,52.500 85,52.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="92.500,57.500 85,57.500" fill="none" stroke="#000000" stroke-width="0.350"/>
+<polyline points="92.500,67.500 85,67.500" fill="none" stroke="#000000" stroke-width="0.350"/>
 </svg>

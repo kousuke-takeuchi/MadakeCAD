@@ -84,9 +84,10 @@ A unit whose source symbol is not a block (a library symbol such as a resistor o
 
 For each source net that touches a carried pin:
 
-1. **Power or ground** (name in `power_nets` or `ground_nets`): no wire. Each carried pin gets its own mark on a 5 mm stub: `power_rail` with the net name as value for power; for ground, the net mark symbol that the source uses on that net, or the library ground mark when the source has none.
-2. **Internal**: every pin of the net is carried on this sheet. The pins are joined by wires.
-3. **Leaving**: some pins are not on this sheet. The carried pins are joined by wires when there are two or more, and one tag (a net label with `tag`) is placed at the pin that comes first in column order. With one carried pin the tag sits at the end of a 5 mm stub. With two or more, the tag hangs on its own branch: the pin's 5 mm stub, then 5 mm more on the same row to the tag, with the flag pointing away from the box; the wire to the other pins leaves the branch before the flag, so the tag is a free end and no wire runs through or along a flag. The pin, the tag and the other pins are one net.
+0. **Pin groups (bars)**: carried pins of one unit on one side that belong to the same net are placed in adjacent rows (in natural order of the pin key) and joined at their stub ends by one straight vertical wire, the bar, with a junction wherever three ends meet (the stub end of every middle pin). This applies to every net class. Rows are left free between two power groups (and between two ground groups) of one side so that the mark of a group does not touch the rows next to it.
+1. **Power or ground** (name in `power_nets` or `ground_nets`): no wire. Each group gets one mark at the end of its bar: `power_rail` with the net name as value at the upper end for power; for ground, the net mark symbol that the source uses on that net, or the library ground mark when the source has none, at the lower end. A single pin is a group of one (mark at the end of its stub).
+2. **Internal**: every pin of the net is carried on this sheet. The groups are joined by wires; each group is one terminal of the router, a point on its bar: the end nearest to its peers, the middle when peers are above and below. A net whose pins are all in one group (a jumper inside one unit) needs no routed wire: the bar is the whole net.
+3. **Leaving**: some pins are not on this sheet. The carried groups are joined by wires when there are two or more, and one tag (a net label with `tag`) is placed at the group that comes first in column order. With one carried group the tag sits at the end of its stub (or bar end). With two or more, the tag hangs on its own branch: the group's terminal point, then 5 mm more outward on the same row to the tag, with the flag pointing away from the box; the wire to the other groups leaves the branch before the flag, so the tag is a free end and no wire runs through or along a flag. The pins, the tag and the other pins are one net.
 
 The tag name is the source net's label name. A source net without a label gets the name `<reference>.<pin>` of the pin that comes first when all pins of the net are sorted by reference and pin key in natural order. The rule uses the whole source net, so every sheet that shows the net computes the same name.
 
@@ -97,23 +98,26 @@ The new sheet has `xref_style` = `sheet_name`, so a tag shows the names of the o
 - A pin whose peers on this sheet are all in columns to the left goes on the left side; all to the right, on the right side; both, on the side with more peers (left on a tie).
 - A pin with no peer on this sheet (leaving nets with one carried pin): right side for a unit in the last column, otherwise left side.
 - Power pins are the first rows of the left side, ground pins the last rows of the left side, each group separated from the signal pins by one spacer row (`{"gap": 1}`).
-- Signal pins on a side are ordered to reduce crossings: two sweeps of the barycentre method over the vertical positions of their peers, ties broken by natural order of the pin key. The result must not depend on hash order: the same input gives the same sheet.
+- Signal groups on a side are ordered to reduce crossings: two sweeps of the barycentre method over the vertical positions of their peers (a group moves as one item; its barycentre is the mean of its pins'), ties broken by natural order of the first pin key. Power groups come first and ground groups last, each ordered by the key of its first pin. The result must not depend on hash order: the same input gives the same sheet.
 
 ### Placement
 
 - The drawing area is the frame's inner area minus the title block.
-- Columns are spread evenly over the width. Units in a column are stacked top to bottom in the given order, with a gap of at least four pitches.
+- Stub length is per unit side: max(5 mm, width of the widest printed outside pin number on that side + 2.5 mm, measured with the block's own text height), rounded up to the 2.5 mm grid, the same for every pin of that side. A long number that the block itself draws into its box is a block rendering matter and is not changed here.
+- Columns are packed, not spread: the first starts at the left edge of the drawing area plus its own left extent; column k+1 starts at the right extent of column k (boxes, stubs, bars, tags, marks) plus a channel of max(20 mm, 10 mm + 2.5 mm × the nets with terminals on both sides of that channel or passing through it), rounded up to the 2.5 mm grid. Units in a column are stacked top to bottom in the given order, top aligned, with a gap of at least four pitches measured between everything one unit draws (marks and bars included) and the caption of the next.
 - Box width holds the longest pin name on both sides plus the reference; `block_pin_text` is chosen so that names are at least 2.2 mm high.
 - Tag text size is chosen so that tags on adjacent pins do not touch (flag height at most pitch minus 1 mm; at a pitch of 2.5 mm the text cannot be smaller than the smallest annotation size, so the flag is taller and adjacent flags are only 0.25 mm apart).
-- A tag's width reserves room for the names of other sheets that appear inside it later: the wider of its `tag_dest`, the longest sheet name of the open project and 10 characters.
+- A tag's width reserves room for the names of other sheets that appear inside it later: the wider of its `tag_dest`, the names of the sheets of the open project that already carry the net name (joined as `xref::tag_dest_names` joins them: at most two names plus the other mark), the longest sheet name of the open project and 10 characters. Column extents include every tag flag with that room.
 - Symbols, pins, the ends of stubs, tags and marks are on the 2.5 mm grid. The bends of routed wires may lie on the router's 1.25 mm grid.
-- A column that is taller than the drawing area, or columns that do not fit the width with a routing channel of at least 15 mm between them, refuse the draft. The message names the column and the excess in mm, so that the caller can move units to another sheet. Nothing is created.
+- A column that is taller than the drawing area, or columns whose right extent (tags and marks included) would cross the right edge of the drawing area with the channels above, refuse the draft. The message names the column and the excess in mm, so that the caller can move units to another sheet. Nothing is created.
 
 ### Wires
 
-Internal wires are planned with the existing router (`route.rs`) on the new sheet's geometry: orthogonal, off symbols and text, right-angle crossings only, junctions where three or more ends meet. Every tag flag (with the reserved destination width) and every mark with its text is an obstacle kept at the router's clearance, and wires stay inside the frame's inner area and out of the title block with its revision rows, as `arrange::frame_areas` reports them for the open project's frame template. A net the router cannot place is joined by a pair of net labels with the net name instead and listed in the result (`labelled`).
+Internal wires are planned with the existing router (`route.rs`) on the new sheet's geometry: orthogonal, off symbols and text, right-angle crossings only, junctions where three or more ends meet. Every tag flag (with the reserved destination width) and every mark with its text is an obstacle kept at the router's clearance, and wires stay inside the frame's inner area and out of the title block with its revision rows, as `arrange::frame_areas` reports them for the open project's frame template. A net the router cannot place is joined instead by tagged labels with the net name (`tag`, flag pointing away from the box, no `tag_dest`) at the end of each terminal's stub or bar branch, and listed in the result (`labelled`).
 
 ### Result
+
+`marked` counts marks (one per power or ground group), not pins.
 
 One edit: add sheet, add entities. Returned JSON:
 

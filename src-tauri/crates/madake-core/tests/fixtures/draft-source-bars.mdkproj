@@ -1,0 +1,798 @@
+{
+  "format_version": 29,
+  "name": "draft-bars",
+  "sheets": [
+    {
+      "id": "bf0ddc55-01f6-4b7d-8e29-b2773534633e",
+      "name": "Sheet1",
+      "kind": "schematic",
+      "size": "A3",
+      "orientation": "Landscape",
+      "zone_cols": 4,
+      "zone_rows": 6,
+      "title_block": {
+        "company": "",
+        "title": "",
+        "drawing_no": "",
+        "scale": "",
+        "date": "",
+        "designed": "",
+        "drawn": "",
+        "checked": "",
+        "approved": "",
+        "rev": ""
+      },
+      "revisions": [],
+      "annotation_text_mm": null,
+      "entities": {
+        "01597f27-b0db-43b4-ac49-dae0defb3d78": {
+          "kind": "net_label",
+          "id": "01597f27-b0db-43b4-ac49-dae0defb3d78",
+          "at": {
+            "x": 35.0,
+            "y": 120.0
+          },
+          "name": "FEED",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "1862b494-f667-46cd-97c9-66d0e3b49ec7": {
+          "kind": "net_label",
+          "id": "1862b494-f667-46cd-97c9-66d0e3b49ec7",
+          "at": {
+            "x": 35.0,
+            "y": 155.0
+          },
+          "name": "D3",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "1fb5b372-8cd3-4abb-884a-151a931b217b": {
+          "kind": "net_label",
+          "id": "1fb5b372-8cd3-4abb-884a-151a931b217b",
+          "at": {
+            "x": 135.0,
+            "y": 112.5
+          },
+          "name": "D2",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "202382bb-1434-4b5a-b11d-f6f1ab4681e4": {
+          "kind": "net_label",
+          "id": "202382bb-1434-4b5a-b11d-f6f1ab4681e4",
+          "at": {
+            "x": 35.0,
+            "y": 145.0
+          },
+          "name": "D1",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "26b5f63e-b090-457e-b0bb-792cf8ae900f": {
+          "kind": "symbol",
+          "id": "26b5f63e-b090-457e-b0bb-792cf8ae900f",
+          "symbol_id": "block",
+          "at": {
+            "x": 60.0,
+            "y": 120.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "UA",
+          "value": "",
+          "attrs": {
+            "block_pins": "{\"left\":[\n {\"no\":\"1\",\"name\":\"G1\"},{\"no\":\"2\",\"name\":\"G2\"},{\"no\":\"3\",\"name\":\"G3\"},\n {\"no\":\"4\",\"name\":\"P1\"},{\"no\":\"5\",\"name\":\"P2\"},\n {\"no\":\"6\",\"name\":\"J1\"},{\"no\":\"7\",\"name\":\"J2\"},\n {\"no\":\"8\",\"name\":\"F1\"},{\"no\":\"9\",\"name\":\"F2\"},\n {\"no\":\"10\",\"name\":\"B1\"},{\"no\":\"11\",\"name\":\"B2\"},\n {\"no\":\"12\",\"name\":\"S1\"},{\"no\":\"13\",\"name\":\"S2\"},{\"no\":\"14\",\"name\":\"S3\"},{\"no\":\"15\",\"name\":\"S4\"}]}",
+            "block_size": "{\"w\":40,\"h\":80}"
+          }
+        },
+        "2a97bcf2-f257-4a7b-86eb-aafd79016470": {
+          "kind": "wire",
+          "id": "2a97bcf2-f257-4a7b-86eb-aafd79016470",
+          "points": [
+            {
+              "x": 242.5,
+              "y": 120.0
+            },
+            {
+              "x": 240.0,
+              "y": 120.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "2b11bfae-1005-42f9-8395-5ac0ca639bf0": {
+          "kind": "wire",
+          "id": "2b11bfae-1005-42f9-8395-5ac0ca639bf0",
+          "points": [
+            {
+              "x": 37.5,
+              "y": 110.0
+            },
+            {
+              "x": 30.0,
+              "y": 110.0
+            },
+            {
+              "x": 30.0,
+              "y": 115.0
+            },
+            {
+              "x": 37.5,
+              "y": 115.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "3388775f-e6b2-4d93-abda-acdc5441ad96": {
+          "kind": "net_label",
+          "id": "3388775f-e6b2-4d93-abda-acdc5441ad96",
+          "at": {
+            "x": 35.0,
+            "y": 125.0
+          },
+          "name": "FEED",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "36f97b6d-77c9-4937-883a-6d433cc77203": {
+          "kind": "wire",
+          "id": "36f97b6d-77c9-4937-883a-6d433cc77203",
+          "points": [
+            {
+              "x": 37.5,
+              "y": 125.0
+            },
+            {
+              "x": 35.0,
+              "y": 125.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "3c31aa7b-918f-4ead-b151-1d7682bbb304": {
+          "kind": "wire",
+          "id": "3c31aa7b-918f-4ead-b151-1d7682bbb304",
+          "points": [
+            {
+              "x": 37.5,
+              "y": 95.0
+            },
+            {
+              "x": 35.0,
+              "y": 95.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "40ad9457-03c3-468e-bf72-c9ef2f6f9d77": {
+          "kind": "net_label",
+          "id": "40ad9457-03c3-468e-bf72-c9ef2f6f9d77",
+          "at": {
+            "x": 135.0,
+            "y": 117.5
+          },
+          "name": "D3",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "41bec683-38eb-4a78-9756-ea4f9a8ad7f3": {
+          "kind": "net_label",
+          "id": "41bec683-38eb-4a78-9756-ea4f9a8ad7f3",
+          "at": {
+            "x": 240.0,
+            "y": 120.0
+          },
+          "name": "FEED",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "4c42a571-31ef-4d30-898e-5a990e9eebbc": {
+          "kind": "net_label",
+          "id": "4c42a571-31ef-4d30-898e-5a990e9eebbc",
+          "at": {
+            "x": 135.0,
+            "y": 132.5
+          },
+          "name": "SIG_C",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "4c8ce7af-2fe1-41ee-8f16-e68d2dbc88e9": {
+          "kind": "net_label",
+          "id": "4c8ce7af-2fe1-41ee-8f16-e68d2dbc88e9",
+          "at": {
+            "x": 35.0,
+            "y": 150.0
+          },
+          "name": "D2",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "4ee3390c-eb65-4997-b957-8b77845da4a7": {
+          "kind": "wire",
+          "id": "4ee3390c-eb65-4997-b957-8b77845da4a7",
+          "points": [
+            {
+              "x": 37.5,
+              "y": 145.0
+            },
+            {
+              "x": 35.0,
+              "y": 145.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "4f987b98-835e-4443-bbfc-7dc743b2005b": {
+          "kind": "net_label",
+          "id": "4f987b98-835e-4443-bbfc-7dc743b2005b",
+          "at": {
+            "x": 35.0,
+            "y": 140.0
+          },
+          "name": "SIG_C",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "4fe20841-9048-4188-a94a-568a1e48ea16": {
+          "kind": "symbol",
+          "id": "4fe20841-9048-4188-a94a-568a1e48ea16",
+          "symbol_id": "block",
+          "at": {
+            "x": 160.0,
+            "y": 120.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "UB",
+          "value": "",
+          "attrs": {
+            "block_pins": "{\"left\":[\n {\"no\":\"P24A_2\",\"name\":\"G\"},{\"no\":\"1\",\"name\":\"D1\"},{\"no\":\"2\",\"name\":\"D2\"},{\"no\":\"3\",\"name\":\"D3\"},\n {\"no\":\"4\",\"name\":\"B1\"},{\"no\":\"5\",\"name\":\"B2\"},{\"no\":\"6\",\"name\":\"IN\"},{\"no\":\"7\",\"name\":\"P\"}]}",
+            "block_size": "{\"w\":40,\"h\":50}"
+          }
+        },
+        "50772fc9-c6ab-4ed5-93dd-bdde18880ca2": {
+          "kind": "wire",
+          "id": "50772fc9-c6ab-4ed5-93dd-bdde18880ca2",
+          "points": [
+            {
+              "x": 37.5,
+              "y": 135.0
+            },
+            {
+              "x": 35.0,
+              "y": 135.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "598d1025-1b47-46c9-89d6-777a0b567d6d": {
+          "kind": "wire",
+          "id": "598d1025-1b47-46c9-89d6-777a0b567d6d",
+          "points": [
+            {
+              "x": 137.5,
+              "y": 132.5
+            },
+            {
+              "x": 135.0,
+              "y": 132.5
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "5ba17cae-a505-4063-9a81-7bb03a02c2b6": {
+          "kind": "net_label",
+          "id": "5ba17cae-a505-4063-9a81-7bb03a02c2b6",
+          "at": {
+            "x": 35.0,
+            "y": 130.0
+          },
+          "name": "BUS",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "5f496e0e-dca9-48dc-b796-46babb8d3acd": {
+          "kind": "wire",
+          "id": "5f496e0e-dca9-48dc-b796-46babb8d3acd",
+          "points": [
+            {
+              "x": 137.5,
+              "y": 127.5
+            },
+            {
+              "x": 135.0,
+              "y": 127.5
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "611a5822-0ffd-41b2-9ae4-e2d7667f00ad": {
+          "kind": "wire",
+          "id": "611a5822-0ffd-41b2-9ae4-e2d7667f00ad",
+          "points": [
+            {
+              "x": 37.5,
+              "y": 85.0
+            },
+            {
+              "x": 35.0,
+              "y": 85.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "66d7e642-137d-48e5-b7ca-a84b5b1492c4": {
+          "kind": "wire",
+          "id": "66d7e642-137d-48e5-b7ca-a84b5b1492c4",
+          "points": [
+            {
+              "x": 137.5,
+              "y": 107.5
+            },
+            {
+              "x": 135.0,
+              "y": 107.5
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "67a44a66-89e4-46d6-bc0e-b6c148daf8c0": {
+          "kind": "wire",
+          "id": "67a44a66-89e4-46d6-bc0e-b6c148daf8c0",
+          "points": [
+            {
+              "x": 37.5,
+              "y": 105.0
+            },
+            {
+              "x": 35.0,
+              "y": 105.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "6cf3be96-1475-4b05-8bd3-53128cc76e13": {
+          "kind": "net_label",
+          "id": "6cf3be96-1475-4b05-8bd3-53128cc76e13",
+          "at": {
+            "x": 135.0,
+            "y": 122.5
+          },
+          "name": "BUS",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "792a02d2-96b8-409e-899d-b030cb9bf836": {
+          "kind": "wire",
+          "id": "792a02d2-96b8-409e-899d-b030cb9bf836",
+          "points": [
+            {
+              "x": 137.5,
+              "y": 112.5
+            },
+            {
+              "x": 135.0,
+              "y": 112.5
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "7e8f919b-7fee-4c5b-8394-f8bc2c4d697c": {
+          "kind": "wire",
+          "id": "7e8f919b-7fee-4c5b-8394-f8bc2c4d697c",
+          "points": [
+            {
+              "x": 37.5,
+              "y": 90.0
+            },
+            {
+              "x": 35.0,
+              "y": 90.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "7ec45708-9d4a-4842-8bfc-162ca12067da": {
+          "kind": "net_label",
+          "id": "7ec45708-9d4a-4842-8bfc-162ca12067da",
+          "at": {
+            "x": 35.0,
+            "y": 135.0
+          },
+          "name": "BUS",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "85154c7b-5442-4bbb-81a1-4f4d1a8fd2d7": {
+          "kind": "wire",
+          "id": "85154c7b-5442-4bbb-81a1-4f4d1a8fd2d7",
+          "points": [
+            {
+              "x": 37.5,
+              "y": 150.0
+            },
+            {
+              "x": 35.0,
+              "y": 150.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "88002df3-eacc-473c-9501-07be7b41ade4": {
+          "kind": "wire",
+          "id": "88002df3-eacc-473c-9501-07be7b41ade4",
+          "points": [
+            {
+              "x": 37.5,
+              "y": 100.0
+            },
+            {
+              "x": 35.0,
+              "y": 100.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "8a040fe0-4558-4b15-b425-9e660d4016e6": {
+          "kind": "net_label",
+          "id": "8a040fe0-4558-4b15-b425-9e660d4016e6",
+          "at": {
+            "x": 135.0,
+            "y": 127.5
+          },
+          "name": "BUS",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "973f7e1f-386c-43ed-bf82-48f0c8fa7b56": {
+          "kind": "wire",
+          "id": "973f7e1f-386c-43ed-bf82-48f0c8fa7b56",
+          "points": [
+            {
+              "x": 137.5,
+              "y": 102.5
+            },
+            {
+              "x": 135.0,
+              "y": 102.5
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "9991394c-713e-4206-abea-54737f5989e0": {
+          "kind": "net_label",
+          "id": "9991394c-713e-4206-abea-54737f5989e0",
+          "at": {
+            "x": 135.0,
+            "y": 137.5
+          },
+          "name": "P24X",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "9f447054-cc2e-41c4-9804-afcf8990d64b": {
+          "kind": "wire",
+          "id": "9f447054-cc2e-41c4-9804-afcf8990d64b",
+          "points": [
+            {
+              "x": 137.5,
+              "y": 117.5
+            },
+            {
+              "x": 135.0,
+              "y": 117.5
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "b0655312-5735-4409-a540-c21ca4e5870c": {
+          "kind": "net_label",
+          "id": "b0655312-5735-4409-a540-c21ca4e5870c",
+          "at": {
+            "x": 135.0,
+            "y": 102.5
+          },
+          "name": "GND",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "b3ab9746-72bd-4a94-9c1b-e5b621fd67f2": {
+          "kind": "wire",
+          "id": "b3ab9746-72bd-4a94-9c1b-e5b621fd67f2",
+          "points": [
+            {
+              "x": 37.5,
+              "y": 140.0
+            },
+            {
+              "x": 35.0,
+              "y": 140.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "b7d6d3fe-3390-47bc-b993-a5770209418f": {
+          "kind": "net_label",
+          "id": "b7d6d3fe-3390-47bc-b993-a5770209418f",
+          "at": {
+            "x": 35.0,
+            "y": 105.0
+          },
+          "name": "P24X",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "bd863b69-f468-4a52-9f8a-bd2cab96ce6a": {
+          "kind": "net_label",
+          "id": "bd863b69-f468-4a52-9f8a-bd2cab96ce6a",
+          "at": {
+            "x": 135.0,
+            "y": 107.5
+          },
+          "name": "D1",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "c4ee3767-07f1-471d-8fc4-d7109eab0453": {
+          "kind": "net_label",
+          "id": "c4ee3767-07f1-471d-8fc4-d7109eab0453",
+          "at": {
+            "x": 35.0,
+            "y": 95.0
+          },
+          "name": "GND",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "c7a322f2-e991-445a-b88b-9ec22ad15002": {
+          "kind": "net_label",
+          "id": "c7a322f2-e991-445a-b88b-9ec22ad15002",
+          "at": {
+            "x": 35.0,
+            "y": 100.0
+          },
+          "name": "P24X",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "cc4a11d0-20f4-41ed-bdc1-9a5aae41e6b9": {
+          "kind": "wire",
+          "id": "cc4a11d0-20f4-41ed-bdc1-9a5aae41e6b9",
+          "points": [
+            {
+              "x": 137.5,
+              "y": 137.5
+            },
+            {
+              "x": 135.0,
+              "y": 137.5
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "d0babb2d-51f7-484e-9b2b-44dd183efef8": {
+          "kind": "wire",
+          "id": "d0babb2d-51f7-484e-9b2b-44dd183efef8",
+          "points": [
+            {
+              "x": 37.5,
+              "y": 120.0
+            },
+            {
+              "x": 35.0,
+              "y": 120.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "d5dc55f6-f24a-41be-918f-219625b8a817": {
+          "kind": "symbol",
+          "id": "d5dc55f6-f24a-41be-918f-219625b8a817",
+          "symbol_id": "block",
+          "at": {
+            "x": 260.0,
+            "y": 120.0
+          },
+          "rotation": 0,
+          "mirror": false,
+          "reference": "UC",
+          "value": "",
+          "attrs": {
+            "block_pins": "{\"left\":[{\"no\":\"1\",\"name\":\"FEED\"}]}",
+            "block_size": "{\"w\":30,\"h\":20}"
+          }
+        },
+        "e3c138a2-708c-461c-9d7c-f4ae564a5505": {
+          "kind": "wire",
+          "id": "e3c138a2-708c-461c-9d7c-f4ae564a5505",
+          "points": [
+            {
+              "x": 137.5,
+              "y": 122.5
+            },
+            {
+              "x": 135.0,
+              "y": 122.5
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "ea98ba38-9132-4b7c-a10d-7cc49cf1456d": {
+          "kind": "net_label",
+          "id": "ea98ba38-9132-4b7c-a10d-7cc49cf1456d",
+          "at": {
+            "x": 35.0,
+            "y": 90.0
+          },
+          "name": "GND",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "f46401e6-0fd9-4960-b4eb-bbf31224248c": {
+          "kind": "net_label",
+          "id": "f46401e6-0fd9-4960-b4eb-bbf31224248c",
+          "at": {
+            "x": 35.0,
+            "y": 85.0
+          },
+          "name": "GND",
+          "rotation": 0,
+          "attrs": {}
+        },
+        "f7795ad8-da7d-40ba-a0bf-a9e01a1783c6": {
+          "kind": "wire",
+          "id": "f7795ad8-da7d-40ba-a0bf-a9e01a1783c6",
+          "points": [
+            {
+              "x": 37.5,
+              "y": 155.0
+            },
+            {
+              "x": 35.0,
+              "y": 155.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        },
+        "fa17f294-e89d-4170-bf33-3e8145f20389": {
+          "kind": "wire",
+          "id": "fa17f294-e89d-4170-bf33-3e8145f20389",
+          "points": [
+            {
+              "x": 37.5,
+              "y": 130.0
+            },
+            {
+              "x": 35.0,
+              "y": 130.0
+            }
+          ],
+          "color": "black",
+          "sq": 0.75,
+          "length_m": null,
+          "length_source": "manual",
+          "part_no": null,
+          "net": null
+        }
+      }
+    }
+  ],
+  "wire_parts": [],
+  "plc_assignments": [],
+  "frame_template": null,
+  "no": null,
+  "mech_links": [],
+  "plc_generate": null
+}

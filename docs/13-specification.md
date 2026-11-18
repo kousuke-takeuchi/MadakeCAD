@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3880 specification clauses** across 6 areas.
+**3904 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -477,17 +477,17 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A unit that has only power and ground pins on the sheet is still drawn, with the marks and nothing else. <sub>`a_unit_with_only_power_pins_is_drawn_with_marks`</sub>
 - Pins are ordered so that the wires between two boxes do not cross, even when the source order is reversed. <sub>`straight_connections_do_not_cross`</sub>
 - The same request always gives the same layout. <sub>`the_same_request_gives_the_same_layout`</sub>
-- Every power pin gets its own rail mark on a 5 mm stub, and the mark is named after the net. <sub>`each_power_pin_gets_its_own_rail_mark_named_after_the_net`</sub>
+- The power pin of each unit gets a rail mark at the end of its stub (as long as the widest number of that side asks), and the mark is named after the net. <sub>`each_power_pin_gets_its_own_rail_mark_named_after_the_net`</sub>
 - A ground mark uses the mark symbol the model names for that net, with the net name as its value when the symbol takes it from the value. <sub>`ground_uses_the_marks_symbol_of_the_source`</sub>
 - When the source has no ground mark, the library rail mark is used, pointing down, with the net name as its value. <sub>`ground_falls_back_to_the_library_mark`</sub>
-- A leaving net gets one tag, on the first pin in column order; when the net is also wired on the sheet, the tag hangs 5 mm beyond that pin's stub, and the pins and the tag are all ends of the wiring. <sub>`a_leaving_net_gets_one_tag_at_the_first_pin_in_column_order`</sub>
+- A leaving net gets one tag, on the first pin in column order; when the net is also wired on the sheet, the tag hangs 5 mm beyond that pin's stub end, and the stub ends and the tag are all ends of the wiring. <sub>`a_leaving_net_gets_one_tag_at_the_first_pin_in_column_order`</sub>
 - A leaving net with one carried pin has a tag but no terminal. <sub>`a_leaving_net_with_one_pin_has_no_terminal`</sub>
 - A tag on a right-side pin points outward (tag_flow = out); a tag on a left-side pin has its body on the outer side too, and no flow. <sub>`a_tag_on_a_right_side_pin_points_outward`</sub>
 - The destinations option becomes the destination text of the tag. <sub>`a_destination_option_becomes_the_tags_destination`</sub>
 - Tags on adjacent pins do not touch, at 5 mm and at 2.5 mm pitch. <sub>`tags_on_adjacent_pins_do_not_touch`</sub>
 - A tag keeps room for the names other sheets add inside it later: its keep-out holds the flag with ten characters and with the longest sheet name of the open project. <sub>`a_tag_reserves_room_for_ten_characters_and_the_longest_sheet_name`</sub>
 - Every box origin, pin, stub end and tag lies on the 2.5 mm grid, at both pitches. <sub>`every_pin_and_origin_is_on_the_grid`</sub>
-- Columns are spread over the drawing area, from its left side to its right side, in the given order. <sub>`columns_are_spread_over_the_drawing_area`</sub>
+- Columns are packed from the left side of the drawing area, in the given order, with at least the minimum channel between them, and stay inside the drawing area. <sub>`columns_are_packed_from_the_left_of_the_drawing_area`</sub>
 - Nothing on the new sheet enters the title block. <sub>`nothing_enters_the_title_block`</sub>
 - A column taller than the drawing area is refused, and the message names the column and the excess in mm. <sub>`a_column_taller_than_the_area_is_refused_with_the_excess`</sub>
 - Columns that leave no routing channel between them are refused, naming the column that does not fit and the excess in mm. <sub>`columns_that_leave_no_channel_are_refused`</sub>
@@ -524,6 +524,33 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Checking changes neither the source nor the open project. <sub>`the_check_changes_nothing`</sub>
 - Lists are in natural order: U2 comes before U10, and pin 9 before pin 10. <sub>`lists_are_in_natural_order`</sub>
 - A pin that is drawn but connected to nothing is reported under split, not as missing. <sub>`an_unconnected_view_pin_is_split_not_missing`</sub>
+
+### draft_look_tests
+
+- Rebuilds tests/fixtures/draft-source-bars.mdkproj (run by hand with --ignored). <sub>`write_the_bars_fixture`</sub>
+- Three ground pins of one unit sit in adjacent rows, in key order, and share one ground mark at the lower end of a vertical bar. <sub>`three_ground_pins_of_one_unit_get_one_mark_at_the_lower_end_of_a_bar`</sub>
+- Two power pins of one unit share one power mark at the upper end of the bar. <sub>`two_power_pins_of_one_unit_get_one_mark_at_the_upper_end_of_a_bar`</sub>
+- The bar has a junction where three ends meet (the stub end of a middle pin) and none at its two ends. <sub>`a_bar_has_a_junction_where_three_ends_meet`</sub>
+- A signal net carried by two pins of one unit puts its pins in adjacent rows on one side, in key order. <sub>`pins_of_a_signal_group_are_in_adjacent_rows_in_key_order`</sub>
+- A jump inside one unit (both pins on the same net and nothing else) is only a bar: no wire is routed and no label is needed, and the two pins stay on one net. <sub>`a_jumper_inside_one_unit_is_only_a_bar`</sub>
+- A leaving net carried by two pins of one unit has one tag, hanging at the end of the bar, and no routed wire. <sub>`a_leaving_net_carried_by_two_pins_of_one_unit_has_one_tag_on_the_bar`</sub>
+- A net whose pins sit in a group on each of two units is routed as one wire between the two bars. <sub>`a_net_between_two_groups_is_one_routed_wire`</sub>
+- The terminal of a group is the bar end nearest to its peers. <sub>`the_terminal_of_a_group_is_the_bar_end_nearest_to_its_peers`</sub>
+- The result counts marks, not pins: three ground pins on one bar are one ground mark. <sub>`marked_counts_marks_not_pins`</sub>
+- A mark never overlaps a pin number, a stub or a text of the rows around it. <sub>`marks_do_not_overlap_the_rows_around_them`</sub>
+- The stub of every pin on a side is as long as the widest printed number of that side asks (at least 5 mm, number width + 2.5 mm, on the 2.5 mm grid): 12.5 mm beside a six character number, 7.5 mm beside two digits, 5 mm beside one digit. <sub>`the_stub_length_follows_the_widest_number_of_a_side`</sub>
+- With one-digit numbers the stub stays 5 mm. <sub>`short_numbers_keep_the_five_millimetre_stub`</sub>
+- No mark, tag, bar or wire overlaps a printed pin number. <sub>`nothing_overlaps_a_printed_pin_number`</sub>
+- When the router gives up on a net, each terminal gets a tag (no destination, flag away from the box) at the end of its stub, never a plain label. <sub>`a_failed_net_gets_tags_at_the_stub_ends`</sub>
+- A tag reserves room for the names of the other sheets that already carry its net, joined as the tags will show them (two names and the other marker). <sub>`a_tag_reserves_room_for_the_sheets_that_already_carry_the_net`</sub>
+- Every tag flag, with room for its destination text, lies inside the drawing area on A3 and on A4. <sub>`every_tag_flag_stays_inside_the_drawing_area`</sub>
+- A request whose tags (with the names of the other sheets that already carry the net) would cross the right edge of the drawing area is refused with the column number and the excess in mm, on A4 and on A3. <sub>`tags_that_would_cross_the_edge_are_refused_with_column_and_excess`</sub>
+- A destination text that is too long for the sheet is refused the same way. <sub>`a_destination_too_long_for_the_sheet_is_refused`</sub>
+- Column k+1 starts one channel after the right extent of column k, with channel = max(20 mm, 10 mm + 2.5 mm per net that crosses it), and the first column starts at the left edge of the drawing area. <sub>`columns_are_packed_with_the_channel_rule`</sub>
+- With few nets the channel is 20 mm, and a single column sits at the left edge, not in the middle. <sub>`a_single_column_sits_at_the_left_edge`</sub>
+- The marks of a unit do not touch the unit's own caption or the caption of the next unit below, and the gap stays at least four pitches. <sub>`marks_keep_clear_of_the_captions_and_the_gap_stays_four_pitches`</sub>
+- Writes the bars fixture as a drafted sheet to the path in MADAKE_DRAFT_SVG (run with --ignored). <sub>`write_the_bars_sheet_as_svg`</sub>
+- Drafts the requests of a JSON file one after another and writes the sheets as SVG for a look (run with --ignored; set MADAKE_DRAFT_REQUESTS and MADAKE_DRAFT_OUT). <sub>`draft_requests_from_a_file_for_looking`</sub>
 
 ### DXF interop (AutoCAD Electrical / EPLAN)
 

@@ -1186,8 +1186,11 @@ pub(crate) const STUB_MM: f64 = 5.0;
 pub(crate) const TAG_BRANCH_MM: f64 = 5.0;
 /// 札の中に後から書かれる他のシートの名前のために、少なくとも確保する文字数。
 pub(crate) const RESERVED_DEST_CHARS: usize = 10;
-/// 隣り合う列のあいだに最低限あける、配線の通り道の幅 (mm)。
-pub(crate) const MIN_CHANNEL_MM: f64 = 15.0;
+/// 隣り合う列のあいだにあける、配線の通り道の幅 (mm) の最小。
+pub(crate) const MIN_CHANNEL_MM: f64 = 20.0;
+/// 通り道の幅の基本 (mm): 通り道を横切るネットが多いとき、この値 + ネット1本につき [`CHANNEL_PER_NET_MM`]。
+const CHANNEL_BASE_MM: f64 = 10.0;
+const CHANNEL_PER_NET_MM: f64 = 2.5;
 /// 描画範囲 (図枠の内側) の縁から空ける余白 (mm)。
 const AREA_MARGIN_MM: f64 = 10.0;
 /// 箱の上に書く参照記号・型番のために、箱の上へ確保する高さ (mm)。
@@ -1214,6 +1217,8 @@ pub(crate) struct Terminal {
     pub dir: Dir,
     /// 札を下げたピンなら、その札の位置 (ピンから同じ行を外へ `STUB_MM + TAG_BRANCH_MM`)。
     pub tag_at: Option<Point>,
+    /// 札の位置そのものの端か (札を下げた組の端と、その札の位置の2つで、札を配線につなぐ)。
+    pub is_tag: bool,
 }
 
 /// layout 段の結果。
@@ -1232,6 +1237,15 @@ pub(crate) struct DraftLayout {
     /// 図枠の内側と表題欄 (改訂欄の行を含む) の矩形 (x0, y0, x1, y1)。[`crate::arrange::frame_areas`] の値。
     pub frame: (f64, f64, f64, f64),
     pub title: (f64, f64, f64, f64),
+    /// 機器のある列ごとの、左端と右端 (用紙のx座標、箱・短い線・棒・タグ・印を含む)。
+    pub columns: Vec<ColumnSpan>,
+}
+
+/// 列1つの横の広がり (用紙のx座標)。
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ColumnSpan {
+    pub left: f64,
+    pub right: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1246,6 +1260,13 @@ enum Row {
     Gap,
 }
 
+/// 箱の1辺で、同じネットのピンを隣の行に並べた組 (「棒」で先をつなぐ)。ピンの添字は鍵の自然順。
+#[derive(Debug, Clone)]
+struct Group {
+    net: usize,
+    pins: Vec<usize>,
+}
+
 /// 機器1つの、ピンの辺・並び (箱の機器だけが並びを持つ)。
 #[derive(Debug, Clone)]
 struct UnitPlan {
@@ -1253,26 +1274,53 @@ struct UnitPlan {
     side: Vec<Side>,
     /// ピンごとの、箱から離れる向き (スタブの向き)。
     stub: Vec<Dir>,
-    /// 電源のピン (左辺の先頭)・信号のピン・接地のピン (左辺の末尾)。ピンの添字。箱の機器だけ。
-    power: Vec<usize>,
-    left: Vec<usize>,
-    right: Vec<usize>,
-    ground: Vec<usize>,
+    /// 辺ごとの短い線の長さ (mm): [左, 右]。その辺のいちばん広い番号に合わせる。ライブラリのシンボルは [`STUB_MM`]。
+    len: [f64; 2],
+    /// 電源の組 (左辺の先頭)・信号の組・接地の組 (左辺の末尾)。箱の機器だけ。
+    power: Vec<Group>,
+    left: Vec<Group>,
+    right: Vec<Group>,
+    ground: Vec<Group>,
+    /// ネットごとに、同じ辺の電源の組のあいだ・接地の組のあいだへ、印のために空ける行数。
+    mark_gap: Vec<usize>,
 }
 
 impl UnitPlan {
-    /// 辺の行 (ピンとすき間)。電源・信号・接地のうち空でない組のあいだに1行のすき間を入れる。
+    /// 辺の組を、箱の上から下の順に。電源・信号・接地の順。
+    fn groups(&self, side: Side) -> Vec<&Group> {
+        match side {
+            Side::Left => self.power.iter().chain(&self.left).chain(&self.ground).collect(),
+            Side::Right => self.right.iter().collect(),
+        }
+    }
+
+    /// 辺の行 (ピンとすき間)。電源・信号・接地のうち空でない種類のあいだに1行のすき間を入れる。電源どうし・接地どうしの組の
+    /// あいだには、印の高さぶんの行をあける (印が隣の行に重ならない)。
     fn rows(&self, side: Side) -> Vec<Row> {
-        let groups: Vec<&Vec<usize>> = match side {
-            Side::Left => [&self.power, &self.left, &self.ground].into_iter().filter(|g| !g.is_empty()).collect(),
-            Side::Right => [&self.right].into_iter().filter(|g| !g.is_empty()).collect(),
-        };
+        let sections: Vec<(u8, &Vec<Group>)> = match side {
+            Side::Left => vec![(0, &self.power), (1, &self.left), (2, &self.ground)],
+            Side::Right => vec![(1, &self.right)],
+        }
+        .into_iter()
+        .filter(|(_, g)| !g.is_empty())
+        .collect();
+        let gap_of = |net: usize| self.mark_gap.get(net).copied().unwrap_or(1);
         let mut out = Vec::new();
-        for (i, g) in groups.iter().enumerate() {
+        for (i, (kind, list)) in sections.iter().enumerate() {
             if i > 0 {
                 out.push(Row::Gap);
             }
-            out.extend(g.iter().map(|&p| Row::Pin(p)));
+            for (j, g) in list.iter().enumerate() {
+                if j > 0 {
+                    let n = match kind {
+                        0 => gap_of(g.net),
+                        2 => gap_of(list[j - 1].net),
+                        _ => 0,
+                    };
+                    out.extend(std::iter::repeat(Row::Gap).take(n));
+                }
+                out.extend(g.pins.iter().map(|&p| Row::Pin(p)));
+            }
         }
         out
     }
@@ -1290,6 +1338,11 @@ impl UnitPlan {
     fn row_index(&self, pin: usize) -> Option<usize> {
         [Side::Left, Side::Right].into_iter().find_map(|s| self.rows(s).iter().position(|r| *r == Row::Pin(pin)))
     }
+}
+
+/// 辺のいちばん広い番号の幅 (mm) から、その辺の短い線の長さを決める: 5mm以上、番号の幅 + 2.5mm、2.5mmの格子へ切り上げ。
+fn stub_length(widest_number: f64) -> f64 {
+    grid_up(f64::max(STUB_MM, widest_number + GRID_MM))
 }
 
 fn dir_of_pin(d: PinDir) -> Dir {
@@ -1354,9 +1407,27 @@ fn library_pin_geometry(unit: &DraftUnit, defs: &[SymbolDef]) -> Result<Vec<(Sid
         .collect()
 }
 
-/// 機器ごとに、ピンの辺を決める (並びは自然順のまま)。
-fn plan_units(model: &DraftModel, defs: &[SymbolDef]) -> Result<Vec<UnitPlan>, String> {
+/// 同じネットのピンを1つの組にする。組は最初のピンの鍵の自然順、組の中のピンも鍵の自然順。
+fn grouped(unit: &DraftUnit, pins: Vec<usize>) -> Vec<Group> {
+    let mut by: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for p in pins {
+        by.entry(unit.pins[p].net).or_default().push(p);
+    }
+    let mut groups: Vec<Group> = by
+        .into_iter()
+        .map(|(net, mut pins)| {
+            pins.sort_by(|a, b| natural_cmp(&unit.pins[*a].key, &unit.pins[*b].key));
+            Group { net, pins }
+        })
+        .collect();
+    groups.sort_by(|a, b| natural_cmp(&unit.pins[a.pins[0]].key, &unit.pins[b.pins[0]].key));
+    groups
+}
+
+/// 機器ごとに、ピンの辺と組を決める (信号の組の並びは自然順のまま)。`mark_gap` はネットごとの、印のために空ける行数。
+fn plan_units(model: &DraftModel, defs: &[SymbolDef], pitch: f64, mark_gap: &[usize]) -> Result<Vec<UnitPlan>, String> {
     let last_column = model.units.iter().map(|u| u.column).max().unwrap_or(0);
+    let th = pin_text_mm(pitch);
     // ネットごとの、このシートのピン (機器の添字, ピンの添字)
     let mut by_net: BTreeMap<usize, Vec<(usize, usize)>> = BTreeMap::new();
     for (u, unit) in model.units.iter().enumerate() {
@@ -1369,10 +1440,12 @@ fn plan_units(model: &DraftModel, defs: &[SymbolDef]) -> Result<Vec<UnitPlan>, S
         let mut plan = UnitPlan {
             side: vec![Side::Left; unit.pins.len()],
             stub: vec![Dir::W; unit.pins.len()],
+            len: [STUB_MM, STUB_MM],
             power: Vec::new(),
             left: Vec::new(),
             right: Vec::new(),
             ground: Vec::new(),
+            mark_gap: mark_gap.to_vec(),
         };
         if !unit.is_block {
             for (p, (side, dir)) in library_pin_geometry(unit, defs)?.into_iter().enumerate() {
@@ -1382,15 +1455,16 @@ fn plan_units(model: &DraftModel, defs: &[SymbolDef]) -> Result<Vec<UnitPlan>, S
             plans.push(plan);
             continue;
         }
+        let (mut power, mut left, mut right, mut ground) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
         for (p, pin) in unit.pins.iter().enumerate() {
             let net = &model.nets[pin.net];
             let side = match net.class {
                 NetClass::Power => {
-                    plan.power.push(p);
+                    power.push(p);
                     Side::Left
                 }
                 NetClass::Ground => {
-                    plan.ground.push(p);
+                    ground.push(p);
                     Side::Left
                 }
                 NetClass::Internal | NetClass::Leaving => {
@@ -1413,8 +1487,8 @@ fn plan_units(model: &DraftModel, defs: &[SymbolDef]) -> Result<Vec<UnitPlan>, S
                         }
                     };
                     match side {
-                        Side::Left => plan.left.push(p),
-                        Side::Right => plan.right.push(p),
+                        Side::Left => left.push(p),
+                        Side::Right => right.push(p),
                     }
                     side
                 }
@@ -1422,17 +1496,28 @@ fn plan_units(model: &DraftModel, defs: &[SymbolDef]) -> Result<Vec<UnitPlan>, S
             plan.side[p] = side;
             plan.stub[p] = if side == Side::Left { Dir::W } else { Dir::E };
         }
-        let by_key = |a: &usize, b: &usize| natural_cmp(&unit.pins[*a].key, &unit.pins[*b].key);
-        plan.power.sort_by(by_key);
-        plan.left.sort_by(by_key);
-        plan.right.sort_by(by_key);
-        plan.ground.sort_by(by_key);
+        plan.power = grouped(unit, power);
+        plan.left = grouped(unit, left);
+        plan.right = grouped(unit, right);
+        plan.ground = grouped(unit, ground);
+        // 辺ごとの短い線: その辺で印字される番号のうちいちばん広いものに合わせる
+        for (i, side) in [Side::Left, Side::Right].into_iter().enumerate() {
+            let widest = unit
+                .pins
+                .iter()
+                .enumerate()
+                .filter(|(p, _)| plan.side[*p] == side)
+                .map(|(_, pin)| text_width(pin.key.trim(), th))
+                .fold(0.0, f64::max);
+            plan.len[i] = stub_length(widest);
+        }
         plans.push(plan);
     }
     Ok(plans)
 }
 
-/// 重心法で信号のピンの並びを決める。左から右、右から左の2回の掃引。決定的 (同じ重心は自然順)。
+/// 重心法で信号の組の並びを決める。左から右、右から左の2回の掃引。決定的 (同じ重心は自然順)。
+/// 組は1つの項目として動き、重心はその組のピンの重心の平均 (同じネットのピンの相手は同じなので、組の相手の位置の平均)。
 fn order_pins(model: &DraftModel, plans: &mut [UnitPlan], tops: &[f64], mids: &[f64], pitch: f64) {
     let last_column = model.units.iter().map(|u| u.column).max().unwrap_or(0);
     // 信号のネットの、相手のピン (自分の機器の外)
@@ -1458,8 +1543,8 @@ fn order_pins(model: &DraftModel, plans: &mut [UnitPlan], tops: &[f64], mids: &[
                     }
                     let bary: Vec<Option<f64>> = list
                         .iter()
-                        .map(|&p| {
-                            let ys: Vec<f64> = by_net[&model.units[u].pins[p].net]
+                        .map(|g| {
+                            let ys: Vec<f64> = by_net[&g.net]
                                 .iter()
                                 .filter(|(u2, _)| *u2 != u)
                                 .map(|&(u2, p2)| {
@@ -1474,17 +1559,17 @@ fn order_pins(model: &DraftModel, plans: &mut [UnitPlan], tops: &[f64], mids: &[
                         })
                         .collect();
                     let slots: Vec<usize> = (0..list.len()).filter(|&i| bary[i].is_some()).collect();
-                    let mut movable: Vec<(f64, usize)> = slots.iter().map(|&i| (bary[i].unwrap(), list[i])).collect();
+                    let mut movable: Vec<(f64, Group)> = slots.iter().map(|&i| (bary[i].unwrap(), list[i].clone())).collect();
                     movable.sort_by(|a, b| {
                         if (a.0 - b.0).abs() < 1e-9 {
-                            natural_cmp(&model.units[u].pins[a.1].key, &model.units[u].pins[b.1].key)
+                            natural_cmp(&model.units[u].pins[a.1.pins[0]].key, &model.units[u].pins[b.1.pins[0]].key)
                         } else {
                             a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal)
                         }
                     });
                     let mut next = list.clone();
-                    for (slot, (_, p)) in slots.iter().zip(movable) {
-                        next[*slot] = p;
+                    for (slot, (_, g)) in slots.iter().zip(movable) {
+                        next[*slot] = g;
                     }
                     if side == Side::Left {
                         plans[u].left = next;
@@ -1607,7 +1692,118 @@ fn stub_wire(from: Point, to: Point) -> Entity {
     Entity::Wire(default_wire(vec![from, to]))
 }
 
-/// 置いた機器のピンから、印・タグ・スタブ・配線の端を作る。
+/// 配置した組1つ: 箱の1辺の同じネットのピン (ライブラリのシンボルは1ピンだけの組)。
+struct PlacedGroup {
+    /// [`DraftModel::units`] の添字。
+    u: usize,
+    side: Side,
+    /// 箱から離れる向き (短い線の向き)。
+    dir: Dir,
+    /// 短い線の長さ (mm)。
+    len: f64,
+    pins: Vec<usize>,
+    net: usize,
+}
+
+/// 全ての組を、機器の順 (列 → 列の中の行)、箱の中の上から下の順に並べる。
+fn placed_groups(model: &DraftModel, plans: &[UnitPlan]) -> Vec<PlacedGroup> {
+    let mut out = Vec::new();
+    for (u, unit) in model.units.iter().enumerate() {
+        if unit.is_block {
+            for (i, side) in [Side::Left, Side::Right].into_iter().enumerate() {
+                for g in plans[u].groups(side) {
+                    out.push(PlacedGroup {
+                        u,
+                        side,
+                        dir: if side == Side::Left { Dir::W } else { Dir::E },
+                        len: plans[u].len[i],
+                        pins: g.pins.clone(),
+                        net: g.net,
+                    });
+                }
+            }
+        } else {
+            for (p, pin) in unit.pins.iter().enumerate() {
+                out.push(PlacedGroup { u, side: plans[u].side[p], dir: plans[u].stub[p], len: STUB_MM, pins: vec![p], net: pin.net });
+            }
+        }
+    }
+    out
+}
+
+/// 札のネットラベル: 旗の本体は箱から離れる側へ伸びる。左辺 (向き W) のピンは「右」(本体が基準点の左)、
+/// 右辺 (向き E) のピンは「左」+外向き。行き先は与えたときだけ付ける。
+fn tag_label(name: &str, at: Point, dir: Dir, dest: Option<&String>) -> NetLabel {
+    let right_side = dir == Dir::E;
+    let mut attrs = BTreeMap::new();
+    attrs.insert(crate::net_tag::TAG_ATTR.to_string(), if right_side { "left" } else { "right" }.to_string());
+    if right_side {
+        attrs.insert(crate::net_tag::FLOW_ATTR.to_string(), "out".to_string());
+    }
+    if let Some(dest) = dest {
+        attrs.insert(crate::net_tag::DEST_ATTR.to_string(), dest.clone());
+    }
+    NetLabel { id: uuid::Uuid::new_v4(), at, name: name.to_string(), rotation: 0, attrs }
+}
+
+/// 印のシンボルの定義: 接地は元の図の印、無ければ (電源も) 同梱の電源の印。
+fn mark_def<'a>(index: &DefIndex<'a>, net: &DraftNet) -> Result<&'a SymbolDef, String> {
+    let symbol_id = if net.class == NetClass::Ground { net.ground_symbol.as_deref().unwrap_or(POWER_SYMBOL) } else { POWER_SYMBOL };
+    index
+        .by_id(symbol_id)
+        .or_else(|| index.by_id(POWER_SYMBOL))
+        .ok_or_else(|| format!("The mark symbol {symbol_id} is not available"))
+}
+
+/// 電源・接地の印を `at` (棒の端) に置く。電源の印は上へ、接地の印は下へ伸びる (ピンの接続方向が下・上を向く)。
+fn mark_instance(index: &DefIndex, net: &DraftNet, at: Point) -> Result<SymbolInstance, String> {
+    let def = mark_def(index, net)?;
+    let ground = net.class == NetClass::Ground;
+    Ok(SymbolInstance {
+        id: uuid::Uuid::new_v4(),
+        symbol_id: def.id.clone(),
+        at,
+        rotation: mark_rotation(def, if ground { PinDir::Up } else { PinDir::Down }),
+        mirror: false,
+        reference: String::new(),
+        value: if def.net_from_value { net.name.clone() } else { String::new() },
+        attrs: BTreeMap::new(),
+    })
+}
+
+/// 印の図形と値の文字が占める矩形。値は印の外形の上下に書かれる。
+fn mark_rect(s: &SymbolInstance, def: &SymbolDef) -> Rect {
+    let mut r = symbol_bounds(s, def).unwrap_or_else(|| Rect::from_corners(s.at, s.at));
+    let half = text_width(&s.value, MARK_TEXT_MM) / 2.0;
+    r.extend(Point::new(s.at.x - half, r.min.y - MARK_TEXT_MM));
+    r.extend(Point::new(s.at.x + half, r.max.y + MARK_TEXT_MM));
+    r
+}
+
+/// ネットごとに、同じ辺の電源どうし (接地どうし) の組のあいだへ空ける行数: 印の高さ + 1mm が隣の行に掛からないだけ。
+/// 電源の印は棒の上の端から上へ、接地の印は下の端から下へ伸びる。
+fn mark_gaps(model: &DraftModel, defs: &[SymbolDef], pitch: f64) -> Result<Vec<usize>, String> {
+    let index = DefIndex::new(defs);
+    model
+        .nets
+        .iter()
+        .map(|net| {
+            if !matches!(net.class, NetClass::Power | NetClass::Ground) {
+                return Ok(1);
+            }
+            let def = mark_def(&index, net)?;
+            let r = mark_rect(&mark_instance(&index, net, origin())?, def);
+            let span = if net.class == NetClass::Ground { r.max.y } else { -r.min.y };
+            Ok((((span + 1.0) / pitch - 1e-9).ceil() as usize).saturating_sub(1).max(1))
+        })
+        .collect()
+}
+
+/// 置いた機器のピンから、印・タグ・スタブ・棒・配線の端を作る。
+///
+/// 同じ辺の同じネットのピンは1つの組で、短い線の先を縦の棒 (1本の線) でつなぎ、3本の端が会う所に接点の丸を打つ。
+/// 電源・接地の組は印を1つだけ (電源は棒の上の端、接地は下の端)。内部・出ていくネットの組は配線の端が1つ
+/// (相手に近い棒の端。相手が上下にあるなら棒の真ん中)。
 fn decorate(
     model: &DraftModel,
     plans: &[UnitPlan],
@@ -1620,110 +1816,116 @@ fn decorate(
         .map(|p| ((p.entity, p.number), p.pos))
         .collect();
     let index = DefIndex::new(defs);
-    // ネットごとのこのシートのピン数
-    let mut count = vec![0usize; model.nets.len()];
+    let groups = placed_groups(model, plans);
+    let pin_pos = |u: usize, p: usize| -> Result<Point, String> {
+        let unit = &model.units[u];
+        points
+            .get(&(ids[u], unit.pins[p].key.clone()))
+            .copied()
+            .ok_or_else(|| format!("The unit {} has no pin {} on the new sheet", unit.reference, unit.pins[p].key))
+    };
+    // ネットごとの、このシートの組の数とピンの数
+    let mut group_count = vec![0usize; model.nets.len()];
+    for g in &groups {
+        group_count[g.net] += 1;
+    }
+    let mut pin_count = vec![0usize; model.nets.len()];
     for unit in &model.units {
         for pin in &unit.pins {
-            count[pin.net] += 1;
+            pin_count[pin.net] += 1;
         }
     }
-    // 出ていくネットのタグは、列 → 列の中の行 → 箱の中のピンの並びで最初のピンに付ける
-    let mut tag_pin: BTreeMap<usize, (usize, usize)> = BTreeMap::new();
-    for (u, unit) in model.units.iter().enumerate() {
-        let order: Vec<usize> = if unit.is_block { plans[u].box_order() } else { (0..unit.pins.len()).collect() };
-        for p in order {
-            let net = unit.pins[p].net;
-            if model.nets[net].class == NetClass::Leaving {
-                tag_pin.entry(net).or_insert((u, p));
-            }
+    // 出ていくネットのタグは、列 → 列の中の行 → 箱の中の並びで最初の組に付ける
+    let mut tag_group: BTreeMap<usize, usize> = BTreeMap::new();
+    for (i, g) in groups.iter().enumerate() {
+        if model.nets[g.net].class == NetClass::Leaving {
+            tag_group.entry(g.net).or_insert(i);
         }
     }
     let mut out = Deco { items: Vec::new(), terminals: Vec::new(), tagged: Vec::new(), power: 0, ground: 0 };
-    for (u, unit) in model.units.iter().enumerate() {
-        let order: Vec<usize> = if unit.is_block { plans[u].box_order() } else { (0..unit.pins.len()).collect() };
-        for p in order {
-            let pin = &unit.pins[p];
-            let net = &model.nets[pin.net];
-            let at = *points
-                .get(&(ids[u], pin.key.clone()))
-                .ok_or_else(|| format!("The unit {} has no pin {} on the new sheet", unit.reference, pin.key))?;
-            let dir = plans[u].stub[p];
-            let (dx, dy) = unit_vec(dir);
-            let end = Point::new(at.x + dx * STUB_MM, at.y + dy * STUB_MM);
-            let mut item = |entity: Entity| out.items.push(DecoItem { unit: u, entity });
-            match net.class {
-                NetClass::Power | NetClass::Ground => {
-                    let ground = net.class == NetClass::Ground;
-                    let symbol_id = if ground { net.ground_symbol.as_deref().unwrap_or(POWER_SYMBOL) } else { POWER_SYMBOL };
-                    let def = index
-                        .by_id(symbol_id)
-                        .or_else(|| index.by_id(POWER_SYMBOL))
-                        .ok_or_else(|| format!("The mark symbol {symbol_id} is not available"))?;
-                    // 電源の印は上へ、接地の印は下へ伸びる (ピンの接続方向が下・上を向く)
-                    let rotation = mark_rotation(def, if ground { PinDir::Up } else { PinDir::Down });
-                    let value = if def.net_from_value { net.name.clone() } else { String::new() };
-                    item(stub_wire(at, end));
-                    item(Entity::Symbol(SymbolInstance {
-                        id: uuid::Uuid::new_v4(),
-                        symbol_id: def.id.clone(),
-                        at: end,
-                        rotation,
-                        mirror: false,
-                        reference: String::new(),
-                        value,
-                        attrs: BTreeMap::new(),
-                    }));
-                    if ground {
-                        out.ground += 1;
-                    } else {
-                        out.power += 1;
-                    }
+    for (gi, g) in groups.iter().enumerate() {
+        let (u, net) = (g.u, &model.nets[g.net]);
+        let (dx, dy) = unit_vec(g.dir);
+        let mut roots = Vec::new();
+        for &p in &g.pins {
+            roots.push(pin_pos(u, p)?);
+        }
+        let ends: Vec<Point> = roots.iter().map(|r| Point::new(r.x + dx * g.len, r.y + dy * g.len)).collect();
+        let (first, last) = (ends[0], ends[ends.len() - 1]);
+        let mut items: Vec<Entity> = Vec::new();
+        for (r, e) in roots.iter().zip(&ends) {
+            items.push(stub_wire(*r, *e));
+        }
+        if ends.len() >= 2 {
+            // 棒: 短い線の先を結ぶ1本の線。途中のピンの短い線の先は3本が会う所
+            items.push(stub_wire(first, last));
+            for e in &ends[1..ends.len() - 1] {
+                items.push(junction_at(*e));
+            }
+        }
+        match net.class {
+            NetClass::Power | NetClass::Ground => {
+                let ground = net.class == NetClass::Ground;
+                items.push(Entity::Symbol(mark_instance(&index, net, if ground { last } else { first })?));
+                if ground {
+                    out.ground += 1;
+                } else {
+                    out.power += 1;
                 }
-                NetClass::Internal | NetClass::Leaving => {
-                    let is_tag = tag_pin.get(&pin.net) == Some(&(u, p));
-                    let wired = count[pin.net] >= 2;
-                    if is_tag {
-                        // 配線もあるネットの札は、ピンの短い線のさらに先 (枝の端) に下げる。配線はピンの短い線の先から
-                        // 出て、札の手前で相手へ曲がるので、旗の上も脇も通らない。配線の無いネットの札は短い線の先
-                        let reach = if wired { STUB_MM + TAG_BRANCH_MM } else { STUB_MM };
-                        let tag_at = Point::new(at.x + dx * reach, at.y + dy * reach);
-                        let mut attrs = BTreeMap::new();
-                        // 旗の本体は箱から離れる側へ伸びる: 左辺のピンは「右」(本体が基準点の左)、右辺のピンは「左」+外向き
-                        let right_side = plans[u].side[p] == Side::Right;
-                        attrs.insert(crate::net_tag::TAG_ATTR.to_string(), if right_side { "left" } else { "right" }.to_string());
-                        if right_side {
-                            attrs.insert(crate::net_tag::FLOW_ATTR.to_string(), "out".to_string());
+            }
+            NetClass::Internal | NetClass::Leaving => {
+                let wired = group_count[g.net] >= 2;
+                // 配線の端: 相手に近い棒の端。相手が棒の上にも下にもあれば棒の真ん中
+                let t = if !wired || ends.len() == 1 {
+                    first
+                } else {
+                    let mut above = false;
+                    let mut below = false;
+                    for g2 in groups.iter().filter(|g2| g2.net == g.net && g2.u != u) {
+                        for &p2 in &g2.pins {
+                            let y = pin_pos(g2.u, p2)?.y;
+                            above |= y < first.y - 1e-9;
+                            below |= y > last.y + 1e-9;
                         }
-                        if let Some(dest) = &net.dest {
-                            attrs.insert(crate::net_tag::DEST_ATTR.to_string(), dest.clone());
-                        }
-                        if !wired {
-                            item(stub_wire(at, end));
-                        }
-                        item(Entity::NetLabel(NetLabel {
-                            id: uuid::Uuid::new_v4(),
-                            at: tag_at,
-                            name: net.name.clone(),
-                            rotation: 0,
-                            attrs,
-                        }));
-                        out.tagged.push((net.name.clone(), count[pin.net]));
-                        if wired {
-                            out.terminals.push(Terminal { net: pin.net, at, dir, tag_at: Some(tag_at) });
-                            out.terminals.push(Terminal { net: pin.net, at: tag_at, dir: dir.opp(), tag_at: None });
-                        }
-                    } else if wired {
-                        out.terminals.push(Terminal { net: pin.net, at, dir, tag_at: None });
                     }
+                    match (above, below) {
+                        (true, true) => Point::new(first.x, grid_down((first.y + last.y) / 2.0)),
+                        (false, true) => last,
+                        _ => first,
+                    }
+                };
+                if ends.iter().all(|e| e.distance_to(&t) > 1e-6) {
+                    items.push(junction_at(t));
+                }
+                let is_tag = tag_group.get(&g.net) == Some(&gi);
+                if is_tag {
+                    // 配線もあるネットの札は、棒の端の先 (枝の端) に下げる。配線は端から出て、札の手前で相手へ曲がるので、
+                    // 旗の上も脇も通らない。配線の無いネットの札は端そのもの
+                    let reach = if wired { TAG_BRANCH_MM } else { 0.0 };
+                    let tag_at = Point::new(t.x + dx * reach, t.y + dy * reach);
+                    items.push(Entity::NetLabel(tag_label(&net.name, tag_at, g.dir, net.dest.as_ref())));
+                    out.tagged.push((net.name.clone(), pin_count[g.net]));
+                    if wired {
+                        out.terminals.push(Terminal { net: g.net, at: t, dir: g.dir, tag_at: Some(tag_at), is_tag: false });
+                        out.terminals.push(Terminal { net: g.net, at: tag_at, dir: g.dir.opp(), tag_at: None, is_tag: true });
+                    }
+                } else if wired {
+                    out.terminals.push(Terminal { net: g.net, at: t, dir: g.dir, tag_at: None, is_tag: false });
                 }
             }
         }
+        out.items.extend(items.into_iter().map(|entity| DecoItem { unit: u, entity }));
     }
     Ok(out)
 }
 
+fn junction_at(at: Point) -> Entity {
+    let id = uuid::Uuid::new_v4();
+    Entity::Junction(crate::model::Junction { id, at })
+}
+
 /// 札の旗の中に書かれうる行き先の文字のうち、いちばん幅の広いもの: 自分の `tag_dest`、`reserve`
-/// (開いているプロジェクトの最も長いシート名と、[`RESERVED_DEST_CHARS`] 文字のうち広い方)。
+/// (確保する文字: 後から他のシートが書く名前)。
 fn widest_dest<'a>(label: &'a NetLabel, reserve: &'a str, font: f64) -> &'a str {
     match crate::net_tag::tag_dest(label) {
         Some(d) if text_width(d, font) > text_width(reserve, font) => d,
@@ -1742,6 +1944,43 @@ fn reserved_dest(open: &Project) -> String {
         .fold(String::new(), |best, n| if text_width(&n, 1.0) > text_width(&best, 1.0) { n } else { best })
 }
 
+/// 札の旗に後から書かれる行き先のために確保する文字の決め方。
+struct Reserve {
+    /// どの札にも確保する文字 ([`reserved_dest`])。
+    floor: String,
+    /// 札の名前 → 開いているプロジェクトの、同じ名前がすでにあるシートの名前を、旗に書かれるとおりにつないだ文字
+    /// ([`crate::xref::tag_dest_names`]: 2枚まで + 「他」)。
+    joined: BTreeMap<String, String>,
+}
+
+impl Reserve {
+    /// 床だけ (つなぎ方を調べない)。
+    #[cfg(test)]
+    fn floor_only(open: &Project) -> Self {
+        Reserve { floor: reserved_dest(open), joined: BTreeMap::new() }
+    }
+
+    /// 出ていくネットの札ごとに、すでに同じ名前を持つシートの名前をつないだ文字を調べる。
+    fn of(open: &Project, model: &DraftModel) -> Self {
+        let mut r = Reserve { floor: reserved_dest(open), joined: BTreeMap::new() };
+        let new_sheet = uuid::Uuid::new_v4(); // まだ無いシート: 開いているプロジェクトの全シートが相手になる
+        for net in model.nets.iter().filter(|n| n.class == NetClass::Leaving) {
+            if let Some(text) = crate::xref::tag_dest_names(open, new_sheet, &net.name) {
+                r.joined.insert(net.name.trim().to_string(), text);
+            }
+        }
+        r
+    }
+
+    /// 名前が `name` の札に確保する文字 (床とつないだ名前の広い方)。
+    fn text(&self, name: &str) -> &str {
+        match self.joined.get(name.trim()) {
+            Some(j) if text_width(j, 1.0) > text_width(&self.floor, 1.0) => j,
+            _ => &self.floor,
+        }
+    }
+}
+
 /// 札の旗の外形 (先端を含む)。行き先には `reserve` を含めて最も広い文字を使う。札でなければ `None`。
 pub(crate) fn flag_rect(label: &NetLabel, label_font: f64, style: XrefStyle, reserve: &str) -> Option<Rect> {
     let dest = widest_dest(label, reserve, label_font);
@@ -1754,7 +1993,7 @@ pub(crate) fn flag_rect(label: &NetLabel, label_font: f64, style: XrefStyle, res
 }
 
 /// 置いたものが占める矩形。札は後から書かれる行き先 (`reserve`) の分まで広げる。
-fn item_rect(entity: &Entity, defs: &[SymbolDef], sheet: &Sheet, label_font: f64, reserve: &str) -> Option<Rect> {
+fn item_rect(entity: &Entity, defs: &[SymbolDef], sheet: &Sheet, label_font: f64, reserve: &Reserve) -> Option<Rect> {
     match entity {
         Entity::Wire(w) => {
             let mut it = w.points.iter();
@@ -1763,18 +2002,13 @@ fn item_rect(entity: &Entity, defs: &[SymbolDef], sheet: &Sheet, label_font: f64
             it.for_each(|p| r.extend(*p));
             Some(r)
         }
-        Entity::NetLabel(l) => {
-            Some(flag_rect(l, label_font, sheet.xref_style, reserve).unwrap_or_else(|| Rect::from_corners(l.at, l.at)))
-        }
+        Entity::NetLabel(l) => Some(
+            flag_rect(l, label_font, sheet.xref_style, reserve.text(&l.name)).unwrap_or_else(|| Rect::from_corners(l.at, l.at)),
+        ),
         Entity::Symbol(s) => {
             let index = DefIndex::new(defs);
             let def = index.get(s)?;
-            let mut r = symbol_bounds(s, &def).unwrap_or_else(|| Rect::from_corners(s.at, s.at));
-            // 印の値 (ネット名) は印の外形の上下に書かれる
-            let half = text_width(&s.value, MARK_TEXT_MM) / 2.0;
-            r.extend(Point::new(s.at.x - half, r.min.y - MARK_TEXT_MM));
-            r.extend(Point::new(s.at.x + half, r.max.y + MARK_TEXT_MM));
-            Some(r)
+            Some(mark_rect(s, &def))
         }
         _ => None,
     }
@@ -1804,7 +2038,7 @@ pub(crate) fn lay_out_in(
     template: &crate::frame_template::FrameTemplate,
 ) -> Result<DraftLayout, String> {
     let pitch = req.pitch_mm;
-    let reserve = reserved_dest(open);
+    let reserve = Reserve::of(open, model);
     let units = &model.units;
     if units.is_empty() {
         return Err("No unit carries a pin: nothing to draw".to_string());
@@ -1859,7 +2093,8 @@ pub(crate) fn lay_out_in(
     }
     let defs = sheet_symbol_defs(&defs_sheet);
 
-    let mut plans = plan_units(model, &defs)?;
+    let mark_gap = mark_gaps(model, &defs, pitch)?;
+    let mut plans = plan_units(model, &defs, pitch, &mark_gap)?;
 
     // 機器の高さ (箱の高さ、またはシンボルの外形) と、列ごとに積んだときの上端 (並べ替えの目安)
     let heights: Vec<f64> = units
@@ -1937,30 +2172,38 @@ pub(crate) fn lay_out_in(
     let left_of: Vec<f64> = columns.iter().map(|&c| grid_up(members(c).iter().map(|&u| -extent[u].min.x).fold(0.0, f64::max))).collect();
     let right_of: Vec<f64> = columns.iter().map(|&c| grid_up(members(c).iter().map(|&u| extent[u].max.x).fold(0.0, f64::max))).collect();
     let widths: Vec<f64> = left_of.iter().zip(&right_of).map(|(l, r)| l + r).collect();
-    let avail = area_x1 - area_x0;
-    let mut need = 0.0;
+    // 通り道: 列kと列k+1のあいだは、20mmと、10mm + そこを横切る (両側に端がある) ネット1本につき2.5mm の大きい方
+    let column_pos: BTreeMap<usize, usize> = columns.iter().enumerate().map(|(k, &c)| (c, k)).collect();
+    let mut net_span: BTreeMap<usize, (usize, usize)> = BTreeMap::new();
+    for unit in units {
+        for pin in &unit.pins {
+            if matches!(model.nets[pin.net].class, NetClass::Internal | NetClass::Leaving) {
+                let k = column_pos[&unit.column];
+                let e = net_span.entry(pin.net).or_insert((k, k));
+                e.0 = e.0.min(k);
+                e.1 = e.1.max(k);
+            }
+        }
+    }
+    let channel = |k: usize| -> f64 {
+        let crossing = net_span.values().filter(|(lo, hi)| *lo <= k && *hi > k).count();
+        grid_up(f64::max(MIN_CHANNEL_MM, CHANNEL_BASE_MM + CHANNEL_PER_NET_MM * crossing as f64))
+    };
+    // 詰めて並べる: 最初の列は描画範囲の左端から、次の列は前の列の右の張り出し + 通り道から。
+    // 箱・短い線・棒・札・印のどれかが右の縁を越える列があれば断る
+    let mut column_x = Vec::new(); // 列の左端
+    let mut x = area_x0;
     for (k, w) in widths.iter().enumerate() {
-        need += w + if k > 0 { MIN_CHANNEL_MM } else { 0.0 };
-        if need > avail + 1e-9 {
+        column_x.push(x);
+        if x + w > area_x1 + 1e-9 {
             return Err(format!(
                 "Column {} does not fit the width: the columns need {:.1} mm more than the drawing area gives (with a channel of at least {} mm between columns)",
                 columns[k] + 1,
-                need - avail,
+                x + w - area_x1,
                 MIN_CHANNEL_MM
             ));
         }
-    }
-    let total: f64 = widths.iter().sum();
-    let (first_x, channel) = if columns.len() == 1 {
-        (grid_up(area_x0 + (avail - total) / 2.0), 0.0)
-    } else {
-        (area_x0, grid_down((avail - total) / (columns.len() - 1) as f64))
-    };
-    let mut column_x = Vec::new(); // 列の左端
-    let mut x = first_x;
-    for w in &widths {
-        column_x.push(x);
-        x += w + channel;
+        x += w + channel(k);
     }
 
     // 縦: 列ごとに上から積む。表題欄に重なる列は表題欄の上までしか使えない
@@ -2014,8 +2257,13 @@ pub(crate) fn lay_out_in(
         keep_out,
         frame,
         title,
+        columns: column_x.iter().zip(&widths).map(|(x, w)| ColumnSpan { left: *x, right: x + w }).collect(),
     })
 }
+
+#[cfg(test)]
+#[path = "draft_look_tests.rs"]
+mod look_tests;
 
 #[cfg(test)]
 mod layout_tests {
@@ -2237,8 +2485,8 @@ mod layout_tests {
 
     // ---- marks
 
-    /// Every power pin gets its own rail mark on a 5 mm stub, and the mark is named after the net.
-    /// 電源のピンには1本ずつ、5mmの短い線の先に、ネット名を値にした電源の印が付く。
+    /// The power pin of each unit gets a rail mark at the end of its stub (as long as the widest number of that side asks), and the mark is named after the net.
+    /// 電源のピンには、短い線 (その辺のいちばん広い番号に合わせた長さ) の先に、ネット名を値にした電源の印が付く。
     #[test]
     fn each_power_pin_gets_its_own_rail_mark_named_after_the_net() {
         let mut r = request(&[&["U1"], &["U2"], &["TB1"]]);
@@ -2249,9 +2497,9 @@ mod layout_tests {
         assert_eq!(l.power_marks, 3);
         for (reference, key) in [("U1", "1"), ("U2", "1"), ("TB1", "1")] {
             let p = pin(&l, reference, key).pos;
-            let end = Point::new(p.x - STUB_MM, p.y);
+            let end = wires(&l).iter().find_map(|w| (w.points.len() == 2 && w.points[0] == p).then(|| w.points[1])).expect("the stub is a real wire");
+            assert!((p.x - end.x) >= STUB_MM - 1e-9 && p.y == end.y);
             assert!(rails.iter().any(|m| m.symbol_id == "power_rail" && m.rotation == 0 && m.at == end), "{reference}.{key}");
-            assert!(wires(&l).iter().any(|w| w.points == vec![p, end]), "the stub is a real wire");
         }
     }
 
@@ -2288,24 +2536,26 @@ mod layout_tests {
 
     // ---- tags
 
-    /// A leaving net gets one tag, on the first pin in column order; when the net is also wired on the sheet, the tag hangs 5 mm beyond that pin's stub, and the pins and the tag are all ends of the wiring.
-    /// 出ていくネットには札が1つだけ付き、列の順で最初のピンに下がる。このシートでも配線するネットなら、札はそのピンの短い線のさらに5mm先にあり、ピンと札のすべてが配線の端になる。
+    /// A leaving net gets one tag, on the first pin in column order; when the net is also wired on the sheet, the tag hangs 5 mm beyond that pin's stub end, and the stub ends and the tag are all ends of the wiring.
+    /// 出ていくネットには札が1つだけ付き、列の順で最初のピンに下がる。このシートでも配線するネットなら、札はそのピンの短い線の先のさらに5mm先にあり、短い線の先と札のすべてが配線の端になる。
     #[test]
     fn a_leaving_net_gets_one_tag_at_the_first_pin_in_column_order() {
         let l = layout(&request(&[&["U1"], &["U2"]]));
         let tags: Vec<_> = labels(&l).into_iter().filter(|n| n.name == "SIG_A").collect();
         assert_eq!(tags.len(), 1, "R1 is not on the sheet, so SIG_A leaves it");
         let p = pin(&l, "U1", "5").pos;
-        assert_eq!(tags[0].at, Point::new(p.x + STUB_MM + TAG_BRANCH_MM, p.y), "U1 is in the first column");
+        let stub = Point::new(p.x + STUB_MM, p.y);
+        assert_eq!(tags[0].at, Point::new(stub.x + TAG_BRANCH_MM, p.y), "U1 is in the first column");
         assert!(l.tagged.contains(&("SIG_A".to_string(), 2)));
         let net = l.terminals.iter().find(|t| t.at == tags[0].at).map(|t| t.net).expect("the tag is a terminal");
         let ends: Vec<Point> = l.terminals.iter().filter(|t| t.net == net).map(|t| t.at).collect();
         assert_eq!(ends.len(), 3, "{ends:?}");
-        assert!(ends.contains(&p), "the tagged pin is a terminal at the pin itself");
-        assert!(ends.contains(&pin(&l, "U2", "3").pos), "the other pin is a terminal at the pin itself");
+        assert!(ends.contains(&stub), "the tagged pin is a terminal at its stub end");
+        let other = pin(&l, "U2", "3").pos;
+        assert!(ends.iter().any(|e| (e.x - other.x).abs() >= STUB_MM - 1e-9 && e.y == other.y), "the other pin is a terminal at its stub end");
         let tag_end = l.terminals.iter().find(|t| t.at == tags[0].at).unwrap();
         assert_eq!(tag_end.dir, Dir::W, "the wire enters the tag from the box side");
-        assert!(!wires(&l).iter().any(|w| w.points.contains(&tags[0].at)), "the layout draws no stub to a wired tag: the router does");
+        assert!(!wires(&l).iter().any(|w| w.points.contains(&tags[0].at)), "the layout draws no wire to a wired tag: the router does");
     }
 
     /// A leaving net with one carried pin has a tag but no terminal.
@@ -2429,10 +2679,10 @@ mod layout_tests {
         symbol_bounds(&s, &index.get(&s).unwrap()).unwrap()
     }
 
-    /// Columns are spread over the drawing area, from its left side to its right side, in the given order.
-    /// 列は描画範囲の左から右へ、指定した順に、全体に広がって並ぶ。
+    /// Columns are packed from the left side of the drawing area, in the given order, with at least the minimum channel between them, and stay inside the drawing area.
+    /// 列は描画範囲の左から、指定した順に、通り道の最小幅以上のすき間をあけて詰めて並び、描画範囲からはみ出さない。
     #[test]
-    fn columns_are_spread_over_the_drawing_area() {
+    fn columns_are_packed_from_the_left_of_the_drawing_area() {
         let l = layout(&request(&[&["U1"], &["U2"], &["TB1"]]));
         let (a, b, c) = (unit_rect(&l, "U1"), unit_rect(&l, "U2"), unit_rect(&l, "TB1"));
         assert!(a.max.x < b.min.x && b.max.x < c.min.x);
@@ -2441,7 +2691,7 @@ mod layout_tests {
         let (frame, _) = crate::arrange::frame_areas(&template, &l.sheet);
         assert!(a.min.x >= frame.0 + AREA_MARGIN_MM - 1e-6);
         assert!(c.max.x <= frame.2 - AREA_MARGIN_MM + 1e-6);
-        assert!(frame.2 - c.max.x < 60.0 && a.min.x - frame.0 < 60.0, "the columns use the width");
+        assert!(a.min.x - frame.0 < 40.0, "the first column starts at the left edge, not in the middle");
     }
 
     /// Nothing on the new sheet enters the title block.
@@ -2458,7 +2708,7 @@ mod layout_tests {
             let defs = defs_of(&l);
             let font = crate::svg::LABEL_FONT * l.sheet.annotation_scale();
             for e in l.sheet.entities.values() {
-                if let Some(r) = item_rect(e, &defs, &l.sheet, font, &reserved_dest(&open())) {
+                if let Some(r) = item_rect(e, &defs, &l.sheet, font, &Reserve::floor_only(&open())) {
                     assert!(!r.overlaps(&title), "{r:?} enters the title block {title:?}");
                 }
             }
@@ -2471,7 +2721,7 @@ mod layout_tests {
     /// 描画範囲より背の高い列は断られ、メッセージに列の番号と超えた量 (mm) が入る。
     #[test]
     fn a_column_taller_than_the_area_is_refused_with_the_excess() {
-        let mut r = request(&[&["U1", "U2", "TB1", "M1"]]);
+        let mut r = request(&[&["U1", "U2", "TB1", "M1", "R1"]]);
         r.paper = DraftPaper::A4;
         let e = refusal(&r);
         assert!(e.starts_with("Column 1 is ") && e.contains(" mm taller"), "{e}");
@@ -2521,7 +2771,7 @@ mod layout_tests {
 // 第3段: layout が置いたシートに、内部ネットと出ていくネットの配線を引く。既存の経路探索 (`route.rs`) を
 // そのまま使い、引けないネットは同じ名前のネットラベルでつなぐ (一部だけ引いた配線は残さない)。
 
-use crate::arrange::{route_rounds, stub_entities_in, Fallback, TextRoom};
+use crate::arrange::route_rounds;
 use crate::route::{emit, RouteGrid, RouteOptions, RouteUnit};
 
 /// 出ていくネットのタグ (ネット名と、このシートが持つピンの数)。
@@ -2610,47 +2860,66 @@ pub(crate) fn plan_in(
 
 /// 単位ごとの配線の端1つ。
 struct Term {
-    /// 経路探索に渡す端 (ピンの短い線の先、または札の位置)。
+    /// 経路探索に渡す端 (棒の端・短い線の先、または札の位置)。
     end: Point,
     dir: Dir,
-    /// ピンの上の端なら、短い線の根元のピン。
-    root: Option<Point>,
-    /// 札を下げたピンなら、その札の位置。
+    /// 札を下げた組の端なら、その札の位置。
     tag: Option<Point>,
+    /// 札の位置そのものの端か。
+    is_tag: bool,
 }
 
-/// 配線を引き、引けないネットはネットラベルでつなぐ。返り値は完成したシートと、配線したネット名・ラベルでつないだネット名 (どちらも自然順)。
+/// 3本以上の端が会う点に接点の丸を打つ (まだ無ければ)。線の端が、別の線の途中や端・曲がり角に載る点が対象
+/// (線どうしが十字に交わるだけの点は含めない)。端の数は、線の端1つにつき1、線の途中を通るなら2。
+fn add_junctions(sheet: &mut Sheet) {
+    let lines: Vec<Vec<Point>> = sheet.entities.values().filter_map(|e| if let Entity::Wire(w) = e { Some(w.points.clone()) } else { None }).collect();
+    let dots: Vec<Point> = sheet.entities.values().filter_map(|e| if let Entity::Junction(j) = e { Some(j.at) } else { None }).collect();
+    let mut candidates: Vec<Point> = lines.iter().filter(|l| l.len() >= 2).flat_map(|l| [l[0], l[l.len() - 1]]).collect();
+    candidates.sort_by_key(|&p| quantised(p));
+    candidates.dedup_by_key(|p| quantised(*p));
+    for p in candidates {
+        if dots.iter().any(|d| d.distance_to(&p) < 1e-6) {
+            continue;
+        }
+        let arms: usize = lines
+            .iter()
+            .flat_map(|l| l.windows(2))
+            .map(|seg| {
+                if seg[0].distance_to(&p) < 1e-6 || seg[1].distance_to(&p) < 1e-6 {
+                    1
+                } else if crate::netlist::segment_distance(&p, &seg[0], &seg[1]) < 1e-6 {
+                    2
+                } else {
+                    0
+                }
+            })
+            .sum();
+        if arms >= 3 {
+            let id = uuid::Uuid::new_v4();
+            sheet.entities.insert(id, Entity::Junction(crate::model::Junction { id, at: p }));
+        }
+    }
+}
+
+/// 配線を引き、引けないネットは、各端に札 (行き先なし) を付けてつなぐ。返り値は完成したシートと、配線したネット名・札でつないだネット名 (どちらも自然順)。
 fn route_wires(model: &DraftModel, layout: &DraftLayout, opts: &RouteOptions) -> (Sheet, Vec<String>, Vec<String>) {
     let mut sheet = layout.sheet.clone();
     let defs = sheet_symbol_defs(&sheet);
     let key_of = |l: &Vec<Point>| l.iter().map(|&p| quantised(p)).collect::<Vec<_>>();
 
-    // 端子が2つ以上あるネットごとに1つの単位。名前の自然順 (同名なら添字順) に引く
+    // 端が2つ以上あるネットごとに1つの単位。名前の自然順 (同名なら添字順) に引く
     let mut by_net: BTreeMap<usize, Vec<&Terminal>> = BTreeMap::new();
     for t in &layout.terminals {
         by_net.entry(t.net).or_default().push(t);
     }
     let mut order: Vec<usize> = by_net.iter().filter(|(_, t)| t.len() >= 2).map(|(&n, _)| n).collect();
     order.sort_by(|&a, &b| natural_cmp(&model.nets[a].name, &model.nets[b].name).then(a.cmp(&b)));
-    // 札の位置の端はそのまま使う。ピンの上にある端子には、箱から5mmの短い線を足し、その先を配線の端にする
-    // (縦に走る配線がピン番号の文字を横切らないための間隔)
-    let label_points: Vec<Point> = sheet.entities.values().filter_map(|e| if let Entity::NetLabel(l) = e { Some(l.at) } else { None }).collect();
-    let at_label = |p: Point| label_points.iter().any(|q| q.distance_to(&p) < 1e-6);
     let mut terms_of: Vec<Vec<Term>> = Vec::new();
     let units: Vec<RouteUnit> = order
         .iter()
         .map(|&n| {
-            let mut terms: Vec<Term> = by_net[&n]
-                .iter()
-                .map(|t| {
-                    if at_label(t.at) {
-                        Term { end: t.at, dir: t.dir, root: None, tag: None }
-                    } else {
-                        let (dx, dy) = unit_vec(t.dir);
-                        Term { end: Point::new(t.at.x + dx * STUB_MM, t.at.y + dy * STUB_MM), dir: t.dir, root: Some(t.at), tag: t.tag_at }
-                    }
-                })
-                .collect();
+            let mut terms: Vec<Term> =
+                by_net[&n].iter().map(|t| Term { end: t.at, dir: t.dir, tag: t.tag_at, is_tag: t.is_tag }).collect();
             terms.sort_by_key(|t| quantised(t.end));
             let unit = RouteUnit {
                 net: model.nets[n].name.clone(),
@@ -2666,22 +2935,14 @@ fn route_wires(model: &DraftModel, layout: &DraftLayout, opts: &RouteOptions) ->
             unit
         })
         .collect();
-    let stubs_of = |i: usize| -> Vec<Vec<Point>> { terms_of[i].iter().filter_map(|t| t.root.map(|root| vec![root, t.end])).collect() };
-    // 札を下げたピンから札までの一直線 (引けずにラベルでつなぐときは、この線でピンと札をつなぐ)
+    // 札を下げた組の端から札までの一直線 (引けずに札でつなぐときは、この線で端と札をつなぐ)
     let tag_lines_of = |i: usize| -> Vec<Vec<Point>> {
-        terms_of[i].iter().filter_map(|t| match (t.root, t.tag) {
-            (Some(root), Some(tag)) => Some(vec![root, tag]),
-            _ => None,
-        }).collect()
+        terms_of[i].iter().filter_map(|t| t.tag.map(|tag| vec![t.end, tag])).collect()
     };
-    let all_tag_lines: Vec<Vec<Point>> = (0..units.len()).flat_map(tag_lines_of).collect();
 
-    // 動かない線: 印・タグのスタブと、配線する端子の短い線
-    let mut base_lines: Vec<Vec<Point>> =
+    // 動かない線: 箱の短い線・棒・印のスタブ
+    let mut fixed_lines: Vec<Vec<Point>> =
         sheet.entities.values().filter_map(|e| if let Entity::Wire(w) = e { Some(w.points.clone()) } else { None }).collect();
-    base_lines.sort_by_key(key_of);
-    let mut fixed_lines = base_lines.clone();
-    fixed_lines.extend((0..units.len()).flat_map(stubs_of));
     fixed_lines.sort_by_key(key_of);
     let mut fixed_spots: Vec<Point> = sheet.entities.values().filter_map(|e| if let Entity::Junction(j) = e { Some(j.at) } else { None }).collect();
     fixed_spots.sort_by_key(|&p| quantised(p));
@@ -2703,38 +2964,16 @@ fn route_wires(model: &DraftModel, layout: &DraftLayout, opts: &RouteOptions) ->
     ] {
         grid.block_area(&r);
     }
-    // ラベルでつなぐときの短い線が避けるもの: 動かない線・ピン・ラベル・ジャンクション (置いた分も足していく)
-    let mut stub_lines = base_lines;
-    let mut stub_spots: Vec<Point> =
-        pin_points(&sheet, &defs).iter().map(|q| q.pos).chain(label_points.iter().copied()).chain(fixed_spots.iter().copied()).collect();
-    stub_spots.sort_by_key(|&p| quantised(p));
-    let mut room = TextRoom::build_with(&sheet, &defs, &BTreeSet::new(), BTreeMap::new());
-    let mut label_stubs: BTreeMap<usize, Vec<Entity>> = BTreeMap::new();
+    // 引けないネットの札つなぎ: 各端の先に、箱から離れる向きの札 (行き先なし)。札を下げた組には札までの線を引く
+    let mut fallback: BTreeMap<usize, Vec<Entity>> = BTreeMap::new();
     let (outcome, _rounds) = route_rounds(&grid, &units, &fixed_lines, &fixed_spots, |i| {
-        // 自分以外の単位の短い線と、札までの線は避ける。自分のピンには、ラベルの短い線を新しく伸ばす。
-        // 札を下げたピンはラベルを足さず、ピンから札までの一直線でつなぐ (札が同じ名前なので、ほかのピンのラベルとつながる)
-        let others: Vec<Vec<Point>> = (0..units.len()).filter(|&j| j != i).flat_map(stubs_of).collect();
-        let own_tag_lines = tag_lines_of(i);
-        let before = stub_lines.len();
-        let mut lines = stub_lines.clone();
-        lines.extend(others);
-        lines.extend(all_tag_lines.iter().cloned());
-        let (l0, s0) = (lines.len(), stub_spots.len());
-        let terms = terms_of[i]
-            .iter()
-            .filter(|t| t.root.is_some() && t.tag.is_none())
-            .map(|t| (t.root.unwrap_or(t.end), Some(t.dir), default_wire(Vec::new())))
-            .collect();
-        let fb = Fallback { net: units[i].net.clone(), name: units[i].net.clone(), terms, template: None };
-        let (es, _) = stub_entities_in(&grid, &fb, &mut lines, &mut stub_spots, Some(&mut room));
-        let mut added = lines[l0..].to_vec();
-        stub_lines.truncate(before);
-        stub_lines.extend(added.iter().cloned());
-        added.extend(own_tag_lines.iter().cloned());
-        let mut es = es;
-        es.extend(own_tag_lines.into_iter().map(|l| Entity::Wire(default_wire(l))));
-        label_stubs.insert(i, es);
-        (added, stub_spots[s0..].to_vec())
+        let own = tag_lines_of(i);
+        let mut es: Vec<Entity> = own.iter().cloned().map(|l| Entity::Wire(default_wire(l))).collect();
+        for t in terms_of[i].iter().filter(|t| !t.is_tag && t.tag.is_none()) {
+            es.push(Entity::NetLabel(tag_label(&units[i].net, t.end, t.dir, None)));
+        }
+        fallback.insert(i, es);
+        (own, Vec::new())
     });
 
     let mut wired = Vec::new();
@@ -2743,44 +2982,19 @@ fn route_wires(model: &DraftModel, layout: &DraftLayout, opts: &RouteOptions) ->
         match &outcome[i] {
             Some(route) => {
                 wired.push(u.net.clone());
-                let emitted = emit(u, route);
-                // 配線がピンの短い線の先で枝分かれしたら (札への枝と相手への線)、そこは3本が会う点なので接点の丸を打つ
-                for line in stubs_of(i) {
-                    let end = line[1];
-                    let arms: usize = emitted
-                        .iter()
-                        .filter_map(|e| if let Entity::Wire(w) = e { Some(w) } else { None })
-                        .flat_map(|w| w.points.windows(2))
-                        .map(|seg| {
-                            if seg[0].distance_to(&end) < 1e-6 || seg[1].distance_to(&end) < 1e-6 {
-                                1
-                            } else if crate::netlist::segment_distance(&end, &seg[0], &seg[1]) < 1e-6 {
-                                2
-                            } else {
-                                0
-                            }
-                        })
-                        .sum();
-                    let dotted = emitted.iter().any(|e| matches!(e, Entity::Junction(j) if j.at.distance_to(&end) < 1e-6));
-                    if arms + 1 >= 3 && !dotted {
-                        let id = uuid::Uuid::new_v4();
-                        sheet.entities.insert(id, Entity::Junction(crate::model::Junction { id, at: end }));
-                    }
-                    let e = Entity::Wire(default_wire(line));
-                    sheet.entities.insert(e.id(), e);
-                }
-                for e in emitted {
+                for e in emit(u, route) {
                     sheet.entities.insert(e.id(), e);
                 }
             }
             None => {
                 labelled.push(u.net.clone());
-                for e in label_stubs.remove(&i).unwrap_or_default() {
+                for e in fallback.remove(&i).unwrap_or_default() {
                     sheet.entities.insert(e.id(), e);
                 }
             }
         }
     }
+    add_junctions(&mut sheet);
     wired.sort_by(|a, b| natural_cmp(a, b));
     labelled.sort_by(|a, b| natural_cmp(a, b));
     (sheet, wired, labelled)
@@ -3047,7 +3261,7 @@ mod wire_tests {
         assert_eq!(p.marked, DraftMarked { power: 3, ground: 4 });
         let marks = p.sheet.entities.values().filter(|e| matches!(e, Entity::Symbol(s) if s.reference.is_empty())).count();
         assert_eq!(marks, 7);
-        assert_eq!(p.wired, vec!["M1.1".to_string(), "SIG_A".into(), "SIG_B".into(), "U2.9".into()]);
+        assert_eq!(p.wired, vec!["M1.1".to_string(), "SIG_A".into(), "SIG_B".into()], "U2.9 - U2.10 is a jumper inside one unit: a bar, no routed wire");
         assert!(p.tagged.is_empty());
         assert_eq!(p.skipped_pins.len(), 2);
     }

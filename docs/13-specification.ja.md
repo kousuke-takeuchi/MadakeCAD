@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3880仕様項目**。
+全6領域・**3904仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -477,17 +477,17 @@
 - 電源・接地のピンしか持たない機器も、印だけを付けた箱として描かれる。 <sub>`a_unit_with_only_power_pins_is_drawn_with_marks`</sub>
 - 2つの箱のあいだの線が交差しないように、元の順序が逆でもピンの並びを入れ替える。 <sub>`straight_connections_do_not_cross`</sub>
 - 同じ入力からは、いつも同じ配置ができる。 <sub>`the_same_request_gives_the_same_layout`</sub>
-- 電源のピンには1本ずつ、5mmの短い線の先に、ネット名を値にした電源の印が付く。 <sub>`each_power_pin_gets_its_own_rail_mark_named_after_the_net`</sub>
+- 電源のピンには、短い線 (その辺のいちばん広い番号に合わせた長さ) の先に、ネット名を値にした電源の印が付く。 <sub>`each_power_pin_gets_its_own_rail_mark_named_after_the_net`</sub>
 - 接地の印は、モデルが示す元の図の印のシンボルを使う。値からネット名を取るシンボルなら、値にネット名を入れる。 <sub>`ground_uses_the_marks_symbol_of_the_source`</sub>
 - 元の図に接地の印が無いときは、ライブラリの電源の印を下向き (180度回転) にして、ネット名を値にして置く。 <sub>`ground_falls_back_to_the_library_mark`</sub>
-- 出ていくネットには札が1つだけ付き、列の順で最初のピンに下がる。このシートでも配線するネットなら、札はそのピンの短い線のさらに5mm先にあり、ピンと札のすべてが配線の端になる。 <sub>`a_leaving_net_gets_one_tag_at_the_first_pin_in_column_order`</sub>
+- 出ていくネットには札が1つだけ付き、列の順で最初のピンに下がる。このシートでも配線するネットなら、札はそのピンの短い線の先のさらに5mm先にあり、短い線の先と札のすべてが配線の端になる。 <sub>`a_leaving_net_gets_one_tag_at_the_first_pin_in_column_order`</sub>
 - 持っているピンが1本だけの出ていくネットには、タグが付くが、配線の端は作らない。 <sub>`a_leaving_net_with_one_pin_has_no_terminal`</sub>
 - 右側のピンのタグは外向き (tag_flow = out)、左側のピンのタグは本体が外側 (左) に伸びる向きで、out は付かない。 <sub>`a_tag_on_a_right_side_pin_points_outward`</sub>
 - destinations に書いた行き先は、タグの行き先の文字になる。 <sub>`a_destination_option_becomes_the_tags_destination`</sub>
 - 隣り合うピンのタグは、ピン間隔が5mmでも2.5mmでも、互いに触れない。 <sub>`tags_on_adjacent_pins_do_not_touch`</sub>
 - 札は、後から中に書かれる他のシートの名前の場所を空けておく。配線が近づかない範囲は、10文字の行き先と、開いているプロジェクトの最も長いシート名を入れた旗を含む。 <sub>`a_tag_reserves_room_for_ten_characters_and_the_longest_sheet_name`</sub>
 - 箱の原点・ピン・短い線の先・タグは、どちらのピン間隔でも2.5mmの格子の上にある。 <sub>`every_pin_and_origin_is_on_the_grid`</sub>
-- 列は描画範囲の左から右へ、指定した順に、全体に広がって並ぶ。 <sub>`columns_are_spread_over_the_drawing_area`</sub>
+- 列は描画範囲の左から、指定した順に、通り道の最小幅以上のすき間をあけて詰めて並び、描画範囲からはみ出さない。 <sub>`columns_are_packed_from_the_left_of_the_drawing_area`</sub>
 - 新しいシートの上のものは、何も表題欄に入らない。 <sub>`nothing_enters_the_title_block`</sub>
 - 描画範囲より背の高い列は断られ、メッセージに列の番号と超えた量 (mm) が入る。 <sub>`a_column_taller_than_the_area_is_refused_with_the_excess`</sub>
 - 列のあいだに配線の通り道をあけられないときは断られ、入りきらない列の番号と超えた量 (mm) が入る。 <sub>`columns_that_leave_no_channel_are_refused`</sub>
@@ -524,6 +524,33 @@
 - 検算は、元の図も開いたプロジェクトも書き換えない。 <sub>`the_check_changes_nothing`</sub>
 - 一覧は自然順に並ぶ。U2 は U10 より前、ピン 9 は 10 より前。 <sub>`lists_are_in_natural_order`</sub>
 - 描いてあるのにどこにもつながっていないピンは、「足りない」ではなく「割れた」に出る。 <sub>`an_unconnected_view_pin_is_split_not_missing`</sub>
+
+### draft_look_tests
+
+- 棒・長い番号の見本の元の図のファイルを作り直す。普段は走らせず、手で動かしたときだけ作り直す。 <sub>`write_the_bars_fixture`</sub>
+- 1つの機器の3本の接地ピンは隣の行に番号順に並び、縦の棒でつながって、棒の下の端に接地の印が1つだけ付く。 <sub>`three_ground_pins_of_one_unit_get_one_mark_at_the_lower_end_of_a_bar`</sub>
+- 1つの機器の2本の電源ピンは、棒の上の端に電源の印を1つだけ付ける。 <sub>`two_power_pins_of_one_unit_get_one_mark_at_the_upper_end_of_a_bar`</sub>
+- 棒には、3本の端が会う所 (真ん中のピンの短い線の先) に接点の丸が付き、棒の両端には付かない。 <sub>`a_bar_has_a_junction_where_three_ends_meet`</sub>
+- 1つの機器の2本のピンで運ぶ信号のネットは、同じ辺の隣の行に番号順に並ぶ。 <sub>`pins_of_a_signal_group_are_in_adjacent_rows_in_key_order`</sub>
+- 1つの機器の中だけのジャンパ (同じネットの2本のピンだけ) は棒だけでつなぐ。配線は引かず、ラベルも付けないが、2本のピンは同じネットのまま。 <sub>`a_jumper_inside_one_unit_is_only_a_bar`</sub>
+- 1つの機器の2本のピンで運ぶ出ていくネットは、札が1つだけで、棒の端に下がる。配線は引かない。 <sub>`a_leaving_net_carried_by_two_pins_of_one_unit_has_one_tag_on_the_bar`</sub>
+- 2つの機器がそれぞれ棒でまとめたピンを持つネットは、2本の棒のあいだを配線1本でつなぐ。 <sub>`a_net_between_two_groups_is_one_routed_wire`</sub>
+- 棒のまとまりの配線の端は、相手のピンにいちばん近い棒の端にある。 <sub>`the_terminal_of_a_group_is_the_bar_end_nearest_to_its_peers`</sub>
+- 結果の marked は印の数であってピンの数ではない。3本の接地ピンを棒でまとめれば、接地の印は1つと数える。 <sub>`marked_counts_marks_not_pins`</sub>
+- 印は、まわりの行のピン番号・短い線・文字に重ならない。 <sub>`marks_do_not_overlap_the_rows_around_them`</sub>
+- 辺のすべてのピンの短い線は、その辺のいちばん広い番号に合わせた同じ長さになる (5mm以上、番号の幅+2.5mmを2.5mm刻みに切り上げ)。6文字の番号の辺は12.5mm、2桁の辺は7.5mm、1桁の辺は5mm。 <sub>`the_stub_length_follows_the_widest_number_of_a_side`</sub>
+- 番号が1桁のときは、短い線は今までどおり5mmのまま。 <sub>`short_numbers_keep_the_five_millimetre_stub`</sub>
+- 印・札・棒・配線のどれも、印字されたピン番号に重ならない。 <sub>`nothing_overlaps_a_printed_pin_number`</sub>
+- 配線を引けないネットは、各端の短い線の先に札 (行き先なし、旗は箱から離れる向き) を付ける。ただのラベルは使わない。 <sub>`a_failed_net_gets_tags_at_the_stub_ends`</sub>
+- 札は、同じネットがすでにある他のシートの名前を、旗に書かれるとおりにつないだ分の場所を空ける (2枚の名前と「他」)。 <sub>`a_tag_reserves_room_for_the_sheets_that_already_carry_the_net`</sub>
+- 札の旗は、行き先の文字の場所を含めて、A3でもA4でも描画範囲の中に収まる。 <sub>`every_tag_flag_stays_inside_the_drawing_area`</sub>
+- 同じネットをすでに持つ他のシートの名前まで含めると札が描画範囲の右の縁を越える依頼は、A4でもA3でも、列の番号と超えた量 (mm) を挙げて断る。 <sub>`tags_that_would_cross_the_edge_are_refused_with_column_and_excess`</sub>
+- 行き先の文字が長すぎて収まらないときも、同じ形で断る。 <sub>`a_destination_too_long_for_the_sheet_is_refused`</sub>
+- 列k+1は、列kの右の張り出しから通り道1つぶん (20mmと、10mm+横切るネット1本につき2.5mmの大きい方) あけて始まり、最初の列は描画範囲の左端から始まる。 <sub>`columns_are_packed_with_the_channel_rule`</sub>
+- ネットが少ないときの通り道は20mmで、列が1つだけでも描画範囲の中央ではなく左端に置く。 <sub>`a_single_column_sits_at_the_left_edge`</sub>
+- 機器の印は、その機器自身の参照記号の文字にも、下に積んだ次の機器の参照記号の文字にも触れず、すき間はピン間隔4つぶん以上ある。 <sub>`marks_keep_clear_of_the_captions_and_the_gap_stays_four_pitches`</sub>
+- 見て確かめるために、棒の見本を下書きしたシートを MADAKE_DRAFT_SVG の場所へSVGで書き出す (--ignored で実行する)。 <sub>`write_the_bars_sheet_as_svg`</sub>
+- 手元のファイルの依頼を順に下書きして、シートをSVGで書き出し、見て確かめる (--ignored で実行。環境変数 MADAKE_DRAFT_REQUESTS と MADAKE_DRAFT_OUT を指定する。無ければ何もしない)。 <sub>`draft_requests_from_a_file_for_looking`</sub>
 
 ### DXF連携 (AutoCAD Electrical / EPLAN)
 
