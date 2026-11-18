@@ -454,6 +454,7 @@ pub fn import_kicad_sch(
                 opt("block_caption").as_deref(),
                 opt("block_leads").as_deref(),
                 opt("block_pin_text").as_deref(),
+                opt("block_view").as_deref(),
             ) {
                 Some(a) => attrs = a,
                 None => report
@@ -1711,5 +1712,32 @@ mod tests {
             assert_eq!(back.attrs, orig.attrs, "{reference}");
             assert_eq!(crate::block::drawn_like(&back.attrs), crate::block::drawn_like(&orig.attrs), "{reference}");
         }
+    }
+
+    /// A view block exported to KiCad imports back as a view, and a plain block does not become one.
+    /// 部分表示のブロックはKiCadへ書き出して読み戻しても部分表示のままで、印の無い普通のブロックが部分表示になることはない。
+    #[test]
+    fn a_view_block_survives_a_kicad_round_trip() {
+        let mut sheet = Sheet::new("S", PaperSize::A3, Orientation::Landscape);
+        for e in [
+            crate::block::test_view("U7", "P24X", 60.0, 50.0, r#"{"left":[{"no":"1","name":"A"}]}"#),
+            crate::block::test_block("U8", "P24X", 160.0, 50.0, r#"{"left":[{"no":"1","name":"A"}]}"#),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let (text, _) = export_kicad_sch(&sheet, &defs(&sheet));
+        let (project, report) = import_kicad_sch(&text, "往復").unwrap();
+        assert!(report.skipped.is_empty(), "{report:?}");
+        let back = |reference: &str| {
+            entities_of(&project.sheets[0])
+                .into_iter()
+                .find_map(|e| match e {
+                    Entity::Symbol(s) if s.reference == reference => Some(s),
+                    _ => None,
+                })
+                .expect("ブロックが読み戻される")
+        };
+        assert!(crate::block::is_view(&back("U7")));
+        assert!(!crate::block::is_view(&back("U8")));
     }
 }

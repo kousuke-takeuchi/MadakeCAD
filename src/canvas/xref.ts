@@ -5,6 +5,7 @@
 //   - ゾーンは zone_cols/zone_rows の分割をラベル座標に当てたもの (行=英字を上から、列=数字を左から)
 
 import type { NetLabel, Point, Project, Sheet, SymbolInstance } from "../ipc";
+import { isBlockView } from "./dynamicSymbol";
 import { annotatedInstances } from "./relayXref";
 import { LABEL_FONT, REF_LABEL_DY } from "./textStyle";
 
@@ -202,7 +203,7 @@ export interface DeviceSite {
 
 /**
  * プロジェクト内の全シンボルインスタンスの所在を、参照記号ごとにまとめて返す (G13)。
- * 参照記号が空のインスタンスは含まない。コイル⇔接点クロスリファレンス (relayXref.ts の
+ * 参照記号が空のインスタンスと、部分表示のブロック (isBlockView) は含まない。コイル⇔接点クロスリファレンス (relayXref.ts の
  * annotatedInstances) が既に自動で所在を注記するインスタンス**だけ**を対象から外す
  * (二重に描かないため)。接点を1つも持たないコイルのように、コイル⇔接点クロスリファレンスが
  * 何も描かないリレーシンボルはここで拾う。
@@ -219,7 +220,8 @@ export function deviceSites(project: Project): Map<string, DeviceSite[]> {
     if (sheet.variant_of) return;
     for (const entity of Object.values(sheet.entities)) {
       if (entity.kind !== "symbol") continue;
-      if (annotated.has(entity.id)) continue;
+      // 部分表示は1つの部品を分けて描いたものなので、場所の表記を出さない (core の device_sites と同じ)
+      if (annotated.has(entity.id) || isBlockView(entity)) continue;
       const reference = entity.reference.trim();
       if (!reference) continue;
       const zone = zoneAt(sheet, entity.at);
@@ -285,7 +287,7 @@ export function sheetDeviceXrefs(project: Project | null, sheetId: string): Map<
   const home = sheet.variant_of ?? sheetId;
   for (const entity of Object.values(sheet.entities)) {
     if (entity.kind !== "symbol") continue;
-    if (annotated.has(entity.id)) continue;
+    if (annotated.has(entity.id) || isBlockView(entity)) continue;
     const reference = entity.reference.trim();
     if (!reference) continue;
     const seen = new Set<string>();

@@ -285,7 +285,7 @@ impl DeviceSite {
 }
 
 /// プロジェクト内の全シンボルインスタンスの所在を、参照記号ごとにまとめて返す。
-/// 参照記号が空のインスタンスは含まない。コイル⇔接点クロスリファレンス
+/// 参照記号が空のインスタンスと、部分表示のブロック ([`crate::block::is_view`]) は含まない。コイル⇔接点クロスリファレンス
 /// ([`crate::relay_xref::annotated_instances`]) が既に自動で所在を注記するインスタンス
 /// **だけ**を対象から外す (二重に描かないため)。接点を1つも持たないコイルのように、
 /// コイル⇔接点クロスリファレンスが何も描かないリレーシンボルはここで拾う。
@@ -304,7 +304,8 @@ pub fn device_sites(project: &Project) -> BTreeMap<String, Vec<DeviceSite>> {
         }
         for entity in sheet.entities.values() {
             let Entity::Symbol(s) = entity else { continue };
-            if annotated.contains(&s.id) {
+            // 部分表示は1つの部品を分けて描いたものなので、場所の表記 (/2.B3) を出さない
+            if annotated.contains(&s.id) || crate::block::is_view(s) {
                 continue;
             }
             let reference = s.reference.trim();
@@ -377,7 +378,7 @@ pub fn sheet_device_xrefs(project: &Project, sheet_id: SheetId) -> BTreeMap<Enti
     let mut out = BTreeMap::new();
     for entity in sheet.entities.values() {
         let Entity::Symbol(s) = entity else { continue };
-        if annotated.contains(&s.id) {
+        if annotated.contains(&s.id) || crate::block::is_view(s) {
             continue;
         }
         let reference = s.reference.trim();
@@ -1327,5 +1328,51 @@ mod tests {
         assert!(sheet_tag_dests(&p, p.sheets[0].id).is_empty());
         let (p, _) = dest_project(&["Motor"], XrefStyle::SheetName);
         assert_eq!(sheet_tag_dests(&p, p.sheets[0].id).get("PUMP").map(String::as_str), Some("Motor"));
+    }
+
+    /// One view of U7 on each of two sheets, each with one wired pin leading to a label `SIG`.
+    fn two_view_project(labels: [&str; 2]) -> Project {
+        let mut project = Project::new("t");
+        project.sheets.push(Sheet::new("Sheet2", PaperSize::A3, Orientation::Landscape));
+        for (i, pins) in [r#"{"left":[{"no":"1","name":"A"}]}"#, r#"{"left":[{"no":"3","name":"C"}]}"#].into_iter().enumerate() {
+            let view = crate::block::test_view("U7", "P24X", 100.0, 60.0, pins);
+            let Entity::Symbol(inst) = &view else { unreachable!() };
+            let def = crate::block::block_symbol(&inst.attrs).unwrap();
+            let (_, pin_at) = crate::netlist::pin_positions(inst, &def).remove(0);
+            let w = wire(&[(pin_at.x - 20.0, pin_at.y), (pin_at.x, pin_at.y)]);
+            let l = label(labels[i], pin_at.x - 20.0, pin_at.y);
+            for e in [view, w, l] {
+                project.sheets[i].entities.insert(e.id(), e);
+            }
+        }
+        project
+    }
+
+    /// Views of one reference on two sheets print no location text for each other, because they are one part drawn in pieces, not a repeated designator.
+    /// 同じ参照記号の部分表示は、1つの部品を分けて描いたものであって参照記号の繰り返しではないので、お互いの場所の表記 (/2.B3 など) を出さない。
+    #[test]
+    fn views_show_no_location_text() {
+        let project = two_view_project(["SIG", "SIG"]);
+        let (s1, s2) = (project.sheets[0].id, project.sheets[1].id);
+        assert!(sheet_device_xrefs(&project, s1).is_empty());
+        assert!(sheet_device_xrefs(&project, s2).is_empty());
+        assert!(device_xref_sites(&project, s1, "U7").is_empty());
+    }
+
+    /// The project netlist lists the pins of all views under the one shared reference, and nets joined by a label across sheets stay one net.
+    /// プロジェクトのネットリストは、すべての部分表示のピンを共通の1つの参照記号の下に並べ、ラベルでシートをまたいでつながるネットは1つのままになる。
+    #[test]
+    fn the_project_netlist_joins_the_pins_of_all_views_under_one_reference() {
+        let netlist = extract_netlist_project(&two_view_project(["SIG", "SIG"]));
+        assert_eq!(netlist.nets.len(), 1, "{:?}", netlist.nets);
+        let mut pins: Vec<String> = netlist.nets[0]
+            .members
+            .iter()
+            .flat_map(|m| m.net.pins.iter().map(|p| format!("{}:{}", p.reference, p.pin)))
+            .collect();
+        pins.sort();
+        assert_eq!(pins, vec!["U7:1", "U7:3"]);
+        let apart = extract_netlist_project(&two_view_project(["SIG", "OTHER"]));
+        assert_eq!(apart.nets.len(), 2);
     }
 }

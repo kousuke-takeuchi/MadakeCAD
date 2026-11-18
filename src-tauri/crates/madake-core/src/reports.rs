@@ -179,12 +179,16 @@ fn base_bom_rows(project: &Project) -> Vec<Vec<String>> {
 /// [`base_bom_rows`] の本体。シートのシンボル定義の引き方を渡せる (テストでユーザーシンボルを足すため)。
 /// ネット名を持つシンボル (接地の印・電源の印) は部品ではないので載せない。
 /// 貫通のシンボル (コネクタの接点) は、同じ参照記号を1つのコネクタとして数える。
+/// 部分表示のブロックも同じ参照記号を1つの部品として数える (型番は最初に空でないもの)。
 fn base_bom_rows_with(
     project: &Project,
     defs_for: impl Fn(&crate::model::Sheet) -> Vec<crate::symbol::SymbolDef>,
 ) -> Vec<Vec<String>> {
     let item_numbers = crate::panel::item_numbers(project);
     let mut groups: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
+    // 部分表示 (1つの機器を複数の図に分けて描くブロック) は、同じ参照記号なら1つの部品。
+    // 型番は、シート順→シート内の並び順で最初の「空でない型番」を取る
+    let mut views: BTreeMap<String, String> = BTreeMap::new();
     for sheet in &project.sheets {
         let defs = defs_for(sheet);
         let marks: std::collections::BTreeSet<&str> =
@@ -194,6 +198,13 @@ fn base_bom_rows_with(
         for entity in sheet.entities.values() {
             if let Entity::Symbol(s) = entity {
                 if marks.contains(s.symbol_id.as_str()) {
+                    continue;
+                }
+                if crate::block::is_view(s) && !s.reference.trim().is_empty() {
+                    let part = views.entry(s.reference.clone()).or_default();
+                    if part.trim().is_empty() {
+                        *part = s.value.clone();
+                    }
                     continue;
                 }
                 // 貫通のシンボル (コネクタの接点) は、同じ参照記号を1つのコネクタとして数える (値は極の番号なので行を分けない)
@@ -210,6 +221,12 @@ fn base_bom_rows_with(
                     .push(s.reference.clone());
             }
         }
+    }
+    for (reference, value) in views {
+        groups
+            .entry((value, crate::block::BLOCK_SYMBOL_ID.to_string()))
+            .or_default()
+            .push(reference);
     }
     let mut rows: Vec<Vec<String>> = groups
         .into_iter()
@@ -1901,5 +1918,63 @@ mod tests {
         let rows = wire_list_rows(&project);
         assert_eq!(rows.len(), 1);
         assert_eq!((rows[0][1].as_str(), rows[0][2].as_str()), ("39:U3", "LTE1:P1"));
+    }
+
+    /// A project with the given views of a unit: (sheet index, reference, value, pins json).
+    fn project_of_views(views: &[(usize, &str, &str, &str)]) -> Project {
+        let mut project = Project::new("t");
+        for _ in 1..=views.iter().map(|v| v.0).max().unwrap_or(0) {
+            project.sheets.push(Sheet::new("Sheet", PaperSize::A3, Orientation::Landscape));
+        }
+        for (i, (sheet, reference, value, pins)) in views.iter().enumerate() {
+            let e = crate::block::test_view(reference, value, 40.0 + 100.0 * i as f64, 40.0, pins);
+            project.sheets[*sheet].entities.insert(e.id(), e);
+        }
+        project
+    }
+
+    /// Views of one reference on several sheets are one part in the parts list: the reference is listed once and the quantity is 1, while a view of another reference with the same part number adds one more.
+    /// 同じ参照記号の部分表示は、いくつのシートにあっても部品表では1つの部品: 参照記号は1回だけ載り数量は1。同じ型番の別の参照記号の部分表示は1つ増える。
+    #[test]
+    fn views_on_two_sheets_count_once_in_the_bom() {
+        let project = project_of_views(&[
+            (0, "U7", "P24X", r#"{"left":[{"no":"1"}]}"#),
+            (1, "U7", "P24X", r#"{"left":[{"no":"2"}]}"#),
+            (1, "U8", "P24X", r#"{"left":[{"no":"1"}]}"#),
+        ]);
+        let rows = base_bom_rows(&project);
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        assert_eq!((rows[0][1].as_str(), rows[0][2].as_str(), rows[0][4].as_str()), ("U7, U8", "P24X", "2"));
+        let only_u7 = base_bom_rows(&project_of_views(&[
+            (0, "U7", "P24X", r#"{"left":[{"no":"1"}]}"#),
+            (1, "U7", "P24X", r#"{"left":[{"no":"2"}]}"#),
+        ]));
+        assert_eq!((only_u7[0][1].as_str(), only_u7[0][4].as_str()), ("U7", "1"));
+    }
+
+    /// The parts list takes the part number of a unit from the first view, in sheet order, that has a non-blank one.
+    /// 部品表の型番は、シートの並び順で最初の「型番が空でない」部分表示から取る。
+    #[test]
+    fn the_bom_takes_the_part_number_from_the_first_view_that_has_one() {
+        let project = project_of_views(&[
+            (0, "U7", "  ", r#"{"left":[{"no":"1"}]}"#),
+            (1, "U7", "P24X", r#"{"left":[{"no":"2"}]}"#),
+            (2, "U7", "P24Y", r#"{"left":[{"no":"3"}]}"#),
+        ]);
+        let rows = base_bom_rows(&project);
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        assert_eq!((rows[0][1].as_str(), rows[0][2].as_str(), rows[0][4].as_str()), ("U7", "P24X", "1"));
+    }
+
+    /// Blocks that are not views still count one each, even with the same reference and part number.
+    /// 部分表示の印が無い普通のブロックは、参照記号と型番が同じでも今までどおり1個ずつ数える。
+    #[test]
+    fn plain_blocks_still_count_one_each_in_the_bom() {
+        let mut project = Project::new("t");
+        for x in [40.0, 140.0] {
+            let e = crate::block::test_block("U7", "P24X", x, 40.0, r#"{"left":[{"no":"1"}]}"#);
+            project.sheets[0].entities.insert(e.id(), e);
+        }
+        assert_eq!(base_bom_rows(&project)[0][4], "2");
     }
 }

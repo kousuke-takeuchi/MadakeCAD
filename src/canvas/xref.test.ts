@@ -15,6 +15,7 @@ import {
   xrefTextAt,
   zoneAt,
 } from "./xref";
+import { isBlockView } from "./dynamicSymbol";
 import {
   COIL_SYMBOL_ID,
   CONTACT_NO_SYMBOL_ID,
@@ -248,6 +249,32 @@ describe("G13 device cross-reference", () => {
     project.sheets.push(sheet("s2", "Sheet2", [symbolEntity("e2", "motor", "M1", 250, 70)]));
     expect(deviceXrefAddresses(project, "s1", "M1")).toEqual(["/3.B3"]);
     expect(deviceXrefAddresses(project, "v1", "M1")).toEqual(["/3.B3"]);
+  });
+
+  // ja: 同じ参照記号の部分表示ブロックは、別のシートにあっても場所の表記を出さない。印の無い普通のブロックなら今までどおり出る
+  it("prints no location text for views of one reference on two sheets", () => {
+    const project = twoSheetDeviceProject("block", "U7");
+    expect(sheetDeviceXrefs(project, "s1").size).toBe(1);
+    for (const s of project.sheets) {
+      for (const e of Object.values(s.entities)) {
+        if (e.kind === "symbol") e.attrs = { block_view: "1" };
+      }
+    }
+    expect(sheetDeviceXrefs(project, "s1").size).toBe(0);
+    expect(sheetDeviceXrefs(project, "s2").size).toBe(0);
+    expect(deviceXrefAddresses(project, "s1", "U7")).toEqual([]);
+  });
+
+  // ja: 部分表示の印は「ブロックで、かつ block_view が 1」のときだけ。ブロックでないシンボルや別の値には効かない
+  it("treats only a block with block_view 1 as a view", () => {
+    const at = (symbolId: string, view: string | undefined) => ({
+      symbol_id: symbolId,
+      attrs: (view === undefined ? {} : { block_view: view }) as Record<string, string>,
+    });
+    expect(isBlockView(at("block", "1"))).toBe(true);
+    expect(isBlockView(at("block", "0"))).toBe(false);
+    expect(isBlockView(at("block", undefined))).toBe(false);
+    expect(isBlockView(at("resistor", "1"))).toBe(false);
   });
 
   // ja: シートごとのデバイスXRef表は、各シンボルのentity idを脇に描くテキストへ対応付ける

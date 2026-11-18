@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3748仕様項目**。
+全6領域・**3769仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -462,6 +462,7 @@
 - 回転・ミラーしたシンボルのピンはモデルどおりの用紙座標に着地するので、書き出したDXFでもピンがそのピンへ引いた配線の端と一致し、読み戻すと同じ回転角・ミラーになる。 <sub>`rotated_symbol_pins_meet_their_wires_in_the_exported_dxf`</sub>
 - 上辺にピンのあるブロックの TAG1/CAT 属性は右揃え (72 = 2) で、基準点は外形の左。上辺にピンの無いブロックは今まで通り中央揃え (72 = 1)。 <sub>`top_pin_block_tag_attributes_are_right_justified_left_of_the_box`</sub>
 - 番号のないピン・すき間と見出しの行・文字の高さを持つブロックは、DXFへ書き出して読み戻しても、同じピン表・文字の高さ・絵に戻る。 <sub>`unnumbered_pins_and_pin_rows_survive_a_dxf_round_trip`</sub>
+- 部分表示のブロックはDXFへ書き出して読み戻しても部分表示のままで、印の無い普通のブロックが部分表示になることはない。 <sub>`a_view_block_survives_a_dxf_round_trip`</sub>
 
 ### 図枠テンプレート (プロットフレーム)
 
@@ -601,6 +602,7 @@
 - MadakeCADが書き出した回路図の"MadakeCAD:<id>"ライブラリidは、端子台・コネクタの動的シンボルも含めそのまま同じシンボルに戻る。 <sub>`madakecad_lib_ids_resolve_directly_on_import`</sub>
 - 自分の太さを持つ破線の配線は、KiCadへその太さの破線として書き出され、読み戻しても破線・同じ太さになる。普通の配線は実線・太さなしのまま。 <sub>`a_dashed_wire_survives_a_kicad_round_trip`</sub>
 - 番号のないピンだけのブロックは、ピン名を鍵にしてKiCadへ書き出される。見出し・すき間の行と文字の高さを持つブロックは、読み戻しても同じ絵・同じピン表に戻る。 <sub>`unnumbered_pins_and_pin_rows_survive_a_kicad_round_trip`</sub>
+- 部分表示のブロックはKiCadへ書き出して読み戻しても部分表示のままで、印の無い普通のブロックが部分表示になることはない。 <sub>`a_view_block_survives_a_kicad_round_trip`</sub>
 
 ### leader
 
@@ -1076,6 +1078,9 @@
 - 極番号 (pole) を持つ静的なプラグ・ソケットは、電線リストで唯一のピン1の代わりにその極番号 (X44A:2) で表記される。極番号の無いものは従来どおり。 <sub>`wire_list_shows_the_pole_of_a_mate_half`</sub>
 - ポートのピンに着く区間ケーブルの芯は、From-To の行に接点を書く (39:U3/VBUS)。 <sub>`a_core_on_a_port_pin_shows_its_contact`</sub>
 - 電線リストでは、2つの USB ポートの間の配線はポートのピンからポートのピンへの1行のまま (接点は書かない)。 <sub>`a_usb_wire_is_one_wire_list_row`</sub>
+- 同じ参照記号の部分表示は、いくつのシートにあっても部品表では1つの部品: 参照記号は1回だけ載り数量は1。同じ型番の別の参照記号の部分表示は1つ増える。 <sub>`views_on_two_sheets_count_once_in_the_bom`</sub>
+- 部品表の型番は、シートの並び順で最初の「型番が空でない」部分表示から取る。 <sub>`the_bom_takes_the_part_number_from_the_first_view_that_has_one`</sub>
+- 部分表示の印が無い普通のブロックは、参照記号と型番が同じでも今までどおり1個ずつ数える。 <sub>`plain_blocks_still_count_one_each_in_the_bom`</sub>
 
 ### route
 
@@ -1409,6 +1414,7 @@
 - ブロックの見出しの行は箱の中に太字で描かれる。番号のないピンは名前を1回だけ書いて番号は書かず、すき間の行は何も描かない。 <sub>`svg_draws_block_captions_in_bold_and_unnumbered_pins_by_name`</sub>
 - block_pin_text は図面のピン名・見出し・番号の文字の大きさを決める。既定の大きさを明示しても何も変わらない。 <sub>`svg_draws_block_texts_at_the_block_pin_text_size`</sub>
 - 形式27のファイル (3枚のシートのタグ付き・タグなしのラベル、古い種類のブロック全部、接地の印) をこのビルドで開くと、どのシートも形式27のビルドが描いたものとバイトまで同じSVGになる。 <sub>`a_format_27_file_renders_byte_identical_svg_after_migration`</sub>
+- プロジェクトの一部として書き出したシートには、他のシートに残りの部分表示がある機器の部分表示の脇に「/シート.ゾーン」の場所の文字が出ない。 <sub>`svg_draws_no_location_text_beside_views`</sub>
 
 ### シンボルライブラリ
 
@@ -1756,6 +1762,17 @@
 - 回路図のどこにも無い参照記号のフットプリントが盤に置かれていると注意として報告され、プロジェクト全体の検証では回路図の指摘と一緒に出る。 <sub>`an_orphan_footprint_is_reported_by_the_project_check`</sub>
 - 配線1本で結んだ2つの USB ポートには、未接続ピンもほかの ERC の指摘も出ない。 <sub>`a_wired_usb_link_has_no_erc_findings`</sub>
 - ポートのネットでは、ラベル USB_MIC と、取り出した配線の点付きラベル USB_MIC.VBUS は同じ名前で、ラベルの競合にならない。 <sub>`a_dotted_label_is_not_a_label_conflict`</sub>
+- 同じコネクタの同じ極の接点を2枚のシートに描き、それぞれ別のネットにあると、プロジェクトの検証が1件だけ指摘し、両方の接点を挙げる。 <sub>`the_same_pole_on_two_sheets_on_different_nets_is_reported`</sub>
+- 同じ極が2枚のシートにあっても、ネットラベルで同じネットにつながっていれば、同じ接点を2回描いただけなので指摘しない。 <sub>`the_same_pole_on_two_sheets_on_one_net_is_allowed`</sub>
+- 1枚のシートの中で極が重なっているときも、プロジェクトの検証では1件だけで、シートの検証と合わせて二重に出ない。 <sub>`a_repeated_pole_on_one_sheet_is_reported_once_by_the_project_check`</sub>
+- 同じ参照記号の部分表示を1枚のシートに何個置いても、1つの部品なので参照記号の重複とは指摘しない。 <sub>`views_of_one_reference_on_one_sheet_are_not_duplicates`</sub>
+- 部分表示が普通のシンボルと参照記号を分け合っているときは、今までどおり重複として指摘する。 <sub>`a_view_and_a_plain_symbol_of_one_reference_are_duplicates`</sub>
+- 部分表示の印が無い普通のブロックを同じ参照記号で2個置いたときは、今までどおり重複として指摘する。 <sub>`two_plain_blocks_of_one_reference_are_still_duplicates`</sub>
+- 同じピンを1枚のシートの2つの部分表示が両方とも出していると、両方の部分表示を挙げてエラーにする。 <sub>`a_pin_shown_by_two_views_on_one_sheet_is_reported`</sub>
+- 同じピンを別々のシートの部分表示が出している場合も、同じようにエラーにする。 <sub>`a_pin_shown_by_two_views_on_two_sheets_is_reported`</sub>
+- 同じ参照記号の部分表示が別々のピンを出している場合や、別々の参照記号が同じピンを持つ場合は指摘しない。 <sub>`views_with_different_pins_or_different_references_are_not_reported`</sub>
+- 同じ参照記号の部分表示が違う型番を持っていると、両方の部分表示を挙げて警告にする。 <sub>`views_that_disagree_on_the_part_number_are_reported`</sub>
+- 型番が空の部分表示は、型番を持つ部分表示と食い違いとは見なさない。型番が同じなら食い違わない。 <sub>`a_blank_part_number_does_not_disagree`</sub>
 
 ### wire_legend
 
@@ -1854,6 +1871,8 @@
 - ラベル自身の tag_dest は、どちらの書き方でも自動の行き先に代わって使われ (他のシートに同名が無くても)、空白なら自動になる。 <sub>`tag_dest_replaces_the_automatic_destination`</sub>
 - タグの無いラベルは、どちらの書き方でもゾーン住所のままで、タグの無いラベルの tag_dest は無視される。 <sub>`untagged_labels_keep_the_zone_address`</sub>
 - ゾーン住所の書き方は寸法計算へ自動の行き先を渡さず、シート名の書き方はラベル名ごとに渡す。 <sub>`automatic_destinations_for_measuring_follow_the_style`</sub>
+- 同じ参照記号の部分表示は、1つの部品を分けて描いたものであって参照記号の繰り返しではないので、お互いの場所の表記 (/2.B3 など) を出さない。 <sub>`views_show_no_location_text`</sub>
+- プロジェクトのネットリストは、すべての部分表示のピンを共通の1つの参照記号の下に並べ、ラベルでシートをまたいでつながるネットは1つのままになる。 <sub>`the_project_netlist_joins_the_pins_of_all_views_under_one_reference`</sub>
 
 
 ## 自動化API (MCP / REST)
@@ -3478,6 +3497,8 @@
 - 接点を従えたリレーのコイルと、その接点は、デバイス単位のクロスリファレンスの対象から外れる(コイル⇔接点クロスリファレンスが既に互いの所在を書いているため) <sub>`G13 device cross-reference`</sub>
 - 接点をどこにも持たないコイルにはコイル⇔接点クロスリファレンスが何も描かないので、そういうコイルだけの参照記号には普通のデバイス単位クロスリファレンスが付く (G13) <sub>`G13 device cross-reference`</sub>
 - 整えバリアントの複製シートがあっても、元シートにも案シートにも住所注記は生えない (複製は「同じ参照記号を持つ別シート」として数えない) <sub>`G13 device cross-reference`</sub>
+- 同じ参照記号の部分表示ブロックは、別のシートにあっても場所の表記を出さない。印の無い普通のブロックなら今までどおり出る <sub>`G13 device cross-reference`</sub>
+- 部分表示の印は「ブロックで、かつ block_view が 1」のときだけ。ブロックでないシンボルや別の値には効かない <sub>`G13 device cross-reference`</sub>
 - シートごとのデバイスXRef表は、各シンボルのentity idを脇に描くテキストへ対応付ける <sub>`G13 device cross-reference`</sub>
 - 3枚のシートに跨る参照記号は、シート順で並んだ他シート全部の住所を1行に並べる <sub>`G13 device cross-reference`</sub>
 - デバイスXRefのテキストはシンボル外形の右側、参照記号のラベルと同じ高さに置かれる <sub>`G13 device cross-reference`</sub>

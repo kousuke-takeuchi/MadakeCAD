@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3748 specification clauses** across 6 areas.
+**3769 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -462,6 +462,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A rotated or mirrored symbol's pins land on exactly the paper positions the model gives them, so the exported pin still meets the wire drawn to it, and reading the file back gives the same rotation and mirror. <sub>`rotated_symbol_pins_meet_their_wires_in_the_exported_dxf`</sub>
 - The TAG1/CAT attributes of a block with top pins are right-justified (group 72 = 2) with their anchor left of the box; a block without top pins keeps them centred (72 = 1). <sub>`top_pin_block_tag_attributes_are_right_justified_left_of_the_box`</sub>
 - Blocks with unnumbered pins, spacer and caption rows and a text size export to DXF and import back with the same pin table, text size and drawing. <sub>`unnumbered_pins_and_pin_rows_survive_a_dxf_round_trip`</sub>
+- A view block exported to DXF imports back as a view, and a plain block does not become one. <sub>`a_view_block_survives_a_dxf_round_trip`</sub>
 
 ### Frame templates (plot frames)
 
@@ -601,6 +602,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Importing a schematic exported by MadakeCAD resolves "MadakeCAD:<id>" library ids directly, including parametric terminal blocks and connectors. <sub>`madakecad_lib_ids_resolve_directly_on_import`</sub>
 - A dashed wire with its own weight exports to KiCad as a dashed stroke of that width and imports back dashed with the same weight; a plain wire stays solid with no weight of its own. <sub>`a_dashed_wire_survives_a_kicad_round_trip`</sub>
 - A block whose pins have no numbers exports to KiCad keyed by pin name, and a block with spacer and caption rows and a text size imports back drawn the same, with the same pin table. <sub>`unnumbered_pins_and_pin_rows_survive_a_kicad_round_trip`</sub>
+- A view block exported to KiCad imports back as a view, and a plain block does not become one. <sub>`a_view_block_survives_a_kicad_round_trip`</sub>
 
 ### leader
 
@@ -1076,6 +1078,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A static plug or socket carrying a pole number shows it in the wire list (X44A:2) instead of its only pin 1; one without a pole is unchanged. <sub>`wire_list_shows_the_pole_of_a_mate_half`</sub>
 - A run-cable core that lands on a port pin shows its contact in the From-To row (39:U3/VBUS). <sub>`a_core_on_a_port_pin_shows_its_contact`</sub>
 - The wire list keeps one row for a wire between two USB ports, from port pin to port pin, with no contact in the text. <sub>`a_usb_wire_is_one_wire_list_row`</sub>
+- Views of one reference on several sheets are one part in the parts list: the reference is listed once and the quantity is 1, while a view of another reference with the same part number adds one more. <sub>`views_on_two_sheets_count_once_in_the_bom`</sub>
+- The parts list takes the part number of a unit from the first view, in sheet order, that has a non-blank one. <sub>`the_bom_takes_the_part_number_from_the_first_view_that_has_one`</sub>
+- Blocks that are not views still count one each, even with the same reference and part number. <sub>`plain_blocks_still_count_one_each_in_the_bom`</sub>
 
 ### route
 
@@ -1409,6 +1414,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A block's caption row is drawn in bold inside the box, an unnumbered pin prints its name once and no number, and a spacer row draws nothing. <sub>`svg_draws_block_captions_in_bold_and_unnumbered_pins_by_name`</sub>
 - block_pin_text sets the font size of the pin names, captions and numbers in the drawing, and writing the default size explicitly changes nothing. <sub>`svg_draws_block_texts_at_the_block_pin_text_size`</sub>
 - A format-27 file (tagged and plain labels on three sheets, blocks of every older kind, ground marks) opens in this build and every sheet renders byte-identical SVG to what the format-27 build drew. <sub>`a_format_27_file_renders_byte_identical_svg_after_migration`</sub>
+- A sheet exported as part of its project draws no "/sheet.zone" text beside a view of a unit whose other views are on another sheet. <sub>`svg_draws_no_location_text_beside_views`</sub>
 
 ### Symbol library
 
@@ -1756,6 +1762,17 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A part placed on the panel whose reference designator is nowhere on the schematic is reported as a warning, and the whole-project check reports it together with the schematic findings. <sub>`an_orphan_footprint_is_reported_by_the_project_check`</sub>
 - Two USB ports joined by one wire have no unconnected pin and no other ERC finding. <sub>`a_wired_usb_link_has_no_erc_findings`</sub>
 - On a port net the label USB_MIC and a dotted label USB_MIC.VBUS on a tapped wire are one name, not a label conflict. <sub>`a_dotted_label_is_not_a_label_conflict`</sub>
+- The same pole of one connector drawn on two sheets on two different nets is reported once by the project check, and it names both contacts. <sub>`the_same_pole_on_two_sheets_on_different_nets_is_reported`</sub>
+- The same pole on two sheets is fine when a net label joins the two wires into one net, because it is one contact drawn twice. <sub>`the_same_pole_on_two_sheets_on_one_net_is_allowed`</sub>
+- A repeated pole on one sheet is reported once by the project check, not once by the sheet check and again by the project check. <sub>`a_repeated_pole_on_one_sheet_is_reported_once_by_the_project_check`</sub>
+- Views of one reference on one sheet are one part, so the duplicate reference check stays quiet. <sub>`views_of_one_reference_on_one_sheet_are_not_duplicates`</sub>
+- A view that shares its reference with an ordinary symbol is still a duplicate. <sub>`a_view_and_a_plain_symbol_of_one_reference_are_duplicates`</sub>
+- Two plain blocks of one reference (not views) are still duplicates. <sub>`two_plain_blocks_of_one_reference_are_still_duplicates`</sub>
+- The same pin shown by two views on one sheet is an error that names both views. <sub>`a_pin_shown_by_two_views_on_one_sheet_is_reported`</sub>
+- The same pin shown by views on two different sheets is an error too. <sub>`a_pin_shown_by_two_views_on_two_sheets_is_reported`</sub>
+- Views that show different pins of one reference, or the same pin key under two different references, are not reported. <sub>`views_with_different_pins_or_different_references_are_not_reported`</sub>
+- Views of one reference that carry two different part numbers are reported as a warning that names both views. <sub>`views_that_disagree_on_the_part_number_are_reported`</sub>
+- A view with a blank part number does not disagree with one that has it, and equal part numbers agree. <sub>`a_blank_part_number_does_not_disagree`</sub>
 
 ### wire_legend
 
@@ -1854,6 +1871,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The label's own tag_dest replaces the automatic destination in both styles, even when no other sheet has the name; a blank one means automatic. <sub>`tag_dest_replaces_the_automatic_destination`</sub>
 - Untagged labels keep the zone address in both styles, and a tag_dest on an untagged label is ignored. <sub>`untagged_labels_keep_the_zone_address`</sub>
 - The zone style never lists sheet names and gives measuring code no automatic destinations; the sheet-name style gives them by label name. <sub>`automatic_destinations_for_measuring_follow_the_style`</sub>
+- Views of one reference on two sheets print no location text for each other, because they are one part drawn in pieces, not a repeated designator. <sub>`views_show_no_location_text`</sub>
+- The project netlist lists the pins of all views under the one shared reference, and nets joined by a label across sheets stay one net. <sub>`the_project_netlist_joins_the_pins_of_all_views_under_one_reference`</sub>
 
 
 ## Automation APIs (MCP / REST)
@@ -3478,6 +3497,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - skips a relay coil and the contact it drives <sub>`G13 device cross-reference`</sub>
 - still cross-references a contactless coil that appears on two sheets <sub>`G13 device cross-reference`</sub>
 - a tidy variant copy adds no cross-reference address to the original or to itself <sub>`G13 device cross-reference`</sub>
+- prints no location text for views of one reference on two sheets <sub>`G13 device cross-reference`</sub>
+- treats only a block with block_view 1 as a view <sub>`G13 device cross-reference`</sub>
 - maps each symbol entity id to the text drawn beside it <sub>`G13 device cross-reference`</sub>
 - lists every other sheet for a designator on three sheets <sub>`G13 device cross-reference`</sub>
 - places the text right of the symbol outline, level with the designator label <sub>`G13 device cross-reference`</sub>

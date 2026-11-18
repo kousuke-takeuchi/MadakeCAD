@@ -6168,4 +6168,31 @@ mod tests {
             assert!(got == want, "シート{} の SVG が形式27のビルドと違う", i + 1);
         }
     }
+
+    /// A sheet exported as part of its project draws no "/sheet.zone" text beside a view of a unit whose other views are on another sheet.
+    /// プロジェクトの一部として書き出したシートには、他のシートに残りの部分表示がある機器の部分表示の脇に「/シート.ゾーン」の場所の文字が出ない。
+    #[test]
+    fn svg_draws_no_location_text_beside_views() {
+        let mut project = Project::new("t");
+        project.sheets.push(Sheet::new("Sheet2", PaperSize::A3, Orientation::Landscape));
+        let pins = [r#"{"left":[{"no":"1"}]}"#, r#"{"left":[{"no":"2"}]}"#];
+        for i in 0..2 {
+            let e = crate::block::test_view("U7", "P24X", 250.0, 70.0, pins[i]);
+            project.sheets[i].entities.insert(e.id(), e);
+        }
+        let svg = project_sheet_to_svg(&project, project.sheets[0].id, &builtin_symbols()).unwrap();
+        assert!(!svg.contains(">/2.B3<") && !svg.contains(">/1.B3<"), "{svg}");
+        assert!(svg.contains(">U7<"), "参照記号は描く");
+        // 対照: 印の無い普通のブロックなら住所が出る
+        let mut plain = project.clone();
+        for sheet in &mut plain.sheets {
+            for e in sheet.entities.values_mut() {
+                if let Entity::Symbol(s) = e {
+                    s.attrs.remove(crate::block::BLOCK_VIEW_ATTR);
+                }
+            }
+        }
+        let svg = project_sheet_to_svg(&plain, plain.sheets[0].id, &builtin_symbols()).unwrap();
+        assert!(svg.contains(">/2.B3<"), "{svg}");
+    }
 }

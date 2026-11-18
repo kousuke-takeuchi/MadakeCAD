@@ -2019,6 +2019,7 @@ pub fn import_dxf(
                         let caption = attrs.remove("BLOCK_CAPTION");
                         let leads = attrs.remove("BLOCK_LEADS");
                         let pin_text = attrs.remove("BLOCK_PIN_TEXT");
+                        let view = attrs.remove("BLOCK_VIEW");
                         match crate::block::imported_block_attrs(
                             pins.as_deref(),
                             size.as_deref(),
@@ -2027,6 +2028,7 @@ pub fn import_dxf(
                             caption.as_deref(),
                             leads.as_deref(),
                             pin_text.as_deref(),
+                            view.as_deref(),
                         ) {
                             Some(a) => attrs.extend(a),
                             None => report
@@ -3399,5 +3401,34 @@ mod tests {
             assert_eq!(crate::block::drawn_like(&back.attrs), crate::block::drawn_like(&orig.attrs), "{reference}");
         }
         assert!(dxf.contains("BLOCK_PIN_TEXT"), "文字の高さの属性が書き出される");
+    }
+
+    /// A view block exported to DXF imports back as a view, and a plain block does not become one.
+    /// 部分表示のブロックはDXFへ書き出して読み戻しても部分表示のままで、印の無い普通のブロックが部分表示になることはない。
+    #[test]
+    fn a_view_block_survives_a_dxf_round_trip() {
+        let mut sheet = Sheet::new("S", PaperSize::A3, Orientation::Landscape);
+        for e in [
+            crate::block::test_view("U7", "P24X", 60.0, 50.0, r#"{"left":[{"no":"1","name":"A"}]}"#),
+            crate::block::test_block("U8", "P24X", 160.0, 50.0, r#"{"left":[{"no":"1","name":"A"}]}"#),
+        ] {
+            sheet.entities.insert(e.id(), e);
+        }
+        let dxf = sheet_to_dxf(&sheet, &defs(&sheet), &[]).0;
+        let (project, report) = import_dxf(&dxf, "往復", &DxfImportOptions::default()).unwrap();
+        assert!(report.skipped.is_empty(), "{report:?}");
+        let back = |reference: &str| {
+            project.sheets[0]
+                .entities
+                .values()
+                .find_map(|e| match e {
+                    Entity::Symbol(s) if s.reference == reference => Some(s.clone()),
+                    _ => None,
+                })
+                .expect("ブロックが読み戻される")
+        };
+        assert!(crate::block::is_view(&back("U7")));
+        assert!(!crate::block::is_view(&back("U8")));
+        assert!(dxf.contains("BLOCK_VIEW"), "部分表示の属性が書き出される");
     }
 }

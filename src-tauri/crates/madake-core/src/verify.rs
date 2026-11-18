@@ -55,11 +55,15 @@ pub fn verify_project(project: &crate::model::Project) -> Vec<Diagnostic> {
         diags.extend(
             verify_sheet(sheet, &crate::symbol::sheet_symbol_defs(sheet))
                 .into_iter()
-                // ラベル競合はシート単位ではなくプロジェクト全体で評価し直す
-                .filter(|d| d.code != LABEL_CONFLICT),
+                // ラベル競合・接点の極の重なりは、シート単位ではなくプロジェクト全体で評価し直す
+                // (ラベルでつながったシートを跨ぐネットを1つとして数えるため。二重に出さない)
+                .filter(|d| d.code != LABEL_CONFLICT && d.code != CONTACT_POLE_REPEATED),
         );
     }
     diags.extend(project_label_conflicts(project));
+    diags.extend(project_contact_poles(project));
+    // 1つの機器を複数の図に分けて描く部分表示は、ピンの重なりと型番の食い違いをプロジェクト全体で見る
+    diags.extend(view_diagnostics(project));
     // コイル⇔接点も1デバイスがシートを跨ぐので、プロジェクト全体で評価する
     diags.extend(crate::relay_xref::relay_diagnostics(project));
     // 盤レイアウト (回路図と盤の突き合わせ) もプロジェクト全体で評価する
@@ -100,15 +104,142 @@ fn project_label_conflicts(project: &crate::model::Project) -> Vec<Diagnostic> {
     diags
 }
 
+/// 同じコネクタ (参照記号) の同じ極の接点が、プロジェクト全体の統合ネットで別々のネットにある、の指摘。
+/// ネットラベルでつながったシートを跨ぐネットは1つのネットとして数える。1組につき1件だけ出す。
+fn project_contact_poles(project: &crate::model::Project) -> Vec<Diagnostic> {
+    let mut by_pole: BTreeMap<(String, String), BTreeMap<usize, Vec<(SheetId, EntityId)>>> = BTreeMap::new();
+    let mut through_by_sheet: BTreeMap<SheetId, BTreeSet<String>> = BTreeMap::new();
+    for sheet in &project.sheets {
+        let throughs = crate::symbol::sheet_symbol_defs(sheet)
+            .into_iter()
+            .filter(|d| d.through)
+            .map(|d| d.id)
+            .collect();
+        through_by_sheet.insert(sheet.id, throughs);
+    }
+    for (ni, net) in crate::xref::extract_netlist_project(project).nets.iter().enumerate() {
+        for member in &net.members {
+            let (Some(sheet), Some(throughs)) =
+                (project.sheet(member.sheet_id), through_by_sheet.get(&member.sheet_id))
+            else {
+                continue;
+            };
+            for p in &member.net.pins {
+                if p.reference.trim().is_empty() {
+                    continue;
+                }
+                let Some(Entity::Symbol(s)) = sheet.entities.get(&p.entity_id) else { continue };
+                if !throughs.contains(&s.symbol_id) {
+                    continue;
+                }
+                let ids = by_pole.entry((p.reference.clone(), p.pin.clone())).or_default().entry(ni).or_default();
+                if !ids.iter().any(|(_, id)| *id == p.entity_id) {
+                    ids.push((sheet.id, p.entity_id));
+                }
+            }
+        }
+    }
+    let mut diags = Vec::new();
+    for ((reference, pole), by_net) in &by_pole {
+        if by_net.len() < 2 {
+            continue;
+        }
+        let members: Vec<(SheetId, EntityId)> = by_net.values().flatten().copied().collect();
+        diags.push(Diagnostic {
+            severity: Severity::Error,
+            code: CONTACT_POLE_REPEATED.into(),
+            message: format!(
+                "コネクタ {reference} の極 {pole} の接点が、別々の{}つのネットにあります。極の番号を変えるか、同じネットにつなぐ",
+                by_net.len()
+            ),
+            sheet_id: members[0].0,
+            entity_ids: members.iter().map(|(_, id)| *id).collect(),
+        });
+    }
+    diags
+}
+
+/// 部分表示 ([`crate::block::is_view`]) のプロジェクト全体の検査。参照記号ごとに、シート順→シート内の並び順で
+/// 部分表示を集め、(1) 同じピンの鍵を2つ以上の部分表示が出していれば `erc.view_pin_repeated` (エラー)、
+/// (2) 空でない型番が食い違えば `erc.view_part_mismatch` (警告) を出す。参照記号が空の部分表示は部品として
+/// まとめられないので対象にしない。整えバリアントの複製シートは元シートの写しなので数えない。
+fn view_diagnostics(project: &crate::model::Project) -> Vec<Diagnostic> {
+    // 参照記号 → 部分表示 (シートid, entity id, 型番, ピンの鍵)
+    let mut views: BTreeMap<String, Vec<(SheetId, EntityId, String, Vec<String>)>> = BTreeMap::new();
+    for sheet in &project.sheets {
+        if sheet.is_variant() {
+            continue;
+        }
+        for e in sheet.entities.values() {
+            let Entity::Symbol(s) = e else { continue };
+            let reference = s.reference.trim();
+            if reference.is_empty() || !crate::block::is_view(s) {
+                continue;
+            }
+            views.entry(reference.to_string()).or_default().push((
+                sheet.id,
+                s.id,
+                s.value.trim().to_string(),
+                crate::block::pin_keys(&s.attrs),
+            ));
+        }
+    }
+    let mut diags = Vec::new();
+    for (reference, list) in &views {
+        let mut by_pin: BTreeMap<&str, Vec<(SheetId, EntityId)>> = BTreeMap::new();
+        for (sheet_id, id, _, keys) in list {
+            for key in keys.iter().collect::<BTreeSet<_>>() {
+                by_pin.entry(key.as_str()).or_default().push((*sheet_id, *id));
+            }
+        }
+        for (pin, owners) in &by_pin {
+            if owners.len() >= 2 {
+                diags.push(Diagnostic {
+                    severity: Severity::Error,
+                    code: VIEW_PIN_REPEATED.into(),
+                    message: format!(
+                        "{reference} のピン {pin} を{}つの部分表示が出しています。1つのピンは1つの部分表示だけに置く",
+                        owners.len()
+                    ),
+                    sheet_id: owners[0].0,
+                    entity_ids: owners.iter().map(|(_, id)| *id).collect(),
+                });
+            }
+        }
+        let with_part: Vec<_> = list.iter().filter(|(_, _, value, _)| !value.is_empty()).collect();
+        let distinct: BTreeSet<&str> = with_part.iter().map(|(_, _, v, _)| v.as_str()).collect();
+        if distinct.len() >= 2 {
+            diags.push(Diagnostic {
+                severity: Severity::Warning,
+                code: VIEW_PART_MISMATCH.into(),
+                message: format!(
+                    "{reference} の部分表示で型番が食い違っています: {}",
+                    distinct.into_iter().collect::<Vec<_>>().join(", ")
+                ),
+                sheet_id: with_part[0].0,
+                entity_ids: with_part.iter().map(|(_, id, _, _)| *id).collect(),
+            });
+        }
+    }
+    diags
+}
+
 /// ネットラベル競合の診断コード。シート単位・プロジェクト全体で共通。
 const LABEL_CONFLICT: &str = "erc.label_conflict";
 /// 参照記号の重複判定で、嵌合1極のプラグ/ソケットをまとめる分類名。
 const MATE_HALF: &str = "mate_half";
 /// 貫通のシンボル (コネクタの接点) の分類の印。参照記号の重複の検査で、同じ参照記号を分け合える種類を表す。
 const THROUGH_KIND: &str = "through";
+/// 部分表示のブロック ([`crate::block::is_view`]) の分類の印。同じ参照記号の部分表示どうしは重複にしない。
+const VIEW_KIND: &str = "view";
 
 /// 同じコネクタの同じ極の接点が別々のネットにある、の診断コード。
 pub const CONTACT_POLE_REPEATED: &str = "erc.contact_pole_repeated";
+
+/// 同じ参照記号の部分表示が同じピンを出している、の診断コード。
+pub const VIEW_PIN_REPEATED: &str = "erc.view_pin_repeated";
+/// 同じ参照記号の部分表示が違う型番を持っている、の診断コード。
+pub const VIEW_PART_MISMATCH: &str = "erc.view_part_mismatch";
 
 /// 浮きネットラベル (配線にもピンにも載っていない) の診断コード。
 pub const DANGLING_LABEL: &str = "erc.dangling_label";
@@ -655,7 +786,10 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
                 .get(s)
                 .map(|d| d.category.clone())
                 .unwrap_or_default();
-            let kind = if crate::mate::is_mate_half(&s.symbol_id) {
+            let kind = if crate::block::is_view(s) {
+                // 部分表示は、同じ参照記号どうしなら何個あっても1つの部品 (普通のシンボルと分け合えば重複)
+                VIEW_KIND.to_string()
+            } else if crate::mate::is_mate_half(&s.symbol_id) {
                 MATE_HALF.to_string()
             } else if defs.get(s).is_some_and(|d| d.through) {
                 // 貫通のシンボル (コネクタの接点) は、同じ参照記号 (コネクタ名) で何個置いてもよい
@@ -669,6 +803,7 @@ fn erc(sheet: &Sheet, symbols: &[SymbolDef]) -> Vec<Diagnostic> {
     for (reference, members) in &by_ref {
         let shared_ok = members.iter().all(|(_, cat)| cat == "relay")
             || members.iter().all(|(_, cat)| cat == MATE_HALF)
+            || members.iter().all(|(_, cat)| cat == VIEW_KIND)
             // 貫通のシンボルだけが、同じ種類どうしで1つの参照記号を分け合う
             || members.iter().all(|(_, cat)| cat.starts_with(THROUGH_KIND) && cat == &members[0].1);
         if members.len() >= 2 && !shared_ok {
@@ -1932,5 +2067,182 @@ mod tests {
             sheet.entities.insert(e.id(), e);
         }
         assert!(!run(&sheet).iter().any(|d| d.code == "erc.label_conflict"), "{:?}", run(&sheet));
+    }
+
+    fn net_label_named(name: &str, x: f64, y: f64) -> Entity {
+        Entity::NetLabel(NetLabel {
+            id: Uuid::new_v4(),
+            at: Point::new(x, y),
+            name: name.into(),
+            rotation: 0,
+            attrs: Default::default(),
+        })
+    }
+
+    /// A project with `n` sheets, each holding the given entities (index = sheet).
+    fn project_with(per_sheet: Vec<Vec<Entity>>) -> crate::model::Project {
+        let mut project = crate::model::Project::new("t");
+        while project.sheets.len() < per_sheet.len() {
+            project.sheets.push(Sheet::new("Sheet", PaperSize::A3, Orientation::Landscape));
+        }
+        for (i, entities) in per_sheet.into_iter().enumerate() {
+            for e in entities {
+                project.sheets[i].entities.insert(e.id(), e);
+            }
+        }
+        project
+    }
+
+    /// One wired contact of J7 on the horizontal line at `y`, with a label on its left wire.
+    fn labelled_contact(pole: &str, y: f64, label: &str) -> Vec<Entity> {
+        vec![
+            wire(&[(0.0, y), (17.5, y)]),
+            with_ref_value(mark("connector_contact", 20.0, y), "J7", pole),
+            wire(&[(22.5, y), (40.0, y)]),
+            net_label_named(label, 0.0, y),
+        ]
+    }
+
+    fn of_code(diags: &[Diagnostic], code: &str) -> Vec<Diagnostic> {
+        diags.iter().filter(|d| d.code == code).cloned().collect()
+    }
+
+    /// The same pole of one connector drawn on two sheets on two different nets is reported once by the project check, and it names both contacts.
+    /// 同じコネクタの同じ極の接点を2枚のシートに描き、それぞれ別のネットにあると、プロジェクトの検証が1件だけ指摘し、両方の接点を挙げる。
+    #[test]
+    fn the_same_pole_on_two_sheets_on_different_nets_is_reported() {
+        let (a, b) = (labelled_contact("2", 10.0, "NET_A"), labelled_contact("2", 10.0, "NET_B"));
+        let (ida, idb) = (a[1].id(), b[1].id());
+        let project = project_with(vec![a, b]);
+        let hits = of_code(&verify_project(&project), CONTACT_POLE_REPEATED);
+        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert_eq!(hits[0].severity, Severity::Error);
+        assert!(hits[0].entity_ids.contains(&ida) && hits[0].entity_ids.contains(&idb), "{hits:?}");
+    }
+
+    /// The same pole on two sheets is fine when a net label joins the two wires into one net, because it is one contact drawn twice.
+    /// 同じ極が2枚のシートにあっても、ネットラベルで同じネットにつながっていれば、同じ接点を2回描いただけなので指摘しない。
+    #[test]
+    fn the_same_pole_on_two_sheets_on_one_net_is_allowed() {
+        let project = project_with(vec![labelled_contact("2", 10.0, "NET_A"), labelled_contact("2", 10.0, "NET_A")]);
+        assert!(of_code(&verify_project(&project), CONTACT_POLE_REPEATED).is_empty());
+    }
+
+    /// A repeated pole on one sheet is reported once by the project check, not once by the sheet check and again by the project check.
+    /// 1枚のシートの中で極が重なっているときも、プロジェクトの検証では1件だけで、シートの検証と合わせて二重に出ない。
+    #[test]
+    fn a_repeated_pole_on_one_sheet_is_reported_once_by_the_project_check() {
+        let mut entities = labelled_contact("2", 10.0, "NET_A");
+        entities.extend(labelled_contact("2", 60.0, "NET_B"));
+        let project = project_with(vec![entities]);
+        assert_eq!(of_code(&verify_project(&project), CONTACT_POLE_REPEATED).len(), 1);
+    }
+
+    const PINS_AB: &str = r#"{"left":[{"no":"1","name":"A"},{"no":"2","name":"B"}]}"#;
+    const PINS_CD: &str = r#"{"left":[{"no":"3","name":"C"},{"no":"4","name":"D"}]}"#;
+    const PINS_B_E: &str = r#"{"left":[{"no":"2","name":"B"},{"no":"5","name":"E"}]}"#;
+
+    /// Views of one reference on one sheet are one part, so the duplicate reference check stays quiet.
+    /// 同じ参照記号の部分表示を1枚のシートに何個置いても、1つの部品なので参照記号の重複とは指摘しない。
+    #[test]
+    fn views_of_one_reference_on_one_sheet_are_not_duplicates() {
+        let sheet = sheet_with(vec![
+            crate::block::test_view("U7", "P24X", 40.0, 40.0, PINS_AB),
+            crate::block::test_view("U7", "P24X", 140.0, 40.0, PINS_CD),
+        ]);
+        assert!(of_code(&run(&sheet), "erc.duplicate_reference").is_empty(), "{:?}", run(&sheet));
+    }
+
+    /// A view that shares its reference with an ordinary symbol is still a duplicate.
+    /// 部分表示が普通のシンボルと参照記号を分け合っているときは、今までどおり重複として指摘する。
+    #[test]
+    fn a_view_and_a_plain_symbol_of_one_reference_are_duplicates() {
+        let sheet = sheet_with(vec![
+            crate::block::test_view("U7", "P24X", 40.0, 40.0, PINS_AB),
+            symbol("resistor", "U7", 140.0, 40.0),
+        ]);
+        assert_eq!(of_code(&run(&sheet), "erc.duplicate_reference").len(), 1);
+    }
+
+    /// Two plain blocks of one reference (not views) are still duplicates.
+    /// 部分表示の印が無い普通のブロックを同じ参照記号で2個置いたときは、今までどおり重複として指摘する。
+    #[test]
+    fn two_plain_blocks_of_one_reference_are_still_duplicates() {
+        let sheet = sheet_with(vec![
+            crate::block::test_block("U7", "P24X", 40.0, 40.0, PINS_AB),
+            crate::block::test_block("U7", "P24X", 140.0, 40.0, PINS_CD),
+        ]);
+        assert_eq!(of_code(&run(&sheet), "erc.duplicate_reference").len(), 1);
+    }
+
+    /// The same pin shown by two views on one sheet is an error that names both views.
+    /// 同じピンを1枚のシートの2つの部分表示が両方とも出していると、両方の部分表示を挙げてエラーにする。
+    #[test]
+    fn a_pin_shown_by_two_views_on_one_sheet_is_reported() {
+        let (a, b) = (
+            crate::block::test_view("U7", "P24X", 40.0, 40.0, PINS_AB),
+            crate::block::test_view("U7", "P24X", 140.0, 40.0, PINS_B_E),
+        );
+        let (ida, idb) = (a.id(), b.id());
+        let project = project_with(vec![vec![a, b]]);
+        let hits = of_code(&verify_project(&project), "erc.view_pin_repeated");
+        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert_eq!(hits[0].severity, Severity::Error);
+        assert!(hits[0].entity_ids.contains(&ida) && hits[0].entity_ids.contains(&idb), "{hits:?}");
+    }
+
+    /// The same pin shown by views on two different sheets is an error too.
+    /// 同じピンを別々のシートの部分表示が出している場合も、同じようにエラーにする。
+    #[test]
+    fn a_pin_shown_by_two_views_on_two_sheets_is_reported() {
+        let project = project_with(vec![
+            vec![crate::block::test_view("U7", "P24X", 40.0, 40.0, PINS_AB)],
+            vec![crate::block::test_view("U7", "P24X", 40.0, 40.0, PINS_B_E)],
+        ]);
+        let hits = of_code(&verify_project(&project), "erc.view_pin_repeated");
+        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert_eq!(hits[0].entity_ids.len(), 2);
+    }
+
+    /// Views that show different pins of one reference, or the same pin key under two different references, are not reported.
+    /// 同じ参照記号の部分表示が別々のピンを出している場合や、別々の参照記号が同じピンを持つ場合は指摘しない。
+    #[test]
+    fn views_with_different_pins_or_different_references_are_not_reported() {
+        let project = project_with(vec![
+            vec![crate::block::test_view("U7", "P24X", 40.0, 40.0, PINS_AB)],
+            vec![
+                crate::block::test_view("U7", "P24X", 40.0, 40.0, PINS_CD),
+                crate::block::test_view("U8", "P24X", 140.0, 40.0, PINS_AB),
+            ],
+        ]);
+        assert!(of_code(&verify_project(&project), "erc.view_pin_repeated").is_empty());
+    }
+
+    /// Views of one reference that carry two different part numbers are reported as a warning that names both views.
+    /// 同じ参照記号の部分表示が違う型番を持っていると、両方の部分表示を挙げて警告にする。
+    #[test]
+    fn views_that_disagree_on_the_part_number_are_reported() {
+        let (a, b) = (
+            crate::block::test_view("U7", "P24X", 40.0, 40.0, PINS_AB),
+            crate::block::test_view("U7", "P24Y", 40.0, 40.0, PINS_CD),
+        );
+        let (ida, idb) = (a.id(), b.id());
+        let project = project_with(vec![vec![a], vec![b]]);
+        let hits = of_code(&verify_project(&project), "erc.view_part_mismatch");
+        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert_eq!(hits[0].severity, Severity::Warning);
+        assert!(hits[0].entity_ids.contains(&ida) && hits[0].entity_ids.contains(&idb), "{hits:?}");
+    }
+
+    /// A view with a blank part number does not disagree with one that has it, and equal part numbers agree.
+    /// 型番が空の部分表示は、型番を持つ部分表示と食い違いとは見なさない。型番が同じなら食い違わない。
+    #[test]
+    fn a_blank_part_number_does_not_disagree() {
+        let project = project_with(vec![
+            vec![crate::block::test_view("U7", "", 40.0, 40.0, PINS_AB)],
+            vec![crate::block::test_view("U7", "P24X", 40.0, 40.0, PINS_CD)],
+            vec![crate::block::test_view("U7", " P24X ", 40.0, 40.0, r#"{"left":[{"no":"6"}]}"#)],
+        ]);
+        assert!(of_code(&verify_project(&project), "erc.view_part_mismatch").is_empty());
     }
 }

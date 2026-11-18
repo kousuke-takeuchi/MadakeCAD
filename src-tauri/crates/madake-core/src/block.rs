@@ -42,6 +42,8 @@ pub const BLOCK_LEADS_ATTR: &str = "block_leads";
 pub const BLOCK_CAPTION_ATTR: &str = "block_caption";
 /// ピン名・見出し・ピン番号の文字の高さを持つ属性キー (mm、1.5〜5.0。無ければ [`BLOCK_PIN_TEXT_MM`])。
 pub const BLOCK_PIN_TEXT_ATTR: &str = "block_pin_text";
+/// 部分表示 (1つの機器を複数の図に分けて描くブロック) の印を持つ属性キー (`"1"` で部分表示。無ければ普通のブロック)。
+pub const BLOCK_VIEW_ATTR: &str = "block_view";
 /// `block_pin_text` の下限 (mm)。
 pub const BLOCK_PIN_TEXT_MIN_MM: f64 = 1.5;
 /// `block_pin_text` の上限 (mm)。
@@ -56,6 +58,19 @@ pub const BLOCK_FINE_PITCH_MM: f64 = 2.5;
 pub const BLOCK_FINE_MIN_MM: f64 = 5.0;
 /// 番号を内側に描くとき、左右の番号のあいだに空けるすき間 (mm)。
 pub const BLOCK_INSIDE_GAP_MM: f64 = 1.0;
+
+/// 部分表示のブロックか。ブロックで、かつ属性 [`BLOCK_VIEW_ATTR`] が `"1"` のとき真。
+/// 同じ参照記号の部分表示は1つの部品として扱う (重複の検査・部品表・場所の表記)。
+pub fn is_view(inst: &crate::model::SymbolInstance) -> bool {
+    inst.symbol_id == BLOCK_SYMBOL_ID && inst.attrs.get(BLOCK_VIEW_ATTR).is_some_and(|v| v == "1")
+}
+
+/// ブロックが持つピンの鍵 (番号。番号が無ければピン名) の一覧。表の並び (左→右→上→下) のまま。
+/// すき間・見出しの行は数えない。ピン表が読めないときは空。部分表示のあいだでピンの重なりを調べるのに使う。
+pub fn pin_keys(attrs: &BTreeMap<String, String>) -> Vec<String> {
+    let Ok(spec) = parse_block_spec(attrs) else { return Vec::new() };
+    spec.pins.all().filter(|p| p.is_pin()).map(|p| p.key().to_string()).collect()
+}
 
 /// ブロックのピン間隔。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1196,6 +1211,7 @@ pub fn imported_block_attrs(
     caption: Option<&str>,
     leads: Option<&str>,
     pin_text: Option<&str>,
+    view: Option<&str>,
 ) -> Option<BTreeMap<String, String>> {
     let mut attrs = BTreeMap::new();
     for (k, v) in [
@@ -1206,12 +1222,23 @@ pub fn imported_block_attrs(
         (BLOCK_CAPTION_ATTR, caption),
         (BLOCK_LEADS_ATTR, leads),
         (BLOCK_PIN_TEXT_ATTR, pin_text),
+        (BLOCK_VIEW_ATTR, view),
     ] {
         if let Some(v) = v.filter(|v| !v.is_empty()) {
             attrs.insert(k.to_string(), v.to_string());
         }
     }
     block_symbol(&attrs).ok().map(|_| attrs)
+}
+
+/// テスト用: 部分表示 (`block_view` = `"1"`) のブロック。
+#[cfg(test)]
+pub(crate) fn test_view(reference: &str, value: &str, x: f64, y: f64, pins_json: &str) -> crate::model::Entity {
+    let crate::model::Entity::Symbol(mut s) = test_block(reference, value, x, y, pins_json) else {
+        unreachable!("test_block はシンボルを返す")
+    };
+    s.attrs.insert(BLOCK_VIEW_ATTR.into(), "1".into());
+    crate::model::Entity::Symbol(s)
 }
 
 /// テスト用: `block_pins`を持つブロックのシンボルインスタンス(他モジュールのテストが使う)。
@@ -2542,7 +2569,7 @@ mod tests {
         assert!(BLOCK_UNREADABLE_WARNING.contains("属性"), "{BLOCK_UNREADABLE_WARNING}");
         assert!(!BLOCK_UNREADABLE_WARNING.contains("ピン表"), "{BLOCK_UNREADABLE_WARNING}");
         assert!(BLOCK_UNREADABLE_WARNING.contains("見本の箱"), "{BLOCK_UNREADABLE_WARNING}");
-        assert!(imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, Some("3"), None, None, None, None).is_none(), "間隔が読めないときも警告の対象");
+        assert!(imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, Some("3"), None, None, None, None, None).is_none(), "間隔が読めないときも警告の対象");
     }
 
     fn placed_fine(pins: &str, size: &str) -> (crate::model::SymbolInstance, SymbolDef) {
@@ -2995,10 +3022,10 @@ mod tests {
     /// ブロックの参照記号の置き場所は、書き出したファイルを読み戻しても残る: 取り込みは block_caption をピン表と一緒に保つ。
     #[test]
     fn imported_block_attrs_keep_the_caption_place() {
-        let attrs = imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, Some("inside"), None, None).unwrap();
+        let attrs = imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, Some("inside"), None, None, None).unwrap();
         assert_eq!(attrs[BLOCK_CAPTION_ATTR], "inside");
-        assert!(imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, Some("below"), None, None).is_none());
-        let attrs = imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, None, None, None).unwrap();
+        assert!(imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, Some("below"), None, None, None).is_none());
+        let attrs = imported_block_attrs(Some(r#"{"left":[{"no":"1"}]}"#), None, None, None, None, None, None, None).unwrap();
         assert!(!attrs.contains_key(BLOCK_CAPTION_ATTR));
     }
 
@@ -3073,7 +3100,7 @@ mod tests {
         bad.insert(BLOCK_LEADS_ATTR.to_string(), "short".to_string());
         assert!(parse_block_spec(&bad).unwrap_err().contains(BLOCK_LEADS_ATTR));
         // 取り込みも保つ
-        let kept = imported_block_attrs(Some(pins), None, Some("2.5"), Some("inside"), None, Some("none"), None).unwrap();
+        let kept = imported_block_attrs(Some(pins), None, Some("2.5"), Some("inside"), None, Some("none"), None, None).unwrap();
         assert_eq!(kept[BLOCK_LEADS_ATTR], "none");
     }
 
@@ -3355,8 +3382,8 @@ mod tests {
     #[test]
     fn importing_a_block_keeps_block_pin_text() {
         let pins = r#"{"left":[{"name":"A"}]}"#;
-        let kept = imported_block_attrs(Some(pins), None, None, None, None, None, Some("3")).unwrap();
+        let kept = imported_block_attrs(Some(pins), None, None, None, None, None, Some("3"), None).unwrap();
         assert_eq!(kept[BLOCK_PIN_TEXT_ATTR], "3");
-        assert!(imported_block_attrs(Some(pins), None, None, None, None, None, Some("9")).is_none());
+        assert!(imported_block_attrs(Some(pins), None, None, None, None, None, Some("9"), None).is_none());
     }
 }

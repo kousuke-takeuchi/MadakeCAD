@@ -246,6 +246,13 @@ export function resolveInstanceDef(
 export const BLOCK_SYMBOL_ID = "block";
 /** ピン表を持つ属性キー(JSON)。 */
 export const BLOCK_PINS_ATTR = "block_pins";
+/** 部分表示 (1つの機器を複数の図に分けて描くブロック) の印の属性キー ("1" で部分表示)。 */
+export const BLOCK_VIEW_ATTR = "block_view";
+
+/** 部分表示のブロックか (madake-coreの`block::is_view`と同じ規則)。 */
+export function isBlockView(inst: Pick<SymbolInstance, "symbol_id" | "attrs">): boolean {
+  return inst.symbol_id === BLOCK_SYMBOL_ID && inst.attrs?.[BLOCK_VIEW_ATTR] === "1";
+}
 /** 外形寸法を持つ属性キー(JSON `{"w":mm,"h":mm}`)。 */
 export const BLOCK_SIZE_ATTR = "block_size";
 /** ピン間隔を持つ属性キー ("5" か "2.5"。無ければ5)。 */
