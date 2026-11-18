@@ -535,3 +535,58 @@ async fn the_link_api_reads_planned_objects() {
     assert!(reply["sheet_id"].is_string(), "{reply}");
     assert_eq!(sheet_count(&doc), 2);
 }
+
+fn title_block_of_sheet(doc: &SharedDoc, name: &str) -> Value {
+    let engine = doc.engine.lock().unwrap();
+    let sheet = engine.project().sheets.iter().find(|s| s.name == name).expect("the sheet exists");
+    serde_json::to_value(&sheet.title_block).unwrap()
+}
+
+/// Through the MCP tool, a draft without title_block gets the sheet name as its drawing title, and one with planned_sheets and title_block fields gets the planned number and the given fields.
+/// MCPツール経由で、title_block の無い下書きはシート名が品名になり、planned_sheets と title_block の欄を付けると計画の位置の図番と書いた欄が入る。
+#[tokio::test]
+async fn the_mcp_tool_fills_the_title_block() {
+    let (doc, bridge, _) = fixture();
+    call(&bridge, "draft_function_sheet", first_request()).await;
+    assert_eq!(title_block_of_sheet(&doc, "Sheet A")["title"], "Sheet A");
+    let mut second = second_request();
+    second["planned_sheets"] = json!(["Sheet A", "Sheet B"]);
+    second["title_block"] = json!({"company": "Example Works", "rev": "A"});
+    call(&bridge, "draft_function_sheet", second).await;
+    let tb = title_block_of_sheet(&doc, "Sheet B");
+    assert_eq!((tb["title"].as_str(), tb["drawing_no"].as_str(), tb["company"].as_str(), tb["rev"].as_str()), (Some("Sheet B"), Some("2/2"), Some("Example Works"), Some("A")));
+}
+
+/// The MCP parameter type reads title_block and refuses an unknown title_block field, naming it.
+/// MCPの引数の型は title_block を読み、知らない欄を書けばその欄名を挙げて断る。
+#[test]
+fn the_mcp_params_read_title_block_and_refuse_unknown_fields() {
+    let params: madake_mcp::DraftFunctionSheetParams =
+        serde_json::from_value(json!({"source_path": "/x.mdkproj", "name": "A", "columns": [["U1"]], "title_block": {"title": "T", "fields": {"k": "v"}}})).unwrap();
+    assert_eq!(params.request.title_block.unwrap().title.as_deref(), Some("T"));
+    let err = serde_json::from_value::<madake_mcp::DraftFunctionSheetParams>(
+        json!({"source_path": "/x.mdkproj", "name": "A", "columns": [["U1"]], "title_block": {"titel": "T"}}),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("titel"), "{err}");
+}
+
+/// Through the Link API, title_block overrides the default title, and an unknown title_block field is refused with 400 and changes nothing.
+/// Link API経由で、title_block は既定の品名を置き換え、知らない欄は400で断られて何も変わらない。
+#[tokio::test]
+async fn the_link_api_reads_title_block() {
+    let (doc, _, router) = fixture();
+    let mut bad = first_request();
+    bad["title_block"] = json!({"titel": "x"});
+    let (status, text) = post_text(&router, "/api/v1/draft/function-sheet", bad).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(text.contains("titel"), "{text}");
+    assert_eq!(sheet_count(&doc), 0);
+    let mut good = first_request();
+    good["title_block"] = json!({"title": "Cooling line", "drawing_no": "EX-1"});
+    let (status, _) = post(&router, "/api/v1/draft/function-sheet", good).await;
+    assert_eq!(status, StatusCode::OK);
+    let tb = title_block_of_sheet(&doc, "Sheet A");
+    assert_eq!((tb["title"].as_str(), tb["drawing_no"].as_str()), (Some("Cooling line"), Some("EX-1")));
+}

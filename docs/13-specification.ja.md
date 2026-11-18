@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3989仕様項目**。
+全6領域・**4000仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -529,6 +529,13 @@
 - 仕上がったシートでは、機器の原点・ピン・短い線の先・札・印は2.5mmの格子の上にある。1.25mmの経路の格子に乗ってよいのは、引いた配線の曲がりだけ。 <sub>`everything_but_routed_bends_is_on_the_grid`</sub>
 - 配線・札・印は図枠の内側から出ず、表題欄 (改訂欄の行を含む) にも入らない。既定の図枠の A3 と A4 でも、余白が広く表題欄の大きい図枠でも同じ。 <sub>`nothing_leaves_the_frame_or_enters_the_title_block`</sub>
 - 経路探索は、配置の段から渡された表題欄の矩形に入らない。自由に引いた配線の途中に表題欄を置き直すと、配線はそれを避けて回る。 <sub>`the_router_keeps_out_of_the_title_block_the_layout_reports`</sub>
+- 依頼に表題欄が無いとき、新しいシートの品名はシート名になり、他の欄は全て空のままになる。 <sub>`the_drawing_title_is_the_sheet_name_by_default`</sub>
+- 依頼の title_block に書いた欄は、品名も含めて既定を置き換え、書かなかった欄は既定のままになる。 <sub>`title_block_fields_in_the_request_override_the_defaults`</sub>
+- 表題欄に無い欄名を書いた依頼は断られ、その欄名が文に出る。 <sub>`an_unknown_title_block_field_is_refused`</sub>
+- planned_sheets があると、図番は「k/n」(計画のn枚の中でこのシートが何番目か。名前は前後の空白を無視して比べ、文字列の項目でも詳しい項目でも同じ) になる。 <sub>`the_drawing_number_is_the_position_among_the_planned_sheets`</sub>
+- このシートの名前が計画の項目に無いときは、図番は空のままになる。 <sub>`the_drawing_number_is_left_alone_when_the_sheet_is_not_planned`</sub>
+- title_block に図番を書けば、計画の位置から決まる図番より優先され、空の図番を書いた場合も同じになる。 <sub>`a_drawing_number_in_the_request_is_not_replaced_by_the_planned_position`</sub>
+- 下書きしたシートの絵には、図枠の表題欄の中にシート名が品名として印字される。 <sub>`the_drawn_sheet_prints_its_name_inside_the_title_block`</sub>
 - 下書きのシートは、ゴールデンファイル (id は出てくる順の番号に置き換え) と全く同じ絵になる。ファイルを作り直すときは MADAKE_UPDATE_DRAFT_GOLDEN=1 を付ける。 <sub>`a_drafted_sheet_renders_like_the_golden_file`</sub>
 
 ### draft_channel_tests
@@ -2132,6 +2139,9 @@
 - 計画のシートの機器つきの形 (name・units・pins) も文字列の形も、MCPの引数の型を通り、計画は機器つきの項目の機器を読む。 <sub>`planned_objects_round_trip_through_the_mcp_params`</sub>
 - planned_sheets の形の違う項目は、Link API (400) でも MCP のツールでも、planned_sheets と何番目の項目かを挙げた文で断られ、何も変わらない。 <sub>`a_malformed_planned_entry_is_refused_naming_its_position`</sub>
 - Link API経由で、機器つきの項目は計画まで届く。元の図に無い機器は項目を挙げて断られ、正しい項目ならシートが作られる。 <sub>`the_link_api_reads_planned_objects`</sub>
+- MCPツール経由で、title_block の無い下書きはシート名が品名になり、planned_sheets と title_block の欄を付けると計画の位置の図番と書いた欄が入る。 <sub>`the_mcp_tool_fills_the_title_block`</sub>
+- MCPの引数の型は title_block を読み、知らない欄を書けばその欄名を挙げて断る。 <sub>`the_mcp_params_read_title_block_and_refuse_unknown_fields`</sub>
+- Link API経由で、title_block は既定の品名を置き換え、知らない欄は400で断られて何も変わらない。 <sub>`the_link_api_reads_title_block`</sub>
 
 ### drawing_tools
 
@@ -2737,6 +2747,7 @@
 - madake reroute --json は返事をそのまま出し、通常の出力は引き直さなかったネットを理由つきで並べる。 <sub>`reroute_prints_json_or_a_human_summary`</sub>
 - madake arrangeは、シートと通り道の幅を指定されたときだけ送る。 <sub>`arrange_sends_only_what_was_given`</sub>
 - madake draftは依頼のJSONを読み、相対の元の図の場所を依頼のファイルの隣からの絶対パスにして送り、要約か生の返り値を出す。 <sub>`draft_sends_the_request_with_an_absolute_source_path`</sub>
+- madake draftは、依頼のファイルにある title_block をそのままアプリへ送る。 <sub>`draft_sends_the_title_block_on`</sub>
 - madake draftは、依頼のファイルが無い・JSONでない・元の図の場所が無いときは、アプリを呼ばずに断る。 <sub>`draft_refuses_a_bad_request_file`</sub>
 - madake draft-checkは絶対パスと繰り返した--ignoreの参照記号を送り、合っていれば成功で終わる。 <sub>`draft_check_sends_the_path_and_the_ignored_references`</sub>
 - madake draft-checkは、合っていないと失敗 (終了コード0以外) になり、エラーに問題のピンを書いた結果を持つ。 <sub>`draft_check_fails_when_the_sheets_do_not_match`</sub>

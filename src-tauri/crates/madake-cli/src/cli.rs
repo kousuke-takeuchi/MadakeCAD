@@ -1373,6 +1373,21 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// madake draft sends the title_block of the request file on to the app unchanged.
+    /// madake draftは、依頼のファイルにある title_block をそのままアプリへ送る。
+    #[test]
+    fn draft_sends_the_title_block_on() {
+        let dir = std::env::temp_dir().join(format!("madake-cli-draft-tb-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("request.json");
+        std::fs::write(&file, r#"{"source_path": "/abs/s.mdkproj", "name": "A", "columns": [["U1"]], "title_block": {"company": "Example Works", "drawing_no": "EX-1"}}"#).unwrap();
+        let api = FakeApi { result: json!({"sheet_id": "S1", "units": 1, "pins": 1, "wired": [], "tagged": [], "marked": {"power": 0, "ground": 0}, "labelled": [], "skipped_pins": [], "metrics": {}}), ..Default::default() };
+        run(&parse(&["madake", "draft", file.to_str().unwrap()]), &api).unwrap();
+        let sent = api.calls()[0].clone();
+        assert!(sent.contains(r#""title_block":{"company":"Example Works","drawing_no":"EX-1"}"#), "{sent}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     /// madake draft refuses a request file that is missing, is not JSON, or has no source_path, without calling the app.
     /// madake draftは、依頼のファイルが無い・JSONでない・元の図の場所が無いときは、アプリを呼ばずに断る。
     #[test]

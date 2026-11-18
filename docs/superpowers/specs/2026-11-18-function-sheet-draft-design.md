@@ -62,7 +62,8 @@ The draft command sets `block_view` on every block it creates. A person may set 
   "destinations": {"J7.2": "cabinet B"},
   "paper": "A3",
   "pitch_mm": 5.0,
-  "planned_sheets": ["1 Power", "2 Control", "3 Motors"]
+  "planned_sheets": ["1 Power", "2 Control", "3 Motors"],
+  "title_block": {"company": "Example Works", "rev": "A"}
 }
 ```
 
@@ -75,6 +76,8 @@ The draft command sets `block_view` on every block it creates. A person may set 
 - `paper`: `A3` (default) or `A4`, landscape.
 - `pitch_mm`: pin pitch of the boxes, 2.5 or 5.0 (default 5.0).
 - `planned_sheets`: optional. The sheets the caller plans to draft, in any order; it may include this request's own name and names that already exist. Pass the names of all sheets you will draft so that tags keep room for them. Each entry is either a string (the sheet name only) or an object `{"name": "...", "units": ["U1", ...], "pins": {"U1": ["1", "2"]}}` (`pins` optional, with the meaning of the request's `pins`: it limits a unit on that planned sheet). Refused: a blank name or the same name twice (spaces around a name are ignored); in an object, a blank or unknown unit, a pin key the unit does not have, or `pins` naming a unit that is not in `units`. An entry that is neither a string nor such an object (a number, an object without `units`, an unknown field) is refused with a message that names its position, `planned_sheets[i] (entry i+1)`, through the Link API (400), MCP and the CLI. Default: empty (the room is chosen as before, see Placement).
+
+- `title_block`: optional overrides for the new sheet's title block, with the field names `TitleBlock` serialises (`company`, `title`, `drawing_no`, `scale`, `date`, `designed`, `drawn`, `checked`, `approved`, `rev`, `fields`), all optional; a field that is given replaces the default (an empty string empties it), and an unknown field is refused. Defaults: `title` (printed by the frame as the drawing name, 品名) is the trimmed sheet `name`; when `planned_sheets` is non-empty and `drawing_no` is not given, `drawing_no` is `k/n` with n the number of planned entries and k the 1-based position of this sheet's name among them (trimmed comparison; a name that is not planned leaves it empty); every other field is what `AddSheet` gives a new sheet (empty).
 
 ### Which pins a view carries
 

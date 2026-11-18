@@ -35,7 +35,7 @@
 <text x="292" y="260.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">図番</text>
 <text x="316" y="260.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">  Rev -</text>
 <text x="292" y="268.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">品名</text>
-<text x="316" y="268.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif"></text>
+<text x="316" y="268.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">Function</text>
 <text x="292" y="276.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">尺度</text>
 <text x="316" y="276.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">    日付 </text>
 <text x="292" y="284.500" font-size="3" fill="#000" text-anchor="start" font-family="sans-serif">設計</text>

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3989 specification clauses** across 6 areas.
+**4000 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -529,6 +529,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - On the finished sheet, unit origins, pins, the ends of stubs, tags and marks are on the 2.5 mm grid; only the bends of routed wires may lie on the 1.25 mm router grid. <sub>`everything_but_routed_bends_is_on_the_grid`</sub>
 - No wire, tag or mark leaves the frame's inner area or enters the title block (with its revision rows), on A3 and on A4 with the default frame, and with a frame of wide margins and a large title block. <sub>`nothing_leaves_the_frame_or_enters_the_title_block`</sub>
 - The router stays out of the title block rectangle that the layout hands it: a title block put over the middle of a wire that ran freely makes the wire go round it. <sub>`the_router_keeps_out_of_the_title_block_the_layout_reports`</sub>
+- Without a title_block in the request, the drawing title of the new sheet is the sheet name and every other title block field is empty. <sub>`the_drawing_title_is_the_sheet_name_by_default`</sub>
+- Fields given in title_block replace the defaults, the title included; fields not given keep the default. <sub>`title_block_fields_in_the_request_override_the_defaults`</sub>
+- A title_block field that does not exist is refused, and the message names it. <sub>`an_unknown_title_block_field_is_refused`</sub>
+- With planned_sheets, the drawing number is "k/n": this sheet's place among the n planned entries (names compared without surrounding spaces, strings and objects alike). <sub>`the_drawing_number_is_the_position_among_the_planned_sheets`</sub>
+- When this sheet's name is not among the planned entries, the drawing number stays empty. <sub>`the_drawing_number_is_left_alone_when_the_sheet_is_not_planned`</sub>
+- A drawing number given in title_block wins over the planned position, and so does an empty one. <sub>`a_drawing_number_in_the_request_is_not_replaced_by_the_planned_position`</sub>
+- The picture of a drafted sheet prints the sheet name inside the title block area of the frame. <sub>`the_drawn_sheet_prints_its_name_inside_the_title_block`</sub>
 - A drafted sheet draws exactly like the golden file (entity ids replaced by their order of appearance). Set MADAKE_UPDATE_DRAFT_GOLDEN=1 to rewrite the file. <sub>`a_drafted_sheet_renders_like_the_golden_file`</sub>
 
 ### draft_channel_tests
@@ -2132,6 +2139,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The object form of a planned sheet (name, units, pins) and the string form both go through the MCP parameter type, and the planner reads the units of an object. <sub>`planned_objects_round_trip_through_the_mcp_params`</sub>
 - A malformed planned_sheets entry is refused through the Link API (400) and through the MCP tool with a message that names planned_sheets and the entry's position, and nothing changes. <sub>`a_malformed_planned_entry_is_refused_naming_its_position`</sub>
 - Through the Link API an object entry reaches the planner: a unit the source does not have is refused naming the entry, a good entry drafts the sheet. <sub>`the_link_api_reads_planned_objects`</sub>
+- Through the MCP tool, a draft without title_block gets the sheet name as its drawing title, and one with planned_sheets and title_block fields gets the planned number and the given fields. <sub>`the_mcp_tool_fills_the_title_block`</sub>
+- The MCP parameter type reads title_block and refuses an unknown title_block field, naming it. <sub>`the_mcp_params_read_title_block_and_refuse_unknown_fields`</sub>
+- Through the Link API, title_block overrides the default title, and an unknown title_block field is refused with 400 and changes nothing. <sub>`the_link_api_reads_title_block`</sub>
 
 ### drawing_tools
 
@@ -2737,6 +2747,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - madake reroute --json prints the reply as it came, and the human output lists the nets left unchanged with their reasons. <sub>`reroute_prints_json_or_a_human_summary`</sub>
 - madake arrange sends the sheet and the channel width only when given. <sub>`arrange_sends_only_what_was_given`</sub>
 - madake draft reads the request file, turns a relative source_path into an absolute one next to the file, and prints a summary or the raw reply. <sub>`draft_sends_the_request_with_an_absolute_source_path`</sub>
+- madake draft sends the title_block of the request file on to the app unchanged. <sub>`draft_sends_the_title_block_on`</sub>
 - madake draft refuses a request file that is missing, is not JSON, or has no source_path, without calling the app. <sub>`draft_refuses_a_bad_request_file`</sub>
 - madake draft-check sends an absolute path and the repeated --ignore references, and succeeds when the sheets match. <sub>`draft_check_sends_the_path_and_the_ignored_references`</sub>
 - madake draft-check fails (non-zero exit) when the sheets do not match, and the error carries the report with the problem pins. <sub>`draft_check_fails_when_the_sheets_do_not_match`</sub>

@@ -127,6 +127,7 @@ pub(super) fn request(columns: &[&[&str]]) -> DraftRequest {
         paper: DraftPaper::A3,
         pitch_mm: 5.0,
         planned_sheets: Vec::new(),
+        title_block: None,
     }
 }
 
