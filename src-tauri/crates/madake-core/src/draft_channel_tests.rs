@@ -484,3 +484,22 @@ fn drafted_fixtures_keep_the_connections_and_wires_off_everything() {
         }
     }
 }
+
+/// Opening many new tracks between the same two tracks keeps them apart: the tracks never collapse onto one position, so a net never shorts with or is refused because of a track it does not touch.
+/// 同じ2本のトラックのあいだに何度も新しいトラックを開いても、トラックは1つの位置に重ならない。触れていないトラックのせいで短絡したり断られたりはしない。
+#[test]
+fn many_tracks_opened_in_one_gap_stay_apart() {
+    // A has its terminals on the right at y=0 and y=50. Each R(i+1) has its left terminal above and its right terminal above
+    // the ones of R(i), so its best position (no crossing) is always between R(i) and A: forty tracks opened in one gap
+    let mut nets = vec![chan_net(100, "A", &[(0.0, false), (50.0, false)])];
+    for i in 0..40 {
+        nets.push(chan_net(i, &format!("R{}", i + 1), &[(45.0 - i as f64, true), (100.0 - i as f64, false)]));
+    }
+    let a = assign_tracks(&nets);
+    assert!(a.unplaced.is_empty(), "{a:?}");
+    assert_eq!(a.tracks, 41);
+    for i in 0..40 {
+        assert_eq!(track_of(&a, i), Some(i), "R{} is the {i}th track from the left", i + 1);
+    }
+    assert_eq!(track_of(&a, 100), Some(40), "A stays right of every R");
+}

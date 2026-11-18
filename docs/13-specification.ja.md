@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3984仕様項目**。
+全6領域・**3985仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -557,6 +557,7 @@
 - 同じ依頼を2回計画すると、ランダムなidを除けば、全く同じ配線になる。 <sub>`planning_twice_gives_the_same_channel_wires`</sub>
 - 通り道の配線がふさがれたネット (ここでは幹の上に立入禁止の領域を置く) は格子の経路探索に渡され、それでもつながり、つながりは変わらない。 <sub>`a_blocked_channel_net_is_taken_by_the_grid_router`</sub>
 - 基本・棒・積んだ見本のどれでも、どちらのピン間隔でも、下書きのシートは元の図と同じつながりを持ち、札の旗・印・文字の枠・箱に触れる配線は無い。 <sub>`drafted_fixtures_keep_the_connections_and_wires_off_everything`</sub>
+- 同じ2本のトラックのあいだに何度も新しいトラックを開いても、トラックは1つの位置に重ならない。触れていないトラックのせいで短絡したり断られたりはしない。 <sub>`many_tracks_opened_in_one_gap_stay_apart`</sub>
 
 ### draft_check
 

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3984 specification clauses** across 6 areas.
+**3985 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -557,6 +557,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Planning the same request twice gives the same wires once the random ids are left out. <sub>`planning_twice_gives_the_same_channel_wires`</sub>
 - A net whose channel wire is blocked (here by a keep-out area over its trunk) is handed to the grid router, which still joins it, and the connections stay the same. <sub>`a_blocked_channel_net_is_taken_by_the_grid_router`</sub>
 - On the core, bars and stacked fixtures, at both pitches, the drafted sheet carries the connections of the source, and no wire touches a tag flag, a mark, a text box or a box. <sub>`drafted_fixtures_keep_the_connections_and_wires_off_everything`</sub>
+- Opening many new tracks between the same two tracks keeps them apart: the tracks never collapse onto one position, so a net never shorts with or is refused because of a track it does not touch. <sub>`many_tracks_opened_in_one_gap_stay_apart`</sub>
 
 ### draft_check
 

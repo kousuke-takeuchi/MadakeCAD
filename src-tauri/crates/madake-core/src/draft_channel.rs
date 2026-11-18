@@ -124,14 +124,13 @@ fn abstract_segments(terms: &[ChanTerm], x: f64) -> Vec<(Point, Point)> {
 /// 相乗りできるのは、幹の範囲を両側に5mm広げたものが重ならないときだけ。どの位置も選べないネットは `unplaced`。
 pub(crate) fn assign_tracks(nets: &[ChanNet]) -> Assignment {
     struct Track {
-        pos: f64,
         members: Vec<usize>,
     }
-    struct Done {
+    struct Done<'a> {
         key: usize,
         straight: bool,
         span: (f64, f64),
-        segs: Vec<(Point, Point)>,
+        terms: &'a [ChanTerm],
     }
     let mut order: Vec<&ChanNet> = nets.iter().collect();
     order.sort_by(|a, b| natural_cmp(&a.name, &b.name).then(a.key.cmp(&b.key)));
@@ -142,25 +141,28 @@ pub(crate) fn assign_tracks(nets: &[ChanNet]) -> Assignment {
     for net in order {
         let straight = is_straight(&net.terms);
         let span = span_of(&net.terms);
-        // 候補の位置 (左から右)。(トラックの位置, 相乗りする既存のトラックの添字)
-        let mut candidates: Vec<(f64, Option<usize>)> = Vec::new();
+        // 抽象的な位置は整数の並び: i番目のトラックは 2i+1、i番目のトラックの左に開く新しいトラックは 2i。
+        // 新しいトラックを開くたびに付け直すので、何本開いても位置が近づきすぎない (半分ずつにすると丸めで重なる)
+        let segs_of_done: Vec<Vec<(Point, Point)>> = done
+            .iter()
+            .map(|d| {
+                let x = if d.straight { 0.0 } else { (2 * tracks.iter().position(|t| t.members.contains(&d.key)).expect("a placed net has a track") + 1) as f64 };
+                abstract_segments(d.terms, x)
+            })
+            .collect();
+        // 候補の位置 (左から右)。(抽象的な位置, 相乗りする既存のトラックの添字, 新しいトラックを差し込む添字)
+        let mut candidates: Vec<(f64, Option<usize>, usize)> = Vec::new();
         for i in 0..=tracks.len() {
-            let pos = match (i.checked_sub(1).map(|j| tracks[j].pos), tracks.get(i).map(|t| t.pos)) {
-                (None, None) => 0.0,
-                (None, Some(next)) => next - 1.0,
-                (Some(prev), None) => prev + 1.0,
-                (Some(prev), Some(next)) => (prev + next) / 2.0,
-            };
-            candidates.push((pos, None));
+            candidates.push(((2 * i) as f64, None, i));
             if i < tracks.len() {
-                candidates.push((tracks[i].pos, Some(i)));
+                candidates.push(((2 * i + 1) as f64, Some(i), i));
             }
         }
         if straight {
-            candidates = vec![(0.0, None)];
+            candidates = vec![(0.0, None, 0)];
         }
         let mut best: Option<(usize, bool, usize)> = None; // (交差, 新しいトラックを開くか, 候補の添字)
-        for (ci, &(x, share)) in candidates.iter().enumerate() {
+        for (ci, &(x, share, _)) in candidates.iter().enumerate() {
             if let Some(i) = share {
                 let clash = tracks[i].members.iter().any(|m| {
                     let other = done.iter().find(|d| d.key == *m).expect("a member is done");
@@ -172,9 +174,9 @@ pub(crate) fn assign_tracks(nets: &[ChanNet]) -> Assignment {
             }
             let mine = abstract_segments(&net.terms, x);
             let (mut crossings, mut short) = (0usize, false);
-            'pairs: for d in &done {
+            'pairs: for d in &segs_of_done {
                 for a in &mine {
-                    for b in &d.segs {
+                    for b in d {
                         match seg_rel(*a, *b) {
                             Rel::Short => {
                                 short = true;
@@ -199,17 +201,14 @@ pub(crate) fn assign_tracks(nets: &[ChanNet]) -> Assignment {
             out.unplaced.push(net.key);
             continue;
         };
-        let (x, share) = candidates[ci];
+        let (_, share, at) = candidates[ci];
         if !straight {
             match share {
                 Some(i) => tracks[i].members.push(net.key),
-                None => {
-                    let at = tracks.iter().position(|t| t.pos > x).unwrap_or(tracks.len());
-                    tracks.insert(at, Track { pos: x, members: vec![net.key] });
-                }
+                None => tracks.insert(at, Track { members: vec![net.key] }),
             }
         }
-        done.push(Done { key: net.key, straight, span, segs: abstract_segments(&net.terms, x) });
+        done.push(Done { key: net.key, straight, span, terms: &net.terms });
     }
     out.tracks = tracks.len();
     for d in &done {
