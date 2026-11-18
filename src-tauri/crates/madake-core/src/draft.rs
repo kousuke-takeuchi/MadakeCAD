@@ -306,6 +306,9 @@ impl DraftRequest {
         for (c, column) in self.columns.iter().enumerate() {
             for r in column {
                 let r = r.trim();
+                if r.is_empty() {
+                    return Err(format!("Column {} holds a blank reference: name a unit of the source", c + 1));
+                }
                 if !seen.insert(r.to_string()) {
                     return Err(format!("The reference {r} is listed more than once in columns (column {})", c + 1));
                 }
@@ -348,6 +351,18 @@ pub(crate) fn build_model(source: &Project, open: &Project, req: &DraftRequest) 
             if !src.instances.contains_key(r.trim()) {
                 return Err(format!("The reference {} does not exist in the source", r.trim()));
             }
+        }
+    }
+    // ライブラリのシンボルの機器は、元の図で1つのシンボルのときだけ置ける (リレーのコイルと接点のように
+    // 何個かのシンボルで描いた機器は、1つのシンボルとして置き直せない)
+    for r in req.columns.iter().flatten() {
+        let list = &src.instances[r.trim()];
+        if list.len() >= 2 && list.iter().any(|s| s.symbol_id != BLOCK_SYMBOL_ID) {
+            return Err(format!(
+                "The unit {} is drawn by {} symbols in the source; a function sheet places a library symbol only when the unit is one symbol",
+                r.trim(),
+                list.len()
+            ));
         }
     }
     let listed: BTreeSet<&str> = req.columns.iter().flatten().map(|r| r.trim()).collect();
@@ -944,6 +959,25 @@ mod model_tests {
     fn a_reference_listed_twice_is_refused() {
         let e = refuse(&fixture_source(), &open(), &request(&[&["U1"], &["U1"]]));
         assert!(e.contains("U1") && e.contains("more than once"), "{e}");
+    }
+
+    /// A blank reference in columns is refused with the column number.
+    /// columns に空白の参照記号があると、列の番号を挙げて断る。
+    #[test]
+    fn a_blank_reference_is_refused() {
+        let e = refuse(&fixture_source(), &open(), &request(&[&["U1"], &["  "]]));
+        assert!(e.contains("blank") && e.contains("Column 2"), "{e}");
+    }
+
+    /// A library-symbol unit that the source draws with several symbols (like a relay coil and its contacts) is refused, because it cannot be placed as one symbol.
+    /// 元の図で何個かのシンボルで描いたライブラリのシンボルの機器 (リレーのコイルと接点など) は、1つのシンボルとして置けないので断る。
+    #[test]
+    fn a_library_unit_drawn_by_several_symbols_is_refused() {
+        let mut source = fixture_source();
+        let extra = Entity::Symbol(plain("resistor", "R1", "10k", Point::new(350.0, 220.0)));
+        source.sheets[0].entities.insert(extra.id(), extra);
+        let e = refuse(&source, &open(), &request(&[&["R1"]]));
+        assert!(e.contains("R1") && e.contains("2 symbols"), "{e}");
     }
 
     /// A pin key the unit does not have is refused.

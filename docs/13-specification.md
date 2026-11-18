@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3878 specification clauses** across 6 areas.
+**3880 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -451,6 +451,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - A request reads from JSON with its defaults, and refuses a field it does not know. <sub>`a_request_reads_with_defaults_and_refuses_unknown_fields`</sub>
 - A reference the source does not have is refused, and the message names it. <sub>`an_unknown_reference_is_refused`</sub>
 - A reference listed twice is refused. <sub>`a_reference_listed_twice_is_refused`</sub>
+- A blank reference in columns is refused with the column number. <sub>`a_blank_reference_is_refused`</sub>
+- A library-symbol unit that the source draws with several symbols (like a relay coil and its contacts) is refused, because it cannot be placed as one symbol. <sub>`a_library_unit_drawn_by_several_symbols_is_refused`</sub>
 - A pin key the unit does not have is refused. <sub>`an_unknown_pin_key_is_refused`</sub>
 - A pins entry for a reference that is not in columns is refused. <sub>`a_pins_entry_for_a_reference_not_in_columns_is_refused`</sub>
 - A net the source does not have is refused in power_nets, in ground_nets and in destinations, naming the option and the net. <sub>`an_unknown_net_is_refused_in_each_option`</sub>

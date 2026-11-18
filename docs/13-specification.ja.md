@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**3878仕様項目**。
+全6領域・**3880仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -451,6 +451,8 @@
 - 下書きの依頼はJSONから読め、省いた項目は既定値になり、知らない項目があれば読み込みを断る。 <sub>`a_request_reads_with_defaults_and_refuses_unknown_fields`</sub>
 - 元の図にない参照記号を挙げると断り、その参照記号を文に入れる。 <sub>`an_unknown_reference_is_refused`</sub>
 - 同じ参照記号を2回挙げると断る。 <sub>`a_reference_listed_twice_is_refused`</sub>
+- columns に空白の参照記号があると、列の番号を挙げて断る。 <sub>`a_blank_reference_is_refused`</sub>
+- 元の図で何個かのシンボルで描いたライブラリのシンボルの機器 (リレーのコイルと接点など) は、1つのシンボルとして置けないので断る。 <sub>`a_library_unit_drawn_by_several_symbols_is_refused`</sub>
 - その機器にないピンの番号を pins に挙げると断る。 <sub>`an_unknown_pin_key_is_refused`</sub>
 - columns にない参照記号を pins に挙げると断る。 <sub>`a_pins_entry_for_a_reference_not_in_columns_is_refused`</sub>
 - 元の図にないネット名は、power_nets・ground_nets・destinations のどれに書いても断り、項目名とネット名を文に入れる。 <sub>`an_unknown_net_is_refused_in_each_option`</sub>
