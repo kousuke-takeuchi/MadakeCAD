@@ -302,7 +302,7 @@ mod tests {
         let mut later_a = request(LATER_A, &[&["R1"]], &[]);
         let mut later_b = with_pins(request(LATER_B, &[&["U2"]], &[]), "U2", &["3"]);
         if planned {
-            let names: Vec<String> = ["Main", LATER_A, LATER_B].iter().map(|s| s.to_string()).collect();
+            let names: Vec<crate::draft::PlannedSheet> = ["Main", LATER_A, LATER_B].iter().map(|s| (*s).into()).collect();
             for r in [&mut main, &mut later_a, &mut later_b] {
                 r.planned_sheets = names.clone();
             }

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**3938 specification clauses** across 6 areas.
+**3945 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -488,11 +488,14 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The destinations option becomes the destination text of the tag. <sub>`a_destination_option_becomes_the_tags_destination`</sub>
 - Tags on adjacent pins do not touch, at 5 mm and at 2.5 mm pitch. <sub>`tags_on_adjacent_pins_do_not_touch`</sub>
 - A tag keeps room for the names other sheets add inside it later: its keep-out holds the flag with ten characters and with the longest sheet name of the open project. <sub>`a_tag_reserves_room_for_ten_characters_and_the_longest_sheet_name`</sub>
-- With one other sheet planned, a tag keeps room for exactly that sheet name when it is wider than ten characters. <sub>`one_planned_name_is_the_reserved_text`</sub>
-- With two other sheets, the reserve is the two names joined with the separator a tag uses, the wider name first. <sub>`two_planned_names_are_joined`</sub>
-- With three or more other sheets, the reserve is the two widest names joined plus the other marker. <sub>`three_planned_names_keep_the_two_widest_and_the_other_marker`</sub>
-- The name of the sheet being drafted, even when it is listed in planned_sheets, never counts; existing sheet names and planned names that repeat count once. <sub>`the_own_name_is_left_out_and_existing_names_count_once`</sub>
-- A planned set that is too narrow still keeps the ten-character minimum for the flag. <sub>`a_short_planned_name_keeps_the_ten_character_minimum`</sub>
+- The widest destination text of a set of names: one name is that name, two are joined, three or more keep the two widest and the other marker. <sub>`the_widest_destination_text_follows_the_flag_rules`</sub>
+- Name-only planned sheets are possible destinations of every tag, and the own name never counts; no minimum of ten characters is kept. <sub>`name_only_entries_reserve_for_every_tag_and_the_own_name_is_left_out`</sub>
+- An object entry is a destination only for the nets it carries a pin of: net A goes to one other sheet, net B to two, net C to none. <sub>`an_object_entry_is_a_destination_only_for_the_nets_it_carries`</sub>
+- Object and name-only entries mix: a name-only entry joins every tag, an object entry only its own nets. <sub>`object_and_name_only_entries_mix`</sub>
+- An entry that has the same name as a sheet of the open project counts through that sheet's labels, not through the plan. <sub>`an_entry_that_already_exists_counts_by_its_labels`</sub>
+- On A4, a request whose planned sheets are only names is refused because every tag reserves room for all of them, while the same sheets given with their units fit: only the nets they carry reserve room. <sub>`per_tag_room_lets_a_sheet_fit_that_the_worst_case_refuses`</sub>
+- The names of planned sheets with units that the source does not have, or pins that a unit does not have, are refused with the entry named. <sub>`planned_objects_with_unknown_units_or_pins_are_refused`</sub>
+- A planned sheet may be written as a string or as an object, in one list, and an object with an unknown field is refused. <sub>`planned_sheets_read_both_forms_from_json`</sub>
 - With planned names the layout is wider than with none: the first column starts further right so that the widest flag fits. <sub>`planned_names_push_the_first_column_right`</sub>
 - A request without planned_sheets reads as an empty list and lays out exactly as one that names an empty list. <sub>`a_request_without_planned_sheets_lays_out_as_before`</sub>
 - Every box origin, pin, stub end and tag lies on the 2.5 mm grid, at both pitches. <sub>`every_pin_and_origin_is_on_the_grid`</sub>
@@ -509,6 +512,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The counts in the plan are the counts on the sheet. <sub>`the_plan_counts_match_the_sheet`</sub>
 - Planning the same request twice gives the same sheet once the random entity ids are replaced by their order of appearance. <sub>`planning_twice_gives_the_same_sheet`</sub>
 - A net that leaves the sheet keeps its tag, and the wire to the tag ends exactly on the tag's stub, so the pins and the tag are one net. <sub>`a_leaving_net_with_two_pins_is_wired_to_its_tag`</sub>
+- Three planned sheets given with their units: the tag of net SIG_A reserves room for two other sheets, SIG_B for one and M1.1 for none; once all three are drafted every flag, drawn with the destination the export prints, lies inside its reserve and no tag leaves the frame. <sub>`per_net_reserves_hold_the_real_flags_of_three_drafted_sheets`</sub>
 - Where a leaving net is also wired, no wire runs through or along a tag flag: only the tag's own wire touches its flag, at the tag's point. At a pitch of 5 mm every other wire keeps the router clearance; at 2.5 mm, where adjacent flags are only 0.25 mm apart, no other wire touches a flag. <sub>`no_wire_runs_through_or_along_a_tag_flag`</sub>
 - A tag sits at a free end: exactly one wire reaches its point, and its flag touches no other flag, no unit outline and no mark. <sub>`a_tag_hangs_at_a_free_end_clear_of_other_tags_boxes_and_marks`</sub>
 - Wherever three or more wire arms meet there is a junction dot, also where the wire to the peers leaves a tag's branch at a pin's stub. <sub>`every_point_where_three_wires_meet_has_a_junction`</sub>
@@ -2079,6 +2083,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The draft tool description tells the caller to pass the names of all sheets so that tags keep room for them. <sub>`the_draft_tool_description_mentions_planned_sheets`</sub>
 - Through the Link API, planned_sheets reaches the planner: a blank entry is refused (400, and the planner's message names the field), and nothing changes. <sub>`the_link_api_reads_planned_sheets`</sub>
 - Through the Link API, drafting three sheets with planned_sheets leaves no tag outside the frame, and without it the check lists the tag and says layout_ok is false while ok stays true. <sub>`the_check_reports_tags_outside_the_frame_through_the_link_api`</sub>
+- The object form of a planned sheet (name, units, pins) and the string form both go through the MCP parameter type, and the planner reads the units of an object. <sub>`planned_objects_round_trip_through_the_mcp_params`</sub>
+- Through the Link API an object entry reaches the planner: a unit the source does not have is refused naming the entry, a good entry drafts the sheet. <sub>`the_link_api_reads_planned_objects`</sub>
 
 ### drawing_tools
 
@@ -2689,6 +2695,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - madake draft-check fails (non-zero exit) when the sheets do not match, and the error carries the report with the problem pins. <sub>`draft_check_fails_when_the_sheets_do_not_match`</sub>
 - madake draft-check also fails when the connections match but a tag flag leaves the frame, and the report lists the sheet, the net and the excess. <sub>`draft_check_fails_when_a_tag_leaves_the_frame`</sub>
 - madake draft sends planned_sheets from the request file unchanged. <sub>`draft_sends_planned_sheets`</sub>
+- madake draft sends the object form of planned_sheets (name, units, pins) from the request file unchanged, next to plain names. <sub>`draft_sends_planned_sheet_objects`</sub>
 - madake undo tells the user when there is nothing to undo. <sub>`undo_reports_empty_history`</sub>
 - madake redo reports the new document revision on success. <sub>`redo_reports_revision`</sub>
 - madake save/open report the file path they acted on. <sub>`save_and_open_report_path`</sub>

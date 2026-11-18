@@ -409,7 +409,8 @@ fn three_requests(planned: bool) -> Vec<Value> {
 fn planned_sheets_round_trips_through_the_mcp_params() {
     let params: madake_mcp::DraftFunctionSheetParams =
         serde_json::from_value(json!({"source_path": "/x.mdkproj", "name": "A", "columns": [["U1"]], "planned_sheets": ["A", "B"]})).unwrap();
-    assert_eq!(params.request.planned_sheets, vec!["A".to_string(), "B".to_string()]);
+    let names: Vec<&str> = params.request.planned_sheets.iter().map(|p| p.name()).collect();
+    assert_eq!(names, vec!["A", "B"]);
     let none: madake_mcp::DraftFunctionSheetParams =
         serde_json::from_value(json!({"source_path": "/x.mdkproj", "name": "A", "columns": [["U1"]]})).unwrap();
     assert!(none.request.planned_sheets.is_empty());
@@ -465,4 +466,50 @@ async fn the_check_reports_tags_outside_the_frame_through_the_link_api() {
             assert!(outside[0]["excess_mm"].as_f64().unwrap() > 0.0, "{check}");
         }
     }
+}
+
+/// The object form of a planned sheet (name, units, pins) and the string form both go through the MCP parameter type, and the planner reads the units of an object.
+/// 計画のシートの機器つきの形 (name・units・pins) も文字列の形も、MCPの引数の型を通り、計画は機器つきの項目の機器を読む。
+#[test]
+fn planned_objects_round_trip_through_the_mcp_params() {
+    let params: madake_mcp::DraftFunctionSheetParams = serde_json::from_value(json!({
+        "source_path": "/x.mdkproj", "name": "A", "columns": [["U1"]],
+        "planned_sheets": ["B", {"name": "C", "units": ["U2"], "pins": {"U2": ["3"]}}]
+    }))
+    .unwrap();
+    assert_eq!(params.request.planned_sheets.len(), 2);
+    assert_eq!(params.request.planned_sheets[0].name(), "B");
+    match &params.request.planned_sheets[1] {
+        madake_core::draft::PlannedSheet::Detailed(d) => {
+            assert_eq!(d.name, "C");
+            assert_eq!(d.units, vec!["U2".to_string()]);
+            assert_eq!(d.pins["U2"], vec!["3".to_string()]);
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+/// Through the Link API an object entry reaches the planner: a unit the source does not have is refused naming the entry, a good entry drafts the sheet.
+/// Link API経由で、機器つきの項目は計画まで届く。元の図に無い機器は項目を挙げて断られ、正しい項目ならシートが作られる。
+#[tokio::test]
+async fn the_link_api_reads_planned_objects() {
+    let (doc, bridge, router) = fixture();
+    let mut bad = first_request();
+    bad["planned_sheets"] = json!([{"name": "Later", "units": ["NOPE9"]}]);
+    let err = draft(&doc, &bad).expect_err("an unknown unit is refused");
+    assert!(err.contains("Later") && err.contains("NOPE9"), "{err}");
+    let (status, _) = post(&router, "/api/v1/draft/function-sheet", bad).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(sheet_count(&doc), 0);
+    let mut good = first_request();
+    good["planned_sheets"] = json!(["Sheet A", {"name": "Sheet B", "units": ["U2"], "pins": {"U2": ["9", "10"]}}]);
+    let (status, reply) = post(&router, "/api/v1/draft/function-sheet", good.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    good["name"] = json!("Sheet B");
+    good["columns"] = json!([["U2"], ["TB1", "R1"]]);
+    good["pins"] = json!({"U2": ["9", "10"]});
+    good["planned_sheets"] = json!(["Sheet A", {"name": "Sheet B", "units": ["U2"], "pins": {"U2": ["9", "10"]}}]);
+    let reply = call(&bridge, "draft_function_sheet", good).await;
+    assert!(reply["sheet_id"].is_string(), "{reply}");
+    assert_eq!(sheet_count(&doc), 2);
 }

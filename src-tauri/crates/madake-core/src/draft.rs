@@ -58,11 +58,54 @@ pub struct DraftRequest {
     /// 箱のピン間隔 (mm)。2.5 か 5.0 (既定 5.0)。
     #[serde(default = "default_pitch")]
     pub pitch_mm: f64,
-    /// 呼び出し側が下書きするつもりの全ての機能シートの名前 (順不同。この依頼自身の名前や、すでにある名前を含んでよい)。
-    /// 札の行き先の文字のために確保する幅は、開いているプロジェクトにあるシート名とこの一覧の和集合から
-    /// この依頼のシート名を除いた集合で、旗が将来持ちうる最も広い文字になる。空なら従来どおり。
+    /// 呼び出し側が下書きするつもりの全ての機能シート (順不同。この依頼自身や、すでにあるシートを含んでよい)。
+    /// 各項目は名前の文字列か、`{name, units, pins?}` (そのシートが載せる機器とピン)。札の行き先の文字のために
+    /// 確保する幅は、札ごとに、その札が将来持ちうる行き先だけで決まる。空なら従来どおり。
     #[serde(default)]
-    pub planned_sheets: Vec<String>,
+    pub planned_sheets: Vec<PlannedSheet>,
+}
+
+/// 計画した機能シート1枚。名前だけなら中身は不明 (どの札の行き先にもなりうる)。
+/// `{name, units, pins?}` なら、そのシートが載せるピンを持つネットの札だけの行き先になる。
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
+#[serde(untagged)]
+pub enum PlannedSheet {
+    /// 名前だけ。
+    Name(String),
+    /// 名前と、載せる機器・ピン。
+    Detailed(PlannedSheetDetail),
+}
+
+/// 載せる機器を添えた計画のシート。`pins` は依頼の `pins` と同じ意味 (その機器をそのシートで限る)。
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PlannedSheetDetail {
+    pub name: String,
+    pub units: Vec<String>,
+    #[serde(default)]
+    pub pins: BTreeMap<String, Vec<String>>,
+}
+
+impl PlannedSheet {
+    /// シートの名前 (前後の空白はそのまま)。
+    pub fn name(&self) -> &str {
+        match self {
+            PlannedSheet::Name(n) => n,
+            PlannedSheet::Detailed(d) => &d.name,
+        }
+    }
+}
+
+impl From<&str> for PlannedSheet {
+    fn from(name: &str) -> Self {
+        PlannedSheet::Name(name.to_string())
+    }
+}
+
+impl From<String> for PlannedSheet {
+    fn from(name: String) -> Self {
+        PlannedSheet::Name(name)
+    }
 }
 
 /// ネットの種類。
@@ -118,6 +161,15 @@ pub(crate) struct DraftNet {
     pub dest: Option<String>,
 }
 
+/// 計画のシート1枚 (この依頼自身を除く) が、このシートの札の行き先になりうるかを決めるもの。
+#[derive(Debug, Clone)]
+pub(crate) struct PlannedCarry {
+    pub name: String,
+    /// 名前だけなら `None` (どの札の行き先にもなりうる)。載せる機器とピンが分かっていれば、そのシートが
+    /// ピンを載せる元のネットの名前 ([`DraftNet::name`] と同じ)。
+    pub nets: Option<BTreeSet<String>>,
+}
+
 /// model 段の結果。
 #[derive(Debug, Clone)]
 pub(crate) struct DraftModel {
@@ -125,6 +177,8 @@ pub(crate) struct DraftModel {
     pub nets: Vec<DraftNet>,
     /// 外したピン (参照記号, ピンの鍵, 理由)。
     pub skipped: Vec<(String, String, String)>,
+    /// `planned_sheets` の項目 (この依頼自身は除く)。
+    pub planned: Vec<PlannedCarry>,
 }
 
 /// 自然順の比較: 数字の並びは数の大きさで比べる (`U2.9` は `U2.10` の前、`U2` は `U10` の前)。
@@ -324,7 +378,7 @@ impl DraftRequest {
         }
         let mut planned = BTreeSet::new();
         for (i, p) in self.planned_sheets.iter().enumerate() {
-            let p = p.trim();
+            let p = p.name().trim();
             if p.is_empty() {
                 return Err(format!("planned_sheets entry {} is blank: give the name of a sheet you will draft", i + 1));
             }
@@ -350,6 +404,43 @@ fn resolve_nets<'a>(
         out.insert(i);
     }
     Ok(out)
+}
+
+/// 機器1つの、載せるピン (鍵, 名前, ネットの番号, ポートか) と、外したピン。`wanted` はピンを限る鍵 (無ければ全て)。
+/// 使用中 = 元のネットが2ピン以上、または電源・接地。下書きするシートと、計画のシートの両方がこの決め方を使う。
+#[allow(clippy::type_complexity)]
+fn unit_pin_nets(
+    src: &Source,
+    reference: &str,
+    wanted: Option<&BTreeSet<&str>>,
+    power: &BTreeSet<usize>,
+    ground: &BTreeSet<usize>,
+) -> Result<(Vec<(String, String, usize, bool)>, Vec<(String, String, String)>), String> {
+    let all = &src.unit_pins[reference];
+    if let Some(w) = wanted {
+        for k in w {
+            if !all.iter().any(|(key, _, _)| key == k) {
+                return Err(format!("The unit {reference} has no pin '{k}'"));
+            }
+        }
+    }
+    let (mut pins, mut skipped) = (Vec::new(), Vec::new());
+    for (key, name, is_port) in all {
+        if wanted.is_some_and(|w| !w.contains(key.as_str())) {
+            continue;
+        }
+        let net = src.pin_net.get(&(reference.to_string(), key.clone())).copied();
+        let Some(i) = net else {
+            skipped.push((reference.to_string(), key.clone(), "pin is not connected".to_string()));
+            continue;
+        };
+        if src.nets[i].pins.len() >= 2 || power.contains(&i) || ground.contains(&i) {
+            pins.push((key.clone(), name.clone(), i, *is_port));
+        } else {
+            skipped.push((reference.to_string(), key.clone(), "net has one pin".to_string()));
+        }
+    }
+    Ok((pins, skipped))
 }
 
 /// 元の図のネットリストを読み、各機器が持つピンと、各ネットの種類・名前を決める。
@@ -430,34 +521,12 @@ pub(crate) fn build_model(source: &Project, open: &Project, req: &DraftRequest) 
     for (column, refs) in req.columns.iter().enumerate() {
         for r in refs {
             let reference = r.trim().to_string();
-            let all = &src.unit_pins[&reference];
             let wanted: Option<BTreeSet<&str>> = req.pins.get(&reference).map(|l| l.iter().map(|k| k.trim()).collect());
-            if let Some(w) = &wanted {
-                for k in w {
-                    if !all.iter().any(|(key, _, _)| key == k) {
-                        return Err(format!("The unit {reference} has no pin '{k}'"));
-                    }
-                }
-            }
+            let (in_use, skips) = unit_pin_nets(&src, &reference, wanted.as_ref(), &power, &ground)?;
+            skipped.extend(skips);
             let mut pins = Vec::new();
-            for (key, name, is_port) in all {
-                if wanted.as_ref().is_some_and(|w| !w.contains(key.as_str())) {
-                    continue;
-                }
-                let net = src.pin_net.get(&(reference.clone(), key.clone())).copied();
-                let in_use = match net {
-                    None => {
-                        skipped.push((reference.clone(), key.clone(), "pin is not connected".to_string()));
-                        continue;
-                    }
-                    Some(i) => src.nets[i].pins.len() >= 2 || power.contains(&i) || ground.contains(&i),
-                };
-                if !in_use {
-                    skipped.push((reference.clone(), key.clone(), "net has one pin".to_string()));
-                    continue;
-                }
-                let net = net.unwrap();
-                if *is_port {
+            for (key, name, net, is_port) in in_use {
+                if is_port {
                     return Err(format!(
                         "The pin {reference}.{key} is a port with contacts, which a function sheet cannot draw"
                     ));
@@ -468,7 +537,7 @@ pub(crate) fn build_model(source: &Project, open: &Project, req: &DraftRequest) 
                         src.nets[net].name
                     ));
                 }
-                pins.push((key.clone(), name.clone(), net));
+                pins.push((key, name, net));
             }
             carried.push(Carried { reference, column, pins });
         }
@@ -554,7 +623,55 @@ pub(crate) fn build_model(source: &Project, open: &Project, req: &DraftRequest) 
         });
         *row += 1;
     }
-    Ok(DraftModel { units, nets, skipped })
+    let planned = planned_carries(&src, open, req, &power, &ground)?;
+    Ok(DraftModel { units, nets, skipped, planned })
+}
+
+/// `planned_sheets` の項目ごとに、載せるピンを持つ元のネットの名前を求める (この依頼自身の項目は除く)。
+/// 載せるピンの決め方は下書きするシートと同じ ([`unit_pin_nets`])。元の図に無い機器・その機器に無いピンは断る。
+fn planned_carries(
+    src: &Source,
+    _open: &Project,
+    req: &DraftRequest,
+    power: &BTreeSet<usize>,
+    ground: &BTreeSet<usize>,
+) -> Result<Vec<PlannedCarry>, String> {
+    let own = req.name.trim();
+    let mut out = Vec::new();
+    for entry in &req.planned_sheets {
+        let name = entry.name().trim().to_string();
+        let nets = match entry {
+            PlannedSheet::Name(_) => None,
+            PlannedSheet::Detailed(d) => {
+                let mut set = BTreeSet::new();
+                let listed: BTreeSet<&str> = d.units.iter().map(|u| u.trim()).collect();
+                for r in d.pins.keys() {
+                    if !listed.contains(r.trim()) {
+                        return Err(format!("planned_sheets entry '{name}': pins names the reference {r}, which is not in its units"));
+                    }
+                }
+                for unit in &d.units {
+                    let reference = unit.trim();
+                    if reference.is_empty() {
+                        return Err(format!("planned_sheets entry '{name}' holds a blank reference in units"));
+                    }
+                    if !src.instances.contains_key(reference) {
+                        return Err(format!("planned_sheets entry '{name}': the reference {reference} does not exist in the source"));
+                    }
+                    let wanted: Option<BTreeSet<&str>> =
+                        d.pins.iter().find(|(k, _)| k.trim() == reference).map(|(_, l)| l.iter().map(|k| k.trim()).collect());
+                    let (pins, _) = unit_pin_nets(src, reference, wanted.as_ref(), power, ground)
+                        .map_err(|e| format!("planned_sheets entry '{name}': {e}"))?;
+                    set.extend(pins.into_iter().map(|(_, _, net, _)| src.nets[net].name.clone()));
+                }
+                Some(set)
+            }
+        };
+        if name != own {
+            out.push(PlannedCarry { name, nets });
+        }
+    }
+    Ok(out)
 }
 
 /// テスト用: 元の図の見本 (`tests/fixtures/draft-source.mdkproj`) を読む。
@@ -2016,26 +2133,16 @@ fn reserved_dest(open: &Project) -> String {
         .fold(String::new(), |best, n| if text_width(&n, 1.0) > text_width(&best, 1.0) { n } else { best })
 }
 
-/// `planned_sheets` を使うとき、札の旗が将来持ちうる最も広い行き先の文字。
-///
-/// 集合 = (開いているプロジェクトのシート名) ∪ `planned` から、このシート自身の名前 `own` を除いたもの (前後の空白は無視、
-/// 名前が空のシートはシート番号)。集合が1つならその名前、2つ以上なら幅の広い2つを [`crate::xref::tag_dest_names`] と同じつなぎ方で
-/// つないだもの、3つ以上ならさらに「他」を付けたもの。集合が空なら `None`。順序は幅の降順、同じ幅なら自然順で決まり、ハッシュの順序には依らない。
-pub(crate) fn planned_reserve_text(open: &Project, planned: &[String], own: &str) -> Option<String> {
-    let own = own.trim();
-    let mut names: BTreeSet<String> = BTreeSet::new();
-    for (i, s) in open.sheets.iter().enumerate() {
-        let n = s.name.trim();
-        names.insert(if n.is_empty() { (i + 1).to_string() } else { n.to_string() });
-    }
-    names.extend(planned.iter().map(|p| p.trim().to_string()));
-    names.remove(own);
-    let mut by_width: Vec<String> = names.into_iter().collect();
+/// 行き先の名前の集合から、旗が持ちうる最も広い文字: 1つならその名前、2つ以上なら幅の広い2つを
+/// [`crate::xref::tag_dest_names`] と同じつなぎ方でつないだもの、3つ以上ならさらに「他」。空なら `None`。
+/// 順序は幅の降順、同じ幅なら自然順で決まり、ハッシュの順序には依らない。
+pub(crate) fn widest_dest_text(names: &BTreeSet<String>) -> Option<String> {
+    let mut by_width: Vec<&String> = names.iter().collect();
     by_width.sort_by(|a, b| text_width(b, 1.0).total_cmp(&text_width(a, 1.0)).then_with(|| natural_cmp(a, b)));
     let sep = crate::xref::DEST_SEPARATOR;
     match by_width.as_slice() {
         [] => None,
-        [a] => Some(a.clone()),
+        [a] => Some((*a).clone()),
         [a, b] => Some(format!("{a}{sep}{b}")),
         [a, b, ..] => Some(format!("{a}{sep}{b}{}", crate::xref::DEST_MORE)),
     }
@@ -2044,43 +2151,68 @@ pub(crate) fn planned_reserve_text(open: &Project, planned: &[String], own: &str
 /// 札の旗に後から書かれる行き先のために確保する文字の決め方。
 #[derive(Debug, Clone)]
 pub(crate) struct Reserve {
-    /// どの札にも確保する文字 ([`reserved_dest`])。
+    /// どの札にも確保する文字 ([`reserved_dest`])。`planned_sheets` を使うときは空。
     floor: String,
-    /// 札の名前 → 開いているプロジェクトの、同じ名前がすでにあるシートの名前を、旗に書かれるとおりにつないだ文字
-    /// ([`crate::xref::tag_dest_names`]: 2枚まで + 「他」)。
+    /// 札の名前 → 確保する文字。従来の動き (`planned_sheets` が空) では、開いているプロジェクトの同じ名前を持つシートの
+    /// 名前を旗に書かれるとおりにつないだ文字 ([`crate::xref::tag_dest_names`]) で、`floor` より広いときだけ使う。
+    /// `planned_sheets` を使うときは、その札が将来持ちうる行き先だけの文字 (行き先が無ければ入れない = 場所なし)。
     joined: BTreeMap<String, String>,
+    /// `planned_sheets` を使う: 札ごとに `joined` の文字だけを確保し、床も10文字の下限も無い。
+    exact: bool,
 }
 
 impl Reserve {
     /// 床だけ (つなぎ方を調べない)。
     #[cfg(test)]
     fn floor_only(open: &Project) -> Self {
-        Reserve { floor: reserved_dest(open), joined: BTreeMap::new() }
+        Reserve { floor: reserved_dest(open), joined: BTreeMap::new(), exact: false }
     }
 
-    /// 出ていくネットの札ごとに、すでに同じ名前を持つシートの名前をつないだ文字を調べる。
+    /// 札ごとの確保する文字を決める。
+    ///
+    /// `planned_sheets` が空なら従来どおり: 床 (開いているプロジェクトの最も長いシート名か10文字) と、同じ名前を
+    /// すでに持つシートの名前をつないだ文字。
+    ///
+    /// 空でなければ、ネット N の札ごとに、行き先の名前の集合は
+    /// - 開いているプロジェクトのシートのうち、すでに名前が N のネットラベルを持つもの (書き出しが行き先に使うのと同じ調べ方)、
+    /// - 計画の項目のうち、まだ無く、自分でもなく、載せる機器・ピンが分かっていて N のピンを1つ以上載せるもの、
+    /// - 計画の項目のうち、まだ無く、自分でもなく、名前だけのもの (中身が分からないので、どの札の行き先にもなりうる)。
+    /// 電源・接地の印は書き出しの行き先に数えられない (印はネットラベルではない) ので、それだけを持つシートは数えない。
     fn of(open: &Project, model: &DraftModel, req: &DraftRequest) -> Self {
-        let mut r = Reserve { floor: reserved_dest(open), joined: BTreeMap::new() };
-        // 計画したシートの名前が渡されたら、後から足される名前の分まで全ての札に確保する (床は従来の10文字以上)
-        if !req.planned_sheets.is_empty() {
-            if let Some(text) = planned_reserve_text(open, &req.planned_sheets, &req.name) {
-                if text_width(&text, 1.0) > text_width(&r.floor, 1.0) {
-                    r.floor = text;
+        let new_sheet = uuid::Uuid::new_v4(); // まだ無いシート: 開いているプロジェクトの全シートが相手になる
+        if req.planned_sheets.is_empty() {
+            let mut r = Reserve { floor: reserved_dest(open), joined: BTreeMap::new(), exact: false };
+            for net in model.nets.iter().filter(|n| n.class == NetClass::Leaving) {
+                if let Some(text) = crate::xref::tag_dest_names(open, new_sheet, &net.name) {
+                    r.joined.insert(net.name.trim().to_string(), text);
                 }
             }
+            return r;
         }
-        let new_sheet = uuid::Uuid::new_v4(); // まだ無いシート: 開いているプロジェクトの全シートが相手になる
-        for net in model.nets.iter().filter(|n| n.class == NetClass::Leaving) {
-            if let Some(text) = crate::xref::tag_dest_names(open, new_sheet, &net.name) {
-                r.joined.insert(net.name.trim().to_string(), text);
+        let existing: BTreeSet<String> = open.sheets.iter().map(|s| s.name.trim().to_string()).collect();
+        let mut r = Reserve { floor: String::new(), joined: BTreeMap::new(), exact: true };
+        for net in &model.nets {
+            let name = net.name.trim().to_string();
+            let mut names: BTreeSet<String> = crate::xref::dest_sheet_names(open, new_sheet, &name).into_iter().collect();
+            for p in model.planned.iter().filter(|p| !existing.contains(p.name.trim())) {
+                if p.nets.as_ref().map_or(true, |nets| nets.contains(&name)) {
+                    names.insert(p.name.trim().to_string());
+                }
+            }
+            if let Some(text) = widest_dest_text(&names) {
+                r.joined.insert(name, text);
             }
         }
         r
     }
 
-    /// 名前が `name` の札に確保する文字 (床とつないだ名前の広い方)。
+    /// 名前が `name` の札に確保する文字。
     fn text(&self, name: &str) -> &str {
-        match self.joined.get(name.trim()) {
+        let joined = self.joined.get(name.trim());
+        if self.exact {
+            return joined.map_or("", String::as_str);
+        }
+        match joined {
             Some(j) if text_width(j, 1.0) > text_width(&self.floor, 1.0) => j,
             _ => &self.floor,
         }
@@ -2788,57 +2920,136 @@ mod layout_tests {
         p
     }
 
-    /// With one other sheet planned, a tag keeps room for exactly that sheet name when it is wider than ten characters.
-    /// 他に計画したシートが1枚なら、その名前が10文字より広いとき、札はその名前ちょうどの場所を空ける。
+    /// The widest destination text of a set of names: one name is that name, two are joined, three or more keep the two widest and the other marker.
+    /// 行き先の名前の集合から作る最も広い文字は、1つならその名前、2つならつないだもの、3つ以上なら広い2つに「他」を付けたものになる。
     #[test]
-    fn one_planned_name_is_the_reserved_text() {
-        let name = "Spare relay panel number two".to_string();
-        let got = planned_reserve_text(&bare(), &[name.clone()], "Main");
-        assert_eq!(got.as_deref(), Some(name.as_str()));
+    fn the_widest_destination_text_follows_the_flag_rules() {
+        let set = |l: &[&str]| l.iter().map(|s| s.to_string()).collect::<BTreeSet<String>>();
+        let sep = crate::xref::DEST_SEPARATOR;
+        assert_eq!(widest_dest_text(&set(&[])), None);
+        assert_eq!(widest_dest_text(&set(&["Spare relay panel number two"])).as_deref(), Some("Spare relay panel number two"));
+        assert_eq!(widest_dest_text(&set(&["Alpha cabinet", "Beta cabinet wide"])), Some(format!("Beta cabinet wide{sep}Alpha cabinet")));
+        let three = set(&["Short", "The widest name here", "Second widest name", "Mid size"]);
+        assert_eq!(
+            widest_dest_text(&three),
+            Some(format!("The widest name here{sep}Second widest name{}", crate::xref::DEST_MORE))
+        );
     }
 
-    /// With two other sheets, the reserve is the two names joined with the separator a tag uses, the wider name first.
-    /// 他のシートが2枚なら、確保する文字は、札が使う区切りで2枚の名前をつないだもので、広い名前が先に来る。
-    #[test]
-    fn two_planned_names_are_joined() {
-        let got = planned_reserve_text(&bare(), &["Alpha cabinet".into(), "Beta cabinet wide".into()], "Main").unwrap();
-        assert_eq!(got, format!("Beta cabinet wide{}Alpha cabinet", crate::xref::DEST_SEPARATOR));
+    /// A project with one sheet and a request that names the sheets it plans; the model of U1 and TB1 on two columns.
+    fn planned_reserve(planned: Vec<PlannedSheet>) -> Reserve {
+        let mut r = request(&[&["U1"], &["TB1"]]);
+        r.planned_sheets = planned;
+        let m = build_model(&fixture_source(), &bare(), &r).unwrap();
+        Reserve::of(&bare(), &m, &r)
     }
 
-    /// With three or more other sheets, the reserve is the two widest names joined plus the other marker.
-    /// 他のシートが3枚以上なら、確保する文字は、いちばん広い2つの名前をつないだものに「他」を付けたものになる。
-    #[test]
-    fn three_planned_names_keep_the_two_widest_and_the_other_marker() {
-        let planned: Vec<String> = ["Short", "The widest name here", "Second widest name", "Mid size"].iter().map(|s| s.to_string()).collect();
-        let got = planned_reserve_text(&bare(), &planned, "Main").unwrap();
-        assert_eq!(got, format!("The widest name here{}Second widest name{}", crate::xref::DEST_SEPARATOR, crate::xref::DEST_MORE));
+    fn detailed(name: &str, units: &[&str], pins: &[(&str, &[&str])]) -> PlannedSheet {
+        PlannedSheet::Detailed(PlannedSheetDetail {
+            name: name.into(),
+            units: units.iter().map(|u| u.to_string()).collect(),
+            pins: pins.iter().map(|(u, k)| (u.to_string(), k.iter().map(|x| x.to_string()).collect())).collect(),
+        })
     }
 
-    /// The name of the sheet being drafted, even when it is listed in planned_sheets, never counts; existing sheet names and planned names that repeat count once.
-    /// 下書きするシート自身の名前は、一覧にあっても数えない。すでにあるシート名と重なる計画の名前は1回だけ数える。
+    /// Name-only planned sheets are possible destinations of every tag, and the own name never counts; no minimum of ten characters is kept.
+    /// 名前だけの計画のシートは、どの札の行き先にもなりうる。自分の名前は数えず、10文字の下限は付けない。
     #[test]
-    fn the_own_name_is_left_out_and_existing_names_count_once() {
-        let mut project = open();
-        project.sheets[0].name = "Existing".into();
-        project.sheets.truncate(1);
-        let planned: Vec<String> = ["Main".to_string(), "Existing".to_string()].to_vec();
-        assert_eq!(planned_reserve_text(&project, &planned, "Main").as_deref(), Some("Existing"));
-        assert_eq!(planned_reserve_text(&project, &planned, " Main ").as_deref(), Some("Existing"));
+    fn name_only_entries_reserve_for_every_tag_and_the_own_name_is_left_out() {
+        let r = planned_reserve(vec!["Function".into(), "B".into()]);
+        assert_eq!(r.text("SIG_A"), "B");
+        assert_eq!(r.text("SIG_B"), "B");
     }
 
-    /// A planned set that is too narrow still keeps the ten-character minimum for the flag.
-    /// 計画した名前が短くても、旗の場所は10文字分の最小の幅を下回らない。
+    /// An object entry is a destination only for the nets it carries a pin of: net A goes to one other sheet, net B to two, net C to none.
+    /// 項目に機器とピンを書いた計画のシートは、そのピンを載せるネットの札だけの行き先になる。ネットAは他の1枚、Bは2枚、Cはどこへも行かない。
     #[test]
-    fn a_short_planned_name_keeps_the_ten_character_minimum() {
-        let r = request(&[&["U1"], &["U2"]]);
-        let mut with = r.clone();
-        with.planned_sheets = vec!["B".into()];
-        let m = build_model(&fixture_source(), &open(), &with).unwrap();
-        let reserve = Reserve::of(&open(), &m, &with);
-        let font = 1.0;
-        assert!(text_width(reserve.text("SIG_A"), font) >= text_width(&"M".repeat(RESERVED_DEST_CHARS), font) - 1e-9);
-        let legacy = Reserve::of(&open(), &m, &r);
-        assert_eq!(reserve.text("SIG_A"), legacy.text("SIG_A"));
+    fn an_object_entry_is_a_destination_only_for_the_nets_it_carries() {
+        // U1 pin 5 = SIG_A, pin 4 = SIG_B (see the fixture); U2 pin 3 = SIG_A, pin 4 = SIG_B; TB1 pins decide the rest
+        let r = planned_reserve(vec![
+            detailed("Alpha cabinet", &["U2"], &[("U2", &["3"])]),
+            detailed("Beta cabinet wide", &["U2"], &[("U2", &["3", "4"])]),
+            detailed("Function", &["U1"], &[]),
+        ]);
+        let sep = crate::xref::DEST_SEPARATOR;
+        assert_eq!(r.text("SIG_A"), format!("Beta cabinet wide{sep}Alpha cabinet"));
+        assert_eq!(r.text("SIG_B"), "Beta cabinet wide");
+        assert_eq!(r.text("P24X"), "", "no planned sheet carries P24X");
+    }
+
+    /// Object and name-only entries mix: a name-only entry joins every tag, an object entry only its own nets.
+    /// 名前だけの項目と機器つきの項目を混ぜると、名前だけの項目は全ての札に、機器つきの項目はそのネットの札にだけ加わる。
+    #[test]
+    fn object_and_name_only_entries_mix() {
+        let r = planned_reserve(vec!["Loose sheet".into(), detailed("Alpha cabinet", &["U2"], &[("U2", &["3"])])]);
+        let sep = crate::xref::DEST_SEPARATOR;
+        assert_eq!(r.text("SIG_A"), format!("Alpha cabinet{sep}Loose sheet"));
+        assert_eq!(r.text("SIG_B"), "Loose sheet");
+    }
+
+    /// An entry that has the same name as a sheet of the open project counts through that sheet's labels, not through the plan.
+    /// すでにあるシートと同じ名前の計画の項目は、計画ではなく、そのシートのラベルがあるかで数える。
+    #[test]
+    fn an_entry_that_already_exists_counts_by_its_labels() {
+        let mut open = bare();
+        let mut sheet = Sheet::new("Alpha cabinet", PaperSize::A3, Orientation::Landscape);
+        let label = Entity::NetLabel(NetLabel { id: uuid::Uuid::new_v4(), at: Point::new(20.0, 20.0), name: "SIG_B".into(), rotation: 0, attrs: Default::default() });
+        sheet.entities.insert(label.id(), label);
+        open.sheets.push(sheet);
+        let mut r = request(&[&["U1"], &["TB1"]]);
+        r.planned_sheets = vec![detailed("Alpha cabinet", &["U2"], &[("U2", &["3"])])];
+        let m = build_model(&fixture_source(), &open, &r).unwrap();
+        let reserve = Reserve::of(&open, &m, &r);
+        assert_eq!(reserve.text("SIG_B"), "Alpha cabinet");
+        assert_eq!(reserve.text("SIG_A"), "", "the existing sheet has no SIG_A label, whatever the plan says");
+    }
+
+    /// On A4, a request whose planned sheets are only names is refused because every tag reserves room for all of them, while the same sheets given with their units fit: only the nets they carry reserve room.
+    /// A4で、計画のシートを名前だけで渡すと、どの札も全部の名前の場所を空けるので幅が足りず断られる。同じシートを機器つきで渡すと、そのシートが載せるネットの札だけが場所を空けるので収まる。
+    #[test]
+    fn per_tag_room_lets_a_sheet_fit_that_the_worst_case_refuses() {
+        let names: Vec<String> = (0..3).map(|i| format!("Distribution cabinet number {i} long")).collect();
+        let mut r = request(&[&["U1"], &["U2"], &["TB1"]]);
+        r.paper = DraftPaper::A4;
+        let columns_of = |r: &DraftRequest| {
+            let m = build_model(&fixture_source(), &bare(), r).unwrap();
+            lay_out(&m, &bare(), r)
+        };
+        r.planned_sheets = names.iter().map(|n| n.as_str().into()).collect();
+        let err = columns_of(&r).err().expect("the worst case does not fit");
+        assert!(err.contains("does not fit the width"), "{err}");
+        r.planned_sheets = names.iter().map(|n| detailed(n, &["TB1"], &[])).collect();
+        columns_of(&r).expect("the per-tag room fits");
+    }
+
+    /// The names of planned sheets with units that the source does not have, or pins that a unit does not have, are refused with the entry named.
+    /// 計画のシートに書いた機器が元の図に無い、またはピンがその機器に無いときは、項目を挙げて断られる。
+    #[test]
+    fn planned_objects_with_unknown_units_or_pins_are_refused() {
+        let mut r = request(&[&["U1"]]);
+        r.planned_sheets = vec![detailed("Alpha cabinet", &["NOPE9"], &[])];
+        let msg = build_model(&fixture_source(), &bare(), &r).unwrap_err();
+        assert!(msg.contains("Alpha cabinet") && msg.contains("NOPE9"), "{msg}");
+        r.planned_sheets = vec![detailed("Alpha cabinet", &["U2"], &[("U2", &["77"])])];
+        let msg = build_model(&fixture_source(), &bare(), &r).unwrap_err();
+        assert!(msg.contains("Alpha cabinet") && msg.contains("77"), "{msg}");
+        r.planned_sheets = vec![detailed("Alpha cabinet", &["U2"], &[("TB1", &["1"])])];
+        assert!(build_model(&fixture_source(), &bare(), &r).unwrap_err().contains("TB1"));
+    }
+
+    /// A planned sheet may be written as a string or as an object, in one list, and an object with an unknown field is refused.
+    /// 計画のシートは、文字列でも、機器つきの項目でも書け、1つの一覧に混ぜてよい。知らない項目のある項目は断られる。
+    #[test]
+    fn planned_sheets_read_both_forms_from_json() {
+        let r: DraftRequest = serde_json::from_str(
+            r#"{"name":"A","columns":[["U1"]],"planned_sheets":["B",{"name":"C","units":["U2"],"pins":{"U2":["3"]}},{"name":"D","units":[]}]}"#,
+        )
+        .unwrap();
+        assert_eq!(r.planned_sheets.len(), 3);
+        assert!(matches!(&r.planned_sheets[0], PlannedSheet::Name(n) if n == "B"));
+        assert!(matches!(&r.planned_sheets[1], PlannedSheet::Detailed(d) if d.name == "C" && d.pins["U2"] == vec!["3".to_string()]));
+        assert!(matches!(&r.planned_sheets[2], PlannedSheet::Detailed(d) if d.pins.is_empty()));
+        assert!(serde_json::from_str::<DraftRequest>(r#"{"name":"A","columns":[["U1"]],"planned_sheets":[{"name":"C","units":[],"bogus":1}]}"#).is_err());
     }
 
     /// With planned names the layout is wider than with none: the first column starts further right so that the widest flag fits.
@@ -3598,6 +3809,71 @@ mod wire_tests {
             let n = nets.iter().find(|n| n.label.as_deref() == Some(net.as_str())).expect("the tag names a net");
             assert!(n.pins.len() >= 2, "{net}: {:?}", n.pins);
         }
+    }
+
+    /// Three planned sheets given with their units: the tag of net SIG_A reserves room for two other sheets, SIG_B for one and M1.1 for none; once all three are drafted every flag, drawn with the destination the export prints, lies inside its reserve and no tag leaves the frame.
+    /// 機器つきで3枚を計画すると、SIG_Aの札は他の2枚、SIG_Bは1枚、M1.1はどれも無い分の場所を空ける。3枚を下書きし終えると、書き出しと同じ行き先で描いた旗がどれも空けた場所に収まり、枠からはみ出す札も無い。
+    #[test]
+    fn per_net_reserves_hold_the_real_flags_of_three_drafted_sheets() {
+        let (a, b) = ("Cabinet B terminal side", "Spare relay panel number two");
+        let object = |name: &str, units: &[&str], pins: &[(&str, &[&str])]| {
+            let mut r = request();
+            r.name = name.into();
+            r.columns = units.iter().map(|u| vec![u.to_string()]).collect();
+            r.pins = pins.iter().map(|(u, k)| (u.to_string(), k.iter().map(|x| x.to_string()).collect())).collect();
+            r.power_nets = Vec::new();
+            r
+        };
+        let mut requests = vec![
+            object("Main", &["U1", "TB1"], &[]),
+            object(a, &["R1"], &[]),
+            object(b, &["U2"], &[("U2", &["3", "4"])]),
+        ];
+        let plan_list = |requests: &[DraftRequest]| -> Vec<PlannedSheet> {
+            requests
+                .iter()
+                .map(|r| {
+                    PlannedSheet::Detailed(PlannedSheetDetail {
+                        name: r.name.clone(),
+                        units: r.columns.iter().flatten().cloned().collect(),
+                        pins: r.pins.clone(),
+                    })
+                })
+                .collect()
+        };
+        let planned = plan_list(&requests);
+        for r in &mut requests {
+            r.planned_sheets = planned.clone();
+        }
+        let mut open = Project::new("open");
+        open.sheets.clear();
+        let mut reserves = Vec::new();
+        for r in &requests {
+            let model = build_model(&fixture_source(), &open, r).unwrap();
+            reserves.push(lay_out(&model, &open, r).unwrap().reserve);
+            let p = plan_function_sheet(&fixture_source(), &open, r).expect("valid");
+            open.sheets.push(p.sheet);
+        }
+        let main = &reserves[0];
+        let sep = crate::xref::DEST_SEPARATOR;
+        assert_eq!(main.text("SIG_A"), format!("{b}{sep}{a}"));
+        assert_eq!(main.text("SIG_B"), b);
+        assert_eq!(main.text("M1.1"), "");
+        for (sheet, reserve) in open.sheets.iter().zip(&reserves) {
+            let dests = crate::xref::sheet_tag_dests(&open, sheet.id);
+            for (l, _, real) in flags(sheet, &dests) {
+                let font = crate::svg::LABEL_FONT * sheet.annotation_scale();
+                let room = flag_rect(&l, font, sheet.xref_style, reserve.text(&l.name)).unwrap();
+                assert!(
+                    room.min.x <= real.min.x + 1e-6 && room.max.x >= real.max.x - 1e-6,
+                    "{} on {}: the flag {real:?} is wider than its reserve {room:?}",
+                    l.name,
+                    sheet.name
+                );
+            }
+        }
+        let check = crate::draft_check::check_function_sheets(&fixture_source(), &open, &[]);
+        assert!(check.tags_outside.is_empty(), "{:?}", check.tags_outside);
     }
 
     /// The request whose two leaving nets (SIG_A, SIG_B) have two pins each on the sheet, so each gets a tag and a wire; U1 also carries its power and ground pins (marks).

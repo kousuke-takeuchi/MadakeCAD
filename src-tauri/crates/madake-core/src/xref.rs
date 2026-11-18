@@ -226,20 +226,37 @@ pub fn tag_dest_names(project: &Project, sheet_id: SheetId, label_name: &str) ->
     dest_names_from(&label_sites(project), sheet_id, name)
 }
 
-fn dest_names_from(sites: &BTreeMap<String, Vec<NetSite>>, sheet_id: SheetId, name: &str) -> Option<String> {
+/// ラベル名の所在 (`sites`) のうち、`sheet_id` 以外のシートの名前を、シート順に1回ずつ。シート名が空ならシート番号。
+fn dest_sheet_names_from(sites: &BTreeMap<String, Vec<NetSite>>, sheet_id: SheetId, name: &str) -> Vec<String> {
     let mut seen = BTreeSet::new();
-    let names: Vec<String> = sites
-        .get(name)?
-        .iter()
+    let Some(list) = sites.get(name) else { return Vec::new() };
+    list.iter()
         .filter(|s| s.sheet_id != sheet_id && seen.insert(s.sheet_id))
         .map(|s| if s.sheet_name.trim().is_empty() { s.sheet_no.to_string() } else { s.sheet_name.trim().to_string() })
-        .collect();
-    match names.as_slice() {
+        .collect()
+}
+
+/// ラベル名 `label_name` と同名のラベルを持つ**他のシート**の名前 ([`tag_dest_names`] がつなぐ前の一覧)。
+pub fn dest_sheet_names(project: &Project, sheet_id: SheetId, label_name: &str) -> Vec<String> {
+    let name = label_name.trim();
+    if name.is_empty() {
+        return Vec::new();
+    }
+    dest_sheet_names_from(&label_sites(project), sheet_id, name)
+}
+
+/// 行き先の名前の一覧を、旗に書くとおり (2枚までと、3枚以上なら「他」) につなぐ。空なら `None`。
+pub fn join_dest_names(names: &[String]) -> Option<String> {
+    match names {
         [] => None,
         [a] => Some(a.clone()),
         [a, b] => Some(format!("{a}{DEST_SEPARATOR}{b}")),
         [a, b, ..] => Some(format!("{a}{DEST_SEPARATOR}{b}{DEST_MORE}")),
     }
+}
+
+fn dest_names_from(sites: &BTreeMap<String, Vec<NetSite>>, sheet_id: SheetId, name: &str) -> Option<String> {
+    join_dest_names(&dest_sheet_names_from(sites, sheet_id, name))
 }
 
 /// シート1枚の、ラベル名 → 旗の中に書く自動の行き先 ([`tag_dest_names`])。シートの書き方がシート名のときだけ中身がある。

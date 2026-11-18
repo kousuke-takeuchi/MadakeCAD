@@ -1458,6 +1458,25 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// madake draft sends the object form of planned_sheets (name, units, pins) from the request file unchanged, next to plain names.
+    /// madake draftは、依頼のファイルにある planned_sheets の機器つきの形 (name・units・pins) を、名前だけの項目と並べたままそのまま送る。
+    #[test]
+    fn draft_sends_planned_sheet_objects() {
+        let dir = std::env::temp_dir().join(format!("madake-cli-draft-planned-obj-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("request.json");
+        std::fs::write(
+            &file,
+            r#"{"source_path": "/tmp/big.mdkproj", "name": "A", "columns": [["U1"]], "planned_sheets": ["Loose", {"name": "B", "units": ["U2"], "pins": {"U2": ["3"]}}]}"#,
+        )
+        .unwrap();
+        let api = FakeApi { result: json!({"sheet_id": "S1"}), ..Default::default() };
+        run(&parse(&["madake", "draft", file.to_str().unwrap()]), &api).unwrap();
+        let sent = api.calls()[0].clone();
+        assert!(sent.contains(r#""planned_sheets":["Loose",{"name":"B","pins":{"U2":["3"]},"units":["U2"]}]"#), "{sent}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     /// madake undo tells the user when there is nothing to undo.
     /// madake undoは戻す操作が無いことをユーザーに伝える。
     #[test]
