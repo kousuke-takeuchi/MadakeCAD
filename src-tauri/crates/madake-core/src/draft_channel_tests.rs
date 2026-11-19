@@ -363,17 +363,19 @@ fn a_net_reaching_two_columns_over_whose_row_is_taken_goes_to_the_grid_router() 
     assert_eq!(device_groups(&p.sheet, &["A", "B", "C"]), device_groups(&src.sheets[0], &["A", "B", "C"]));
 }
 
-/// A leaving net with two groups whose tag flag (with the room kept for other sheets' names) does not fit the channel keeps its tag on the branch at the pin and the grid router draws it; a leaving net with only one group on the sheet has no wire at all.
-/// 旗(他のシートの名前の分の余白を含む)が通り道に収まらない、組が2つの出ていくネットは、札をピンの枝に残し、格子の経路探索が引く。シートに組が1つだけの出ていくネットは配線そのものが無い。
+/// A leaving net with two groups gets its tag on the trunk even in a 20 mm channel with the default room for other sheets' names (the flag may lie over an empty part of the next column); a leaving net with only one group on the sheet has no wire and keeps its tag at the stub end.
+/// 組が2つの出ていくネットは、他のシートの名前の既定の余白があっても20mmの通り道で札を幹につける(旗は隣の列の空いた所にかかってよい)。シートに組が1つだけの出ていくネットは配線が無く、札は短い線の先に残る。
 #[test]
-fn a_tag_that_does_not_fit_the_channel_stays_on_its_branch() {
+fn a_tag_in_a_narrow_channel_moves_to_the_trunk_and_a_single_group_keeps_its_stub_tag() {
     let src = source_of("draft-leaving", &[("A", 2), ("B", 2), ("C", 2)], &[("N", &[("A", "1"), ("B", "1"), ("C", "1")]), ("L", &[("A", "2"), ("C", "2")])]);
     let req = stacked_request(&[&["A"], &["B"]], 5.0);
     let p = plan_function_sheet(&src, &open(), &req).expect("plan");
     assert!(p.wired.contains(&"N".to_string()), "{:?}", p.wired);
     let tag = labels_of(&p.sheet).into_iter().find(|l| l.name == "N").expect("N has its tag");
     let end = stub_end(&p.sheet, "A", "1");
-    assert!(tag.at.distance_to(&Point::new(end.x + 5.0, end.y)) < 1e-6, "the tag hangs on the branch at the pin: {:?} {:?}", tag.at, end);
+    assert!(tag.at.distance_to(&Point::new(end.x + 5.0, end.y)) > 1.0, "the tag is on the trunk, not on the branch: {:?} {:?}", tag.at, end);
+    let single = labels_of(&p.sheet).into_iter().find(|l| l.name == "L").expect("L has its tag");
+    assert!(single.at.distance_to(&stub_end(&p.sheet, "A", "2")) < 1e-6, "one group: the tag sits at the stub end");
     assert_eq!(p.tagged.iter().map(|t| t.net.as_str()).collect::<Vec<_>>(), vec!["L", "N"].into_iter().filter(|n| p.tagged.iter().any(|t| t.net == *n)).collect::<Vec<_>>());
     assert!(wires_touching_flags(&with_sheet(&open(), &p.sheet), &p.sheet).is_empty());
 }

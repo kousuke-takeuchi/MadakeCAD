@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**4019 specification clauses** across 6 areas.
+**4038 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -561,7 +561,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Five pins of one net on three units (two units with two pins each, which form bars) are drawn with one trunk and three drops. <sub>`bars_count_as_one_terminal_each`</sub>
 - Two terminals at the same height on the two sides are one straight horizontal wire from stub end to stub end, with no trunk and no junction. <sub>`terminals_at_one_height_are_one_straight_wire`</sub>
 - A net that reaches two columns over, whose row is taken by another net's drop in the channel, finds no free position there: the grid router draws it and the connections stay right. <sub>`a_net_reaching_two_columns_over_whose_row_is_taken_goes_to_the_grid_router`</sub>
-- A leaving net with two groups whose tag flag (with the room kept for other sheets' names) does not fit the channel keeps its tag on the branch at the pin and the grid router draws it; a leaving net with only one group on the sheet has no wire at all. <sub>`a_tag_that_does_not_fit_the_channel_stays_on_its_branch`</sub>
+- A leaving net with two groups gets its tag on the trunk even in a 20 mm channel with the default room for other sheets' names (the flag may lie over an empty part of the next column); a leaving net with only one group on the sheet has no wire and keeps its tag at the stub end. <sub>`a_tag_in_a_narrow_channel_moves_to_the_trunk_and_a_single_group_keeps_its_stub_tag`</sub>
 - The channel is 10 mm plus 2.5 mm per track and at least 20 mm wide, so the tracks always fit. <sub>`the_channel_width_follows_the_track_count`</sub>
 - Planning the same request twice gives the same wires once the random ids are left out. <sub>`planning_twice_gives_the_same_channel_wires`</sub>
 - A net whose channel wire is blocked (here by a keep-out area over its trunk) is handed to the grid router, which still joins it, and the connections stay the same. <sub>`a_blocked_channel_net_is_taken_by_the_grid_router`</sub>
@@ -647,12 +647,27 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - In the track assignment of a channel, a drop that passes through it is a fixed line: it counts as a crossing, and a trunk may not end at its height. <sub>`a_through_drop_is_a_fixed_line_in_the_track_assignment`</sub>
 - The same request planned twice gives the same wires, and so does the settled layout. <sub>`the_bus_sheet_is_the_same_every_time`</sub>
 - A leaving net that joins two units in adjacent columns is drawn on a trunk with its tag at the trunk's end: no tag branch at the pin, the flag clear of everything, and the sheet's netlist joins both pins and the tag name. <sub>`a_tagged_net_between_two_units_has_its_tag_at_the_end_of_the_trunk`</sub>
-- The tag positions are tried in a fixed order (top 5 mm right, top left, bottom right, bottom left, then the same four at 10 mm); a position where another net's wire is in the way is skipped. For a net at the top the free ones are the top positions; blocking each in turn moves the tag to the next, and with all blocked it stays on its branch at the pin. <sub>`the_tag_positions_of_a_top_net_are_tried_in_order_and_the_branch_is_the_last_resort`</sub>
-- For the lowest net the bottom positions are the free ones: right then left at 5 mm, then at 10 mm; with all blocked the tag stays on its branch. <sub>`the_tag_positions_of_a_bottom_net_are_tried_in_order`</sub>
+- The tag positions are tried in a fixed order: lengths 5, 10, 15 ... 40 mm, and at each length top right, top left, bottom right, bottom left. Blocking the position the tag took moves it to a later one, only ever forward, lengths beyond 10 mm are used, and with every position blocked it stays on its branch. <sub>`the_tag_positions_are_tried_in_a_fixed_order_over_lengths_up_to_forty_millimetres`</sub>
+- For the lowest net of the pair the free positions are below it, so the first one taken is a bottom position, and the order is again only forward. <sub>`the_tag_of_a_bottom_net_takes_a_bottom_position_first`</sub>
 - Later nets keep clear of a tag that was moved to a trunk: with three tagged nets and two plain ones between the same two units, no wire of another net comes within 0.5 mm of any flag, and the connections stay the same. <sub>`later_nets_avoid_a_flag_that_moved_to_a_trunk`</sub>
 - With complete planned_sheets on a three-sheet plan drafted in every order, every flag of the open project is inside the frame, and the check lists no tag outside and finds the same connections as the source. <sub>`three_planned_sheets_drafted_in_every_order_keep_every_flag_inside`</sub>
 - The routing log names what blocked a net: for the bus whose drop runs into a box of column 2, the candidate channel is rejected with the row and the box, and the net is drawn by the grid router. <sub>`the_routing_log_names_the_box_that_blocked_a_drop`</sub>
-- The routing log lists the tag positions that were tried: when the flag with its reserve is wider than the channel, all eight positions are listed in order with the reason and the tag stays on its branch; with room kept exactly, the first position is taken. <sub>`the_routing_log_lists_the_tag_positions_that_were_tried`</sub>
+- The routing log lists the tag positions that were tried: with the room kept exactly, the first position is taken and the log says so. <sub>`the_routing_log_lists_the_tag_positions_that_were_tried`</sub>
+- A tagged net in a normal 20 mm channel with the default room for other sheets' names gets its tag at a trunk end where the next column is empty: the flag lies over the band of the next column, clear of every box, text, wire and mark, and the connections stay the same. <sub>`a_tag_in_a_narrow_channel_goes_where_the_next_column_is_empty`</sub>
+- A position the frame's top edge blocks is skipped and the log names the frame; the tag goes to a bottom position. <sub>`a_position_cut_by_the_frame_is_skipped_and_named`</sub>
+- A position the title block blocks is skipped and the log names the title block. <sub>`a_position_in_the_title_block_is_skipped_and_named`</sub>
+- When the flag would lie on a flag that was already moved, the position is skipped and the log names that net. <sub>`a_position_on_another_moved_flag_is_named_by_its_net`</sub>
+- With every position blocked by a keep-out area, all 32 positions are tried, each is rejected with the name of what is in the way (never a bare "column extent"), and the tag stays on its branch as before. <sub>`a_tag_with_no_free_position_lists_all_32_with_their_obstacles_and_stays_on_the_branch`</sub>
+- With the default room, later nets (those the grid router draws too) keep 0.5 mm clear of a flag that moved to a trunk, on the busy fixture. <sub>`with_the_default_room_later_nets_keep_clear_of_a_moved_flag`</sub>
+- With complete planned_sheets on a three-sheet plan drafted in every order, every flag is inside the frame and inside its reserve, the check lists no tag outside, and the netlist equals the source. <sub>`planned_three_sheets_keep_every_flag_inside_the_frame_and_its_reserve`</sub>
+- A spacer at the start of a column moves its first unit down by exactly that many millimetres, the other columns stay where they are, and everything stays on the 2.5 mm grid. <sub>`a_spacer_at_the_start_of_a_column_moves_the_first_unit_down_by_that_many_millimetres`</sub>
+- A spacer between two units adds to the normal gap below the first one only: the second unit moves down, the first stays. <sub>`a_spacer_between_two_units_moves_only_the_second_down`</sub>
+- Spacers in a row add up: 10 and 15 move a unit as far as 25 does. <sub>`consecutive_spacers_add_up`</sub>
+- A spacer at the end of a column, a value off the 2.5 mm grid or outside 2.5 to 200, are refused with the column number and the entry number, and nothing is drafted. <sub>`bad_spacers_are_refused_with_the_column_and_the_entry`</sub>
+- An entry that is neither a reference nor a {"gap_mm": number} is refused when the request is read, naming columns[c][i] and the column and entry numbers. <sub>`a_malformed_column_entry_is_refused_naming_its_place`</sub>
+- The height refusal counts the spacers: a column that fits is refused once spacers push it past the drawing area. <sub>`the_height_refusal_counts_the_spacers`</sub>
+- Requests without spacers read as before: the columns hold plain references and the plan is the one the plain request gives. <sub>`a_request_without_spacers_plans_as_before`</sub>
+- The bus whose drop a box of column 2 blocked becomes one trunk with straight drops once a spacer moves that box out of the row, and the routing log shows the change. <sub>`a_spacer_moves_the_blocking_box_out_of_the_row_and_the_bus_gets_its_trunk`</sub>
 
 ### DXF interop (AutoCAD Electrical / EPLAN)
 
@@ -2164,6 +2179,9 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The MCP parameter type reads title_block and refuses an unknown title_block field, naming the field and title_block. <sub>`the_mcp_params_read_title_block_and_refuse_unknown_fields`</sub>
 - Through the Link API, title_block overrides the default title, and an unknown title_block field is refused with 400, naming the field and title_block, and changes nothing. <sub>`the_link_api_reads_title_block`</sub>
 - Through the MCP tool, an unknown title_block field is refused with a message that names the field and title_block, and nothing changes. <sub>`the_mcp_tool_refuses_an_unknown_title_block_field`</sub>
+- The MCP parameter type reads spacer objects in a column, and a malformed entry is refused naming its column and entry. <sub>`spacers_round_trip_through_the_mcp_params`</sub>
+- The draft tool description tells the caller that a column may hold {"gap_mm": n} spacers. <sub>`the_draft_tool_description_mentions_spacers`</sub>
+- Through the MCP tool and the Link API, a spacer moves the unit down by exactly that many millimetres, and a spacer at the end of a column is refused (400) with the column and entry, changing nothing. <sub>`spacers_reach_the_planner_through_the_mcp_tool_and_the_link_api`</sub>
 
 ### drawing_tools
 
@@ -2769,6 +2787,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - madake reroute --json prints the reply as it came, and the human output lists the nets left unchanged with their reasons. <sub>`reroute_prints_json_or_a_human_summary`</sub>
 - madake arrange sends the sheet and the channel width only when given. <sub>`arrange_sends_only_what_was_given`</sub>
 - madake draft reads the request file, turns a relative source_path into an absolute one next to the file, and prints a summary or the raw reply. <sub>`draft_sends_the_request_with_an_absolute_source_path`</sub>
+- madake draft sends the spacers of the request file's columns on to the app unchanged. <sub>`draft_sends_the_column_spacers_on`</sub>
 - madake draft sends the title_block of the request file on to the app unchanged. <sub>`draft_sends_the_title_block_on`</sub>
 - madake draft refuses a request file that is missing, is not JSON, or has no source_path, without calling the app. <sub>`draft_refuses_a_bad_request_file`</sub>
 - madake draft-check sends an absolute path and the repeated --ignore references, and succeeds when the sheets match. <sub>`draft_check_sends_the_path_and_the_ignored_references`</sub>

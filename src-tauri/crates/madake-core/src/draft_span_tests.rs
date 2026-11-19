@@ -82,12 +82,26 @@ fn write_the_span_sheets_as_svg() {
     }
     write("bus", &bus_source(), &open(), &bus_request());
     write("tagged", &tagged_source(), &open(), &tagged_request());
+    let mut default_room = tagged_request();
+    default_room.planned_sheets = Vec::new();
+    write("tagged-default", &tagged_source(), &open(), &default_room);
+    write("busy-default", &busy_source(), &open(), &stacked_request(&[&["A"], &["B"]], 5.0));
+    let spaced: DraftRequest = serde_json::from_value(serde_json::json!({
+        "name": "Look", "columns": [["C1"], [{"gap_mm": 30}, "S1", "S2"], ["L1", "L2"]],
+        "power_nets": ["P24X"], "ground_nets": [], "pitch_mm": 5.0
+    }))
+    .expect("a request with a spacer");
+    write("bus-spacer", &bus_fixture(true), &open(), &spaced);
+    write("bus-blocked", &bus_fixture(true), &open(), &bus_request());
 }
 
 
 // ---- helpers
 
+use super::channel::{flag_block, FlagCheck, Obstacles, Scene};
 use super::channel_tests::{drafted, settled, trunks};
+use crate::model::{Orientation, PaperSize};
+use crate::route::RouteGrid;
 use crate::route::RouteOptions;
 
 fn net_key(m: &DraftModel, name: &str) -> usize {
@@ -312,63 +326,73 @@ fn a_tagged_net_between_two_units_has_its_tag_at_the_end_of_the_trunk() {
     assert!(p.wired.contains(&"T".to_string()) && p.tagged.iter().any(|g| g.net == "T"));
 }
 
-/// Runs the position test on one source: `expected` lists the position numbers (0 = top 5 mm right, 1 = top 5 left, 2 = bottom 5 right, 3 = bottom 5 left, 4 to 7 the same at 10 mm) that are free, in the order they must be taken.
-fn tag_positions_follow(src: &Project, req: &DraftRequest, expected: &[usize]) {
+/// Which tag position (0 to 31: 4 per extension length, in the fixed order, lengths 5, 10, ... 40 mm) the tag of T took, or `None` if it hangs on its branch.
+fn position_of(tag: &NetLabel, x: f64, lo: f64, hi: f64) -> Option<usize> {
+    if (tag.at.x - x).abs() > 1e-6 {
+        return None;
+    }
+    (0..32).find(|&i| {
+        let (ext, top, right) = (5.0 * (i / 4 + 1) as f64, (i % 4) < 2, i % 2 == 0);
+        let at = if top { lo - ext } else { hi + ext };
+        (tag.at.y - at).abs() < 1e-6 && tag.attrs.get(crate::net_tag::TAG_ATTR).map(String::as_str) == Some(if right { "left" } else { "right" })
+    })
+}
+
+/// Plans T's sheet again and again, each time blocking the free half of the flag (away from the trunk) at the position the tag just took, until it hangs on its branch.
+/// Returns the positions taken, in order.
+fn taken_positions(src: &Project, req: &DraftRequest) -> Vec<usize> {
     let m = build_model(src, &open(), req).expect("valid");
-    let first = plan_function_sheet(src, &open(), req).expect("plan");
-    let free = tag_named(&first.sheet, "T");
-    let a_row = labels_of(&first.sheet).len();
-    assert!(a_row >= 1);
-    let x = free.at.x;
-    // the topmost and the lowest terminal of T are level here (both units carry T on the same row)
-    let tl = settled(&m, req);
     let t_key = net_key(&m, "T");
-    let rows: Vec<f64> = tl.terminals.iter().filter(|t| t.net == t_key && !t.is_tag).map(|t| t.at.y).collect();
+    let base = settled(&m, req);
+    let rows: Vec<f64> = base.terminals.iter().filter(|t| t.net == t_key && !t.is_tag).map(|t| t.at.y).collect();
     let (lo, hi) = (rows.iter().cloned().fold(f64::MAX, f64::min), rows.iter().cloned().fold(f64::MIN, f64::max));
-    let position = |i: usize| -> (Point, bool) {
-        let (ext, top, right) = (if i < 4 { 5.0 } else { 10.0 }, (i % 4) < 2, i % 2 == 0);
-        (Point::new(x, if top { lo - ext } else { hi + ext }), right)
-    };
-    for k in 0..=expected.len() {
+    let first = plan_function_sheet(src, &open(), req).expect("plan");
+    let x = labels_of(&first.sheet).iter().find(|l| l.name == "T").map_or(0.0, |l| l.at.x);
+    let mut blocked: Vec<Rect> = Vec::new();
+    let mut taken = Vec::new();
+    for _ in 0..34 {
         let mut l = settled(&m, req);
-        for &j in &expected[..k] {
-            let (at, right) = position(j);
-            let f = flag_rect(&trunk_tag("T", at, right, None), l.label_font, l.sheet.xref_style, l.reserve.text("T")).expect("a flag");
-            // the half of the flag away from the trunk, so that the trunk end itself stays free
-            let outer = if right { Rect::from_corners(Point::new(at.x + 2.0, f.min.y), Point::new(f.max.x, f.max.y)) } else { Rect::from_corners(Point::new(f.min.x, f.min.y), Point::new(at.x - 2.0, f.max.y)) };
-            l.keep_out.push(outer);
-        }
-        let (sheet, wired, labelled) = route_wires(&m, &l, &RouteOptions::default());
-        let tag = tag_named(&sheet, "T");
+        l.keep_out.extend(blocked.iter().cloned());
+        let (sheet, wired, labelled, ..) = route_wires_try(&m, &l, &RouteOptions::default());
         assert!(wired.contains(&"T".to_string()) && labelled.is_empty(), "{wired:?} {labelled:?}");
-        assert_eq!(device_groups(&sheet, &["A", "B"]), device_groups(&src.sheets[0], &["A", "B"]), "{k}");
-        if k < expected.len() {
-            let (at, right) = position(expected[k]);
-            assert!(tag.at.distance_to(&at) < 1e-6, "{k} blocked: the tag is at {:?}, want position {} at {at:?}", tag.at, expected[k]);
-            assert_eq!(tag.attrs.get(crate::net_tag::TAG_ATTR).map(String::as_str), Some(if right { "left" } else { "right" }), "{k}");
-        } else {
+        assert_eq!(device_groups(&sheet, &["A", "B"]), device_groups(&src.sheets[0], &["A", "B"]));
+        assert!(wires_touching_flags(&with_sheet(&open(), &sheet), &sheet).is_empty());
+        let tag = tag_named(&sheet, "T");
+        let Some(i) = position_of(&tag, x, lo, hi) else {
             let pin = stub_end(&sheet, "A", "1");
             let pin = if lo > pin.y + 1.0 { stub_end(&sheet, "A", "3") } else { pin };
-            assert!(tag.at.distance_to(&Point::new(pin.x + 5.0, pin.y)) < 1e-6, "all free positions blocked: the tag hangs on the branch at the pin: {:?} {pin:?}", tag.at);
-        }
-        assert!(wires_touching_flags(&with_sheet(&open(), &sheet), &sheet).is_empty(), "{k}");
+            assert!(tag.at.distance_to(&Point::new(pin.x + 5.0, pin.y)) < 1e-6, "no position left: the tag hangs on the branch: {:?}", tag.at);
+            return taken;
+        };
+        taken.push(i);
+        let right = i % 2 == 0;
+        let f = flag_rect(&trunk_tag("T", tag.at, right, None), l.label_font, l.sheet.xref_style, l.reserve.text("T")).expect("a flag");
+        // the half of the flag away from the trunk, so that the trunk end itself stays free
+        blocked.push(if right { Rect::from_corners(Point::new(tag.at.x + 2.0, f.min.y), Point::new(f.max.x, f.max.y)) } else { Rect::from_corners(Point::new(f.min.x, f.min.y), Point::new(tag.at.x - 2.0, f.max.y)) });
     }
+    panic!("the tag never went back to its branch: {taken:?}");
 }
 
-/// The tag positions are tried in a fixed order (top 5 mm right, top left, bottom right, bottom left, then the same four at 10 mm); a position where another net's wire is in the way is skipped. For a net at the top the free ones are the top positions; blocking each in turn moves the tag to the next, and with all blocked it stays on its branch at the pin.
-/// 札の位置は決まった順に試す(上5mmの右・左、下の右・左、次に10mmで同じ順)。他のネットの配線がじゃまな位置は飛ばす。いちばん上のネットでは上の位置だけが空いていて、順にふさぐと札は次の位置へ動き、全部ふさぐとピンの枝に残る。
+/// The tag positions are tried in a fixed order: lengths 5, 10, 15 ... 40 mm, and at each length top right, top left, bottom right, bottom left. Blocking the position the tag took moves it to a later one, only ever forward, lengths beyond 10 mm are used, and with every position blocked it stays on its branch.
+/// 札の位置は決まった順に試す。長さは5・10・15…40mm、各長さで上の右・上の左・下の右・下の左。札が取った位置をふさぐと、より後ろの位置へだけ動き、10mmより長い位置も使われ、全部ふさぐと札は枝に残る。
 #[test]
-fn the_tag_positions_of_a_top_net_are_tried_in_order_and_the_branch_is_the_last_resort() {
-    tag_positions_follow(&tagged_source(), &tagged_request(), &[0, 1, 4, 5]);
+fn the_tag_positions_are_tried_in_a_fixed_order_over_lengths_up_to_forty_millimetres() {
+    let taken = taken_positions(&tagged_source(), &tagged_request());
+    assert!(taken.windows(2).all(|w| w[0] < w[1]), "only forward: {taken:?}");
+    assert!(taken.iter().any(|&i| i >= 8), "lengths beyond 10 mm are used when 5 and 10 are blocked: {taken:?}");
+    assert_eq!(taken.first().copied(), Some(0), "the first position is top 5 mm right when it is free: {taken:?}");
+    assert!(taken.len() >= 4, "{taken:?}");
 }
 
-/// For the lowest net the bottom positions are the free ones: right then left at 5 mm, then at 10 mm; with all blocked the tag stays on its branch.
-/// いちばん下のネットでは、下の位置が空いている。5mmの右・左、次に10mmの右・左の順で、全部ふさぐと札は枝に残る。
+/// For the lowest net of the pair the free positions are below it, so the first one taken is a bottom position, and the order is again only forward.
+/// 組のいちばん下のネットでは、空いているのは下の位置なので、最初に取る位置は下の位置で、順は前へだけ進む。
 #[test]
-fn the_tag_positions_of_a_bottom_net_are_tried_in_order() {
+fn the_tag_of_a_bottom_net_takes_a_bottom_position_first() {
     let mut req = tagged_request();
     req.planned_sheets = vec!["Look".into()];
-    tag_positions_follow(&tagged_low_source(), &req, &[2, 3, 6, 7]);
+    let taken = taken_positions(&tagged_low_source(), &req);
+    assert!(taken.windows(2).all(|w| w[0] < w[1]), "{taken:?}");
+    assert!(matches!(taken.first(), Some(i) if i % 4 >= 2), "a bottom position first: {taken:?}");
 }
 
 /// Later nets keep clear of a tag that was moved to a trunk: with three tagged nets and two plain ones between the same two units, no wire of another net comes within 0.5 mm of any flag, and the connections stay the same.
@@ -472,21 +496,10 @@ fn the_routing_log_names_the_box_that_blocked_a_drop() {
     assert!(ok.route_log.iter().all(|e| e.net != "P24X"), "a power net has no wire to log");
 }
 
-/// The routing log lists the tag positions that were tried: when the flag with its reserve is wider than the channel, all eight positions are listed in order with the reason and the tag stays on its branch; with room kept exactly, the first position is taken.
-/// 配線の記録は、試した札の位置を理由つきで並べる。確保した幅の旗が通り道より広いときは、8つの位置が順に理由つきで並び、札は枝に残る。幅を正確に確保したときは、最初の位置が使われる。
+/// The routing log lists the tag positions that were tried: with the room kept exactly, the first position is taken and the log says so.
+/// 配線の記録は、試した札の位置を並べる。幅を正確に確保したときは、最初の位置が使われ、記録にそう残る。
 #[test]
 fn the_routing_log_lists_the_tag_positions_that_were_tried() {
-    let mut req = tagged_request();
-    req.planned_sheets = Vec::new();
-    let p = plan_function_sheet(&tagged_source(), &open(), &req).expect("plan");
-    let t = p.route_log.iter().find(|e| e.net == "T").expect("T is logged");
-    let tag = t.tag.as_ref().expect("T has a tag");
-    assert_eq!(tag.placed, "branch");
-    let names: Vec<&str> = tag.tried.iter().map(|x| x.position.as_str()).collect();
-    assert_eq!(names, ["top+5 right", "top+5 left", "bottom+5 right", "bottom+5 left", "top+10 right", "top+10 left", "bottom+10 right", "bottom+10 left"]);
-    assert!(tag.tried.iter().all(|x| x.rejected.is_some()), "{tag:?}");
-    assert!(tag.tried.iter().any(|x| x.rejected.as_deref() == Some("column extent")), "{tag:?}");
-    assert_eq!(t.router, "grid");
     let p = plan_function_sheet(&tagged_source(), &open(), &tagged_request()).expect("plan");
     let t = p.route_log.iter().find(|e| e.net == "T").expect("T is logged");
     let tag = t.tag.as_ref().expect("T has a tag");
@@ -499,3 +512,335 @@ fn the_routing_log_lists_the_tag_positions_that_were_tried() {
     assert!(serde_json::to_value(&p).expect("the plan is JSON").get("route_log").is_none(), "the public reply does not carry the log");
 }
 
+// ---- change A: flags are checked against real obstacles
+
+/// A tagged net in a normal 20 mm channel with the default room for other sheets' names gets its tag at a trunk end where the next column is empty: the flag lies over the band of the next column, clear of every box, text, wire and mark, and the connections stay the same.
+/// 通常の20mmの通り道で、他のシートの名前の既定の余白があっても、札付きのネットの札は、隣の列が空いている幹の端に付く。旗は隣の列の帯の上にかかっても、箱・文字・配線・印のどれにも触れず、つながりは変わらない。
+#[test]
+fn a_tag_in_a_narrow_channel_goes_where_the_next_column_is_empty() {
+    let mut req = tagged_request();
+    req.planned_sheets = Vec::new();
+    req.destinations.insert("T".into(), "cabinet B terminal side".into());
+    let src = tagged_source();
+    let m = build_model(&src, &open(), &req).expect("valid");
+    let l = settled(&m, &req);
+    let p = plan_function_sheet(&src, &open(), &req).expect("plan");
+    let tag = tag_named(&p.sheet, "T");
+    let pin = stub_end(&p.sheet, "A", "1");
+    assert!(tag.at.distance_to(&Point::new(pin.x + 5.0, pin.y)) > 1.0, "the tag left its branch: {:?}", tag.at);
+    assert!(tag.at.x > l.columns[0].right && tag.at.x < l.columns[1].left, "the tag is on the trunk in the channel: {:?}", tag.at);
+    let t = p.route_log.iter().find(|e| e.net == "T").expect("T is logged");
+    assert_eq!(t.router, "channel");
+    assert_ne!(t.tag.as_ref().expect("a tag").placed, "branch");
+    let f = flag_of(&p.sheet, &tag, None).expect("a flag");
+    assert!(f.min.x < l.columns[0].right || f.max.x > l.columns[1].left, "the flag reaches over the band of a column: {f:?} {:?}", l.columns);
+    for r in ["A", "B"] {
+        let b = bounds_of(&p.sheet, r);
+        assert!(!f.overlaps(&b), "the flag is on the box {r}: {f:?} {b:?}");
+    }
+    let defs = sheet_symbol_defs(&p.sheet);
+    for tb in crate::tidy::text_boxes(&p.sheet, &defs).iter().filter(|t| t.kind != crate::tidy::TextKind::WireNumber && t.text != "T" && t.text != "cabinet B terminal side") {
+        assert!(!f.overlaps(&tb.rect), "the flag is on the text {}", tb.text);
+    }
+    assert!(wires_touching_flags(&with_sheet(&open(), &p.sheet), &p.sheet).is_empty());
+    assert_eq!(device_groups(&p.sheet, &["A", "B"]), device_groups(&src.sheets[0], &["A", "B"]));
+}
+
+/// A position the frame's top edge blocks is skipped and the log names the frame; the tag goes to a bottom position.
+/// 図枠の上の縁がふさぐ位置は飛ばされ、記録は「図枠」と名前を挙げる。札は下の位置へ行く。
+#[test]
+fn a_position_cut_by_the_frame_is_skipped_and_named() {
+    let src = tagged_source();
+    let req = tagged_request();
+    let m = build_model(&src, &open(), &req).expect("valid");
+    let mut l = settled(&m, &req);
+    l.frame.1 = 25.5;
+    let (sheet, _, _, _, partial, tries) = route_wires_try(&m, &l, &RouteOptions::default());
+    let t_key = net_key(&m, "T");
+    let tried = &tries[&t_key];
+    assert!(tried.iter().any(|x| x.rejected.as_deref() == Some("frame")), "{tried:?}");
+    let tag = partial.iter().find(|x| x.net == t_key).and_then(|x| x.tag.as_ref()).expect("a tag record");
+    assert!(tag.placed.starts_with("bottom"), "{}", tag.placed);
+    assert_eq!(device_groups(&sheet, &["A", "B"]), device_groups(&src.sheets[0], &["A", "B"]));
+}
+
+/// A position the title block blocks is skipped and the log names the title block.
+/// 表題欄がふさぐ位置は飛ばされ、記録は「表題欄」と名前を挙げる。
+#[test]
+fn a_position_in_the_title_block_is_skipped_and_named() {
+    let src = tagged_source();
+    let req = tagged_request();
+    let m = build_model(&src, &open(), &req).expect("valid");
+    let mut l = settled(&m, &req);
+    l.title = (66.0, 0.0, 120.0, 28.0);
+    let (_, _, _, _, _, tries) = route_wires_try(&m, &l, &RouteOptions::default());
+    let tried = &tries[&net_key(&m, "T")];
+    assert_eq!(tried[0].position, "top+5 right");
+    assert_eq!(tried[0].rejected.as_deref(), Some("title block"), "{tried:?}");
+}
+
+/// When the flag would lie on a flag that was already moved, the position is skipped and the log names that net.
+/// すでに動かした札の旗の上に重なる位置は飛ばされ、記録はその札のネットの名前を挙げる。
+#[test]
+fn a_position_on_another_moved_flag_is_named_by_its_net() {
+    use std::cell::RefCell;
+    let sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+    let opts = RouteOptions::default();
+    let grid = RouteGrid::build(&sheet, &[], &opts);
+    let flag = Rect::from_corners(Point::new(100.0, 100.0), Point::new(112.0, 104.0));
+    let others = RefCell::new(vec![(flag, "T1".to_string())]);
+    let check = FlagCheck { grid: &grid, gap: 0.6, others: &others };
+    let owner = |_: &[Point]| String::new();
+    let scene = Scene { named: &[], line_owner: &owner };
+    let free = |_: Point, _: Point| true;
+    let obs = Obstacles { fixed_lines: &[], fixed_spots: &[], branches: &[], free: &free };
+    let route = route_geometry_ext(&[ChanTermAt { at: Point::new(100.0, 110.0), left: true }, ChanTermAt { at: Point::new(120.0, 110.0), left: false }], Some(110.0), Some((true, 5.0)));
+    let overlapping = Rect::from_corners(Point::new(104.0, 101.0), Point::new(116.0, 105.0));
+    assert_eq!(flag_block(&overlapping, &route, &obs, &[], &check, &scene).as_deref(), Some("flag of net T1"));
+    let far = Rect::from_corners(Point::new(140.0, 101.0), Point::new(152.0, 105.0));
+    assert_eq!(flag_block(&far, &route, &obs, &[], &check, &scene), None);
+}
+
+/// With every position blocked by a keep-out area, all 32 positions are tried, each is rejected with the name of what is in the way (never a bare "column extent"), and the tag stays on its branch as before.
+/// 32の位置が全て立入禁止の領域でふさがれると、全て試し、どれも「何が邪魔か」の名前つきで外れ(「列の帯」という理由はもう無い)、札は従来どおり枝に残る。
+#[test]
+fn a_tag_with_no_free_position_lists_all_32_with_their_obstacles_and_stays_on_the_branch() {
+    let src = tagged_source();
+    let req = tagged_request();
+    let m = build_model(&src, &open(), &req).expect("valid");
+    let mut l = settled(&m, &req);
+    let x = labels_of(&plan_function_sheet(&src, &open(), &req).expect("plan").sheet).iter().find(|t| t.name == "T").expect("T").at.x;
+    // a band over and under the trunk, wide enough for every flag, that leaves the drops at the terminal rows free
+    l.keep_out.push(Rect::from_corners(Point::new(x - 60.0, 10.0), Point::new(x + 60.0, 30.0)));
+    l.keep_out.push(Rect::from_corners(Point::new(x - 60.0, 34.0), Point::new(x + 60.0, 80.0)));
+    let (sheet, wired, labelled, _, partial, tries) = route_wires_try(&m, &l, &RouteOptions::default());
+    let t = net_key(&m, "T");
+    let tag = partial.iter().find(|p| p.net == t).and_then(|p| p.tag.as_ref()).expect("a tag record");
+    assert_eq!(tag.placed, "branch");
+    assert_eq!(tries[&t].len(), 32, "{:?}", tries[&t]);
+    assert!(tries[&t].iter().all(|x| x.rejected.as_deref().is_some_and(|r| !r.is_empty() && r != "column extent")), "{:?}", tries[&t]);
+    assert!(tries[&t].iter().any(|x| x.rejected.as_deref().is_some_and(|r| r.contains("keep-out"))), "{:?}", tries[&t]);
+    // the keep-out bands also stop the grid router, so the net is joined by tags; the point here is the log
+    assert!(wired.contains(&"T".to_string()) || labelled.contains(&"T".to_string()), "{wired:?} {labelled:?}");
+    let _ = sheet;
+}
+
+/// With the default room, later nets (those the grid router draws too) keep 0.5 mm clear of a flag that moved to a trunk, on the busy fixture.
+/// 既定の余白でも、幹へ動かした旗から、あとのネット(格子の経路探索が引くものも)は0.5mm以上離れる(込み入った見本で)。
+#[test]
+fn with_the_default_room_later_nets_keep_clear_of_a_moved_flag() {
+    let src = busy_source();
+    let mut req = stacked_request(&[&["A"], &["B"]], 5.0);
+    req.planned_sheets = Vec::new();
+    let p = plan_function_sheet(&src, &open(), &req).expect("plan");
+    assert_eq!(device_groups(&p.sheet, &["A", "B"]), device_groups(&src.sheets[0], &["A", "B"]));
+    assert!(wires_touching_flags(&with_sheet(&open(), &p.sheet), &p.sheet).is_empty());
+    assert!(p.route_log.iter().any(|e| e.tag.as_ref().is_some_and(|t| t.placed != "branch")), "{:?}", p.route_log);
+    assert_flags_clear(&p, 0.5);
+}
+
+/// With complete planned_sheets on a three-sheet plan drafted in every order, every flag is inside the frame and inside its reserve, the check lists no tag outside, and the netlist equals the source.
+/// 完全な planned_sheets のある3枚の計画をどの順に下書きしても、旗は全て図枠の中で確保した幅に収まり、検算は「はみ出す札なし」で、つながりは元の図と同じ。
+#[test]
+fn planned_three_sheets_keep_every_flag_inside_the_frame_and_its_reserve() {
+    let planned: Vec<PlannedSheet> = [("One", vec!["SA", "SB"]), ("Two", vec!["SC", "SD"]), ("Three", vec!["SX", "SY"])]
+        .iter()
+        .map(|(n, u)| PlannedSheet::from_value(serde_json::json!({"name": n, "units": u})).expect("an entry"))
+        .collect();
+    let sheets: [(&str, Vec<&[&str]>); 3] = [("One", vec![&["SA", "SB"][..]]), ("Two", vec![&["SC", "SD"][..]]), ("Three", vec![&["SX"][..], &["SY"][..]])];
+    let src = stacked_source();
+    for order in [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]] {
+        let mut project = open();
+        for &i in &order {
+            let (name, cols) = &sheets[i];
+            let mut req = stacked_request(cols, 5.0);
+            req.name = (*name).into();
+            req.planned_sheets = planned.clone();
+            let p = plan_function_sheet(&src, &project, &req).expect("the sheet fits");
+            // inside the reserve: the flag drawn with the names that exist now is inside the flag drawn with the full reserve
+            let m = build_model(&src, &project, &req).expect("valid");
+            let l = lay_out(&m, &project, &req).expect("layout");
+            let with = with_sheet(&project, &p.sheet);
+            let xrefs = crate::xref::sheet_xrefs(&with, p.sheet.id);
+            for label in labels_of(&p.sheet) {
+                let actual = flag_of(&p.sheet, &label, xrefs.get(&label.id).map(String::as_str)).expect("a flag");
+                let reserved = flag_rect(&label, l.label_font, p.sheet.xref_style, l.reserve.text(&label.name)).expect("a flag");
+                assert!(actual.min.x >= reserved.min.x - 1e-6 && actual.max.x <= reserved.max.x + 1e-6, "{order:?} {name} {}: {actual:?} not inside {reserved:?}", label.name);
+                assert!(actual.min.x >= l.frame.0 - 1e-6 && actual.max.x <= l.frame.2 + 1e-6 && actual.min.y >= l.frame.1 - 1e-6 && actual.max.y <= l.frame.3 + 1e-6, "{order:?} {name} {}: {actual:?} outside the frame {:?}", label.name, l.frame);
+            }
+            project.sheets.push(p.sheet);
+        }
+        let check = crate::draft_check::check_function_sheets(&src, &project, &[]);
+        assert!(check.tags_outside.is_empty() && check.layout_ok && check.ok, "{order:?}: {check:?}");
+    }
+}
+
+fn busy_source() -> Project {
+    source_of(
+        "draft-busy",
+        &[("A", 6), ("B", 6), ("X", 3)],
+        &[
+            ("T1", &[("A", "1"), ("B", "2"), ("X", "1")]),
+            ("T2", &[("A", "2"), ("B", "1"), ("X", "2")]),
+            ("T3", &[("A", "3"), ("B", "3"), ("X", "3")]),
+            ("P1", &[("A", "4"), ("B", "5")]),
+            ("P2", &[("A", "5"), ("B", "4")]),
+        ],
+    )
+}
+
+/// Every flag of the plan keeps `clearance` mm from every wire that is not its own net's (a wire that has an end at the tag point is its own).
+fn assert_flags_clear(p: &DraftPlan, clearance: f64) {
+    let project = with_sheet(&open(), &p.sheet);
+    let xrefs = crate::xref::sheet_xrefs(&project, p.sheet.id);
+    let font = crate::svg::LABEL_FONT * p.sheet.annotation_scale();
+    for l in labels_of(&p.sheet) {
+        let Some(tag) = crate::net_tag::net_tag_with(&l, font, p.sheet.xref_style, xrefs.get(&l.id).map(String::as_str)) else { continue };
+        let r = rect_of(&tag.points);
+        let inflated = Rect::from_corners(Point::new(r.min.x - clearance, r.min.y - clearance), Point::new(r.max.x + clearance, r.max.y + clearance));
+        for w in wires_of(&p.sheet) {
+            if w.points.iter().any(|q| q.distance_to(&l.at) < 1e-6) {
+                continue;
+            }
+            for s in w.points.windows(2) {
+                assert!(!seg_rect(s[0], s[1]).overlaps(&inflated), "{} flag {r:?}: wire {:?}-{:?}", l.name, s[0], s[1]);
+            }
+        }
+    }
+}
+
+// ---- change B: spacers in `columns`
+
+/// A request read from JSON, as a caller sends it: the columns may hold spacer objects.
+fn json_request(columns: serde_json::Value) -> Result<DraftRequest, String> {
+    serde_json::from_value(serde_json::json!({"name": "Look", "columns": columns, "power_nets": [], "ground_nets": [], "pitch_mm": 5.0})).map_err(|e| e.to_string())
+}
+
+fn y_of(p: &DraftPlan, reference: &str) -> f64 {
+    unit_of(&p.sheet, reference).at.y
+}
+
+fn stacked_plan(columns: serde_json::Value) -> Result<DraftPlan, String> {
+    plan_function_sheet(&stacked_source(), &stacked_open(), &json_request(columns)?)
+}
+
+/// A spacer at the start of a column moves its first unit down by exactly that many millimetres, the other columns stay where they are, and everything stays on the 2.5 mm grid.
+/// 列の先頭の隙間は、その列の最初の機器をちょうどその mm だけ下げる。他の列は動かず、全てが2.5mmの格子の上に残る。
+#[test]
+fn a_spacer_at_the_start_of_a_column_moves_the_first_unit_down_by_that_many_millimetres() {
+    let plain = stacked_plan(serde_json::json!([["SY"], ["SA", "SB"]])).expect("plan");
+    let spaced = stacked_plan(serde_json::json!([["SY"], [{"gap_mm": 25}, "SA", "SB"]])).expect("plan");
+    assert!((y_of(&spaced, "SA") - y_of(&plain, "SA") - 25.0).abs() < 1e-9);
+    assert!((y_of(&spaced, "SB") - y_of(&plain, "SB") - 25.0).abs() < 1e-9, "the next unit follows");
+    assert!((y_of(&spaced, "SY") - y_of(&plain, "SY")).abs() < 1e-9, "the other column stays");
+    assert!((unit_of(&spaced.sheet, "SA").at.x - unit_of(&plain.sheet, "SA").at.x).abs() < 1e-9);
+    for r in ["SA", "SB", "SY"] {
+        let at = unit_of(&spaced.sheet, r).at;
+        assert!(((at.y / 2.5) - (at.y / 2.5).round()).abs() < 1e-9 && ((at.x / 2.5) - (at.x / 2.5).round()).abs() < 1e-9, "{r} {at:?}");
+    }
+}
+
+/// A spacer between two units adds to the normal gap below the first one only: the second unit moves down, the first stays.
+/// 2つの機器のあいだの隙間は、普通のすき間に足される。後ろの機器だけが下がり、前の機器は動かない。
+#[test]
+fn a_spacer_between_two_units_moves_only_the_second_down() {
+    let plain = stacked_plan(serde_json::json!([["SA", "SB", "SC"]])).expect("plan");
+    let spaced = stacked_plan(serde_json::json!([["SA", {"gap_mm": 15}, "SB", "SC"]])).expect("plan");
+    assert!((y_of(&spaced, "SA") - y_of(&plain, "SA")).abs() < 1e-9);
+    assert!((y_of(&spaced, "SB") - y_of(&plain, "SB") - 15.0).abs() < 1e-9);
+    assert!((y_of(&spaced, "SC") - y_of(&plain, "SC") - 15.0).abs() < 1e-9);
+}
+
+/// Spacers in a row add up: 10 and 15 move a unit as far as 25 does.
+/// 続く隙間は足し合わされる。10と15は、25と同じだけ機器を下げる。
+#[test]
+fn consecutive_spacers_add_up() {
+    let two = stacked_plan(serde_json::json!([[{"gap_mm": 10}, {"gap_mm": 15}, "SA", "SB"]])).expect("plan");
+    let one = stacked_plan(serde_json::json!([[{"gap_mm": 25}, "SA", "SB"]])).expect("plan");
+    assert!((y_of(&two, "SA") - y_of(&one, "SA")).abs() < 1e-9 && (y_of(&two, "SB") - y_of(&one, "SB")).abs() < 1e-9);
+    let plain = stacked_plan(serde_json::json!([["SA", "SB"]])).expect("plan");
+    assert!((y_of(&one, "SA") - y_of(&plain, "SA") - 25.0).abs() < 1e-9);
+}
+
+/// A spacer at the end of a column, a value off the 2.5 mm grid or outside 2.5 to 200, are refused with the column number and the entry number, and nothing is drafted.
+/// 列の末尾の隙間、2.5mmの格子に乗らない値、2.5〜200の外の値は、列の番号と項目の番号を挙げて断る。何も下書きされない。
+#[test]
+fn bad_spacers_are_refused_with_the_column_and_the_entry() {
+    let cases = [
+        (serde_json::json!([["SA", {"gap_mm": 10}]]), "column 1, entry 2", "end of the column"),
+        (serde_json::json!([["SY"], ["SA", {"gap_mm": 10}, "SB", {"gap_mm": 5}]]), "column 2, entry 4", "end of the column"),
+        (serde_json::json!([["SA", {"gap_mm": 3.0}, "SB"]]), "column 1, entry 2", "multiple of 2.5"),
+        (serde_json::json!([["SA", {"gap_mm": 0}, "SB"]]), "column 1, entry 2", "2.5 to 200"),
+        (serde_json::json!([["SA", {"gap_mm": 202.5}, "SB"]]), "column 1, entry 2", "2.5 to 200"),
+        (serde_json::json!([["SA", {"gap_mm": -5}, "SB"]]), "column 1, entry 2", "2.5 to 200"),
+        (serde_json::json!([[{"gap_mm": 10}]]), "column 1, entry 1", "end of the column"),
+    ];
+    for (columns, place, what) in cases {
+        let e = stacked_plan(columns.clone()).expect_err(&columns.to_string());
+        assert!(e.contains(place) && e.contains(what), "{columns}: {e}");
+    }
+}
+
+/// An entry that is neither a reference nor a {"gap_mm": number} is refused when the request is read, naming columns[c][i] and the column and entry numbers.
+/// 参照記号でも {"gap_mm": 数} でもない項目は、依頼を読むときに、columns[c][i] と列・項目の番号を挙げて断る。
+#[test]
+fn a_malformed_column_entry_is_refused_naming_its_place() {
+    for (columns, place) in [
+        (serde_json::json!([["SA", 5]]), "columns[0][1] (column 1, entry 2)"),
+        (serde_json::json!([["SA"], ["SB", {"gap": 5}, "SC"]]), "columns[1][1] (column 2, entry 2)"),
+        (serde_json::json!([["SA", {"gap_mm": "x"}]]), "columns[0][1] (column 1, entry 2)"),
+        (serde_json::json!([[{"gap_mm": 5, "extra": 1}, "SA"]]), "columns[0][0] (column 1, entry 1)"),
+        (serde_json::json!([["SA", null]]), "columns[0][1] (column 1, entry 2)"),
+        (serde_json::json!(["SA"]), "columns[0]"),
+    ] {
+        let e = json_request(columns.clone()).expect_err(&columns.to_string());
+        assert!(e.contains(place), "{columns}: {e}");
+    }
+    assert!(json_request(serde_json::json!([["SA", {"gap_mm": 5}, "SB"]])).is_ok());
+}
+
+/// The height refusal counts the spacers: a column that fits is refused once spacers push it past the drawing area.
+/// 高さの断りは隙間も数える。収まる列も、隙間で描画範囲を越えれば断られる。
+#[test]
+fn the_height_refusal_counts_the_spacers() {
+    assert!(stacked_plan(serde_json::json!([["SA", "SB"]])).is_ok());
+    let e = stacked_plan(serde_json::json!([["SA", {"gap_mm": 200}, "SB", {"gap_mm": 200}, "SC"]])).expect_err("too tall");
+    assert!(e.contains("taller than the drawing area") && e.contains("Column 1"), "{e}");
+}
+
+/// Requests without spacers read as before: the columns hold plain references and the plan is the one the plain request gives.
+/// 隙間の無い依頼は従来どおりに読まれ、列は参照記号だけで、計画も従来の依頼と同じになる。
+#[test]
+fn a_request_without_spacers_plans_as_before() {
+    let json = stacked_plan(serde_json::json!([["SY"], ["SA", "SB"]])).expect("plan");
+    let plain = plan_function_sheet(&stacked_source(), &stacked_open(), &stacked_request(&[&["SY"], &["SA", "SB"]], 5.0)).expect("plan");
+    assert_eq!(wire_key(&json), wire_key(&plain));
+    for r in ["SY", "SA", "SB"] {
+        assert_eq!(unit_of(&json.sheet, r).at, unit_of(&plain.sheet, r).at);
+    }
+}
+
+/// The bus whose drop a box of column 2 blocked becomes one trunk with straight drops once a spacer moves that box out of the row, and the routing log shows the change.
+/// 2列目の箱が枝をふさいでいたバスは、隙間でその箱を高さからはずすと、幹1本とまっすぐな枝で引かれ、配線の記録にもそう出る。
+#[test]
+fn a_spacer_moves_the_blocking_box_out_of_the_row_and_the_bus_gets_its_trunk() {
+    let src = bus_fixture(true);
+    let mut blocked = bus_request();
+    let before = plan_function_sheet(&src, &open(), &blocked).expect("plan");
+    let b = before.route_log.iter().find(|e| e.net == "BUS").expect("BUS");
+    assert_eq!(b.router, "grid");
+    assert!(b.candidates[0].rejected.as_deref().is_some_and(|r| r.contains("box S1")), "{b:?}");
+    let mut req: DraftRequest = serde_json::from_value(serde_json::json!({
+        "name": "Look", "columns": [["C1"], [{"gap_mm": 30}, "S1", "S2"], ["L1", "L2"]],
+        "power_nets": ["P24X"], "ground_nets": [], "pitch_mm": 5.0
+    }))
+    .expect("a request with a spacer");
+    req.planned_sheets = Vec::new();
+    let after = plan_function_sheet(&src, &open(), &req).expect("plan");
+    let a = after.route_log.iter().find(|e| e.net == "BUS").expect("BUS");
+    assert_eq!((a.router.as_str(), a.channel), ("channel", Some(0)), "{a:?}");
+    assert_eq!(a.candidates[0].rejected, None);
+    assert_eq!(wires_through_boxes(&after.sheet, &BUS_REFS), 0);
+    assert_eq!(device_groups(&after.sheet, &BUS_REFS), device_groups(&src.sheets[0], &BUS_REFS));
+    blocked.planned_sheets = Vec::new();
+}

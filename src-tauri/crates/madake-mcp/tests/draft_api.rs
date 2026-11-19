@@ -610,3 +610,67 @@ async fn the_mcp_tool_refuses_an_unknown_title_block_field() {
     assert!(outcome.content.contains("titel") && outcome.content.contains("title_block"), "{}", outcome.content);
     assert_eq!(sheet_count(&doc), 0);
 }
+
+// ---- spacers in columns
+
+/// The MCP parameter type reads spacer objects in a column, and a malformed entry is refused naming its column and entry.
+/// MCPの引数の型は、列の中の隙間の項目を読み、形の違う項目は列と項目の番号を挙げて断る。
+#[test]
+fn spacers_round_trip_through_the_mcp_params() {
+    let params: madake_mcp::DraftFunctionSheetParams =
+        serde_json::from_value(json!({"source_path": "/x.mdkproj", "name": "A", "columns": [[{"gap_mm": 10}, "U1"]]})).unwrap();
+    assert_eq!(params.request.columns[0].len(), 2);
+    let err = serde_json::from_value::<madake_mcp::DraftFunctionSheetParams>(json!({"source_path": "/x.mdkproj", "name": "A", "columns": [["U1", 5]]}))
+        .err()
+        .expect("a number is not a column entry")
+        .to_string();
+    assert!(err.contains("columns[0][1] (column 1, entry 2)"), "{err}");
+}
+
+/// The draft tool description tells the caller that a column may hold {"gap_mm": n} spacers.
+/// 下書きツールの説明は、列に {"gap_mm": n} の隙間を書けることを伝えている。
+#[test]
+fn the_draft_tool_description_mentions_spacers() {
+    let descriptions = tool_descriptions();
+    let description = &descriptions.iter().find(|(tool, _)| tool == "draft_function_sheet").unwrap().1;
+    assert!(description.contains("gap_mm"), "{description}");
+}
+
+/// Through the MCP tool and the Link API, a spacer moves the unit down by exactly that many millimetres, and a spacer at the end of a column is refused (400) with the column and entry, changing nothing.
+/// MCPツールでもLink APIでも、隙間は機器をちょうどその mm だけ下げる。列の末尾の隙間は、列と項目を挙げた400で断られ、何も変わらない。
+#[tokio::test]
+async fn spacers_reach_the_planner_through_the_mcp_tool_and_the_link_api() {
+    let unit_y = |doc: &SharedDoc, sheet: usize, reference: &str| -> f64 {
+        let engine = doc.engine.lock().unwrap();
+        let project = engine.project();
+        let value = serde_json::to_value(&project.sheets[sheet]).unwrap();
+        value["entities"].as_object().unwrap().values().find_map(|e| (e["reference"] == json!(reference)).then(|| e["at"]["y"].as_f64().unwrap())).expect("the unit")
+    };
+    let (plain_doc, _, _) = fixture();
+    draft(&plain_doc, &first_request()).expect("plain");
+    let sheets = sheet_count(&plain_doc);
+    let plain_y = unit_y(&plain_doc, sheets - 1, "U2");
+
+    let (doc, bridge, router) = fixture();
+    let mut spaced = first_request();
+    spaced["columns"] = json!([["U1", "M1"], [{"gap_mm": 12.5}, "U2"]]);
+    call(&bridge, "draft_function_sheet", spaced.clone()).await;
+    assert!((unit_y(&doc, sheet_count(&doc) - 1, "U2") - plain_y - 12.5).abs() < 1e-9);
+
+    let (doc, _, router2) = fixture();
+    let (status, reply) = post(&router2, "/api/v1/draft/function-sheet", spaced).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert!((unit_y(&doc, sheet_count(&doc) - 1, "U2") - plain_y - 12.5).abs() < 1e-9);
+
+    let before = project_json(&doc);
+    let mut bad = second_request();
+    bad["columns"] = json!([["U2", {"gap_mm": 10}], ["TB1", "R1"]]);
+    let (status, text) = post_text(&router, "/api/v1/draft/function-sheet", bad.clone()).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{text}");
+    assert!(text.contains("column 1, entry 2"), "{text}");
+    bad["columns"] = json!([["U2", 5], ["TB1", "R1"]]);
+    let (status, text) = post_text(&router, "/api/v1/draft/function-sheet", bad).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{text}");
+    assert!(text.contains("columns[0][1]"), "{text}");
+    assert_eq!(project_json(&doc), before);
+}

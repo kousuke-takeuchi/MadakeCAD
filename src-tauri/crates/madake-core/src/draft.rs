@@ -38,8 +38,10 @@ fn default_pitch() -> f64 {
 pub struct DraftRequest {
     /// 新しいシートの名前。空白だけは不可、開いているプロジェクトの既存のシート名とも重ならない。
     pub name: String,
-    /// 列 (左から右)。1〜8列、各列は参照記号の並び (上から下)。参照記号は1回だけ。
-    pub columns: Vec<Vec<String>>,
+    /// 列 (左から右)。1〜8列、各列は参照記号の並び (上から下)。参照記号は1回だけ。参照記号のあいだ・先頭には、
+    /// 次の機器を下げる隙間 `{"gap_mm": n}` (nは2.5mmの倍数で 2.5〜200) を書ける。列の末尾の隙間は断る。
+    #[serde(deserialize_with = "columns_from")]
+    pub columns: Vec<Vec<ColumnEntry>>,
     /// 機器ごとにピンを限る (参照記号 → ピンの鍵の並び)。無い機器は使用中の全ピン。
     #[serde(default)]
     pub pins: BTreeMap<String, Vec<String>>,
@@ -67,6 +69,83 @@ pub struct DraftRequest {
     /// 他は新しいシートと同じ空)。
     #[serde(default, deserialize_with = "title_block_from")]
     pub title_block: Option<DraftTitleBlock>,
+}
+
+/// 列の項目1つ: 機器の参照記号か、次の機器を下げる隙間 `{"gap_mm": n}`。
+#[derive(Debug, Clone, PartialEq, schemars::JsonSchema)]
+#[serde(untagged)]
+pub enum ColumnEntry {
+    /// 機器の参照記号。
+    Unit(String),
+    /// 隙間 (mm): この列の次の機器を、普通の間隔にさらに n mm 足して下げる。n は2.5mmの倍数で 2.5〜200。
+    Gap { gap_mm: f64 },
+}
+
+impl ColumnEntry {
+    /// 機器の参照記号 (隙間なら `None`)。
+    pub fn unit(&self) -> Option<&str> {
+        match self {
+            ColumnEntry::Unit(r) => Some(r),
+            ColumnEntry::Gap { .. } => None,
+        }
+    }
+
+    /// JSON の1項目を読む。文字列なら参照記号、`{"gap_mm": 数}` なら隙間 (知らない項目は断る)。値の範囲は計画のときに調べる。
+    pub fn from_value(value: serde_json::Value) -> Result<Self, String> {
+        match value {
+            serde_json::Value::String(r) => Ok(ColumnEntry::Unit(r)),
+            serde_json::Value::Object(map) => {
+                let bad = || format!("expected a reference or {{\"gap_mm\": number}}, got {}", serde_json::Value::Object(map.clone()));
+                if map.len() != 1 {
+                    return Err(bad());
+                }
+                match map.get("gap_mm").and_then(|v| v.as_f64()) {
+                    Some(n) => Ok(ColumnEntry::Gap { gap_mm: n }),
+                    None => Err(bad()),
+                }
+            }
+            other => Err(format!("expected a reference or {{\"gap_mm\": number}}, got {other}")),
+        }
+    }
+}
+
+impl From<&str> for ColumnEntry {
+    fn from(r: &str) -> Self {
+        ColumnEntry::Unit(r.to_string())
+    }
+}
+
+impl From<String> for ColumnEntry {
+    fn from(r: String) -> Self {
+        ColumnEntry::Unit(r)
+    }
+}
+
+/// `columns` を読む。形の違う項目があれば、`columns[c][i] (column c+1, entry i+1)` を挙げて断る
+/// (Link API の400、MCP のエラー、CLI の表示にそのまま出る)。
+fn columns_from<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Vec<ColumnEntry>>, D::Error> {
+    use serde::de::Error;
+    let value = serde_json::Value::deserialize(d)?;
+    let hint = "a list of columns, each a list of references or {\"gap_mm\": number} spacers";
+    let serde_json::Value::Array(columns) = value else {
+        return Err(D::Error::custom(format!("columns must be {hint}, got {value}")));
+    };
+    columns
+        .into_iter()
+        .enumerate()
+        .map(|(c, column)| {
+            let serde_json::Value::Array(items) = column else {
+                return Err(D::Error::custom(format!("columns[{c}] (column {}) must be {hint}, got {column}", c + 1)));
+            };
+            items
+                .into_iter()
+                .enumerate()
+                .map(|(i, item)| {
+                    ColumnEntry::from_value(item).map_err(|e| D::Error::custom(format!("columns[{c}][{i}] (column {}, entry {}): {e}", c + 1, i + 1)))
+                })
+                .collect()
+        })
+        .collect()
 }
 
 /// `title_block` を読む。形が違う・知らない欄があれば、`title_block: …` と項目名を添えて断る
@@ -263,6 +342,8 @@ pub(crate) struct DraftUnit {
     pub is_block: bool,
     /// 持つピン。元の定義の並び。
     pub pins: Vec<DraftPin>,
+    /// この機器の前に入れる隙間 (mm。`columns` の `{"gap_mm": n}` の和)。この列の1つ前の機器との普通の間隔に足される。
+    pub gap_before_mm: f64,
 }
 
 /// このシートが触れる元のネット1本。
@@ -479,13 +560,30 @@ impl DraftRequest {
         }
         let mut seen = BTreeSet::new();
         for (c, column) in self.columns.iter().enumerate() {
-            for r in column {
-                let r = r.trim();
-                if r.is_empty() {
-                    return Err(format!("Column {} holds a blank reference: name a unit of the source", c + 1));
-                }
-                if !seen.insert(r.to_string()) {
-                    return Err(format!("The reference {r} is listed more than once in columns (column {})", c + 1));
+            for (i, entry) in column.iter().enumerate() {
+                let place = format!("columns[{c}][{i}] (column {}, entry {})", c + 1, i + 1);
+                match entry {
+                    ColumnEntry::Unit(r) => {
+                        let r = r.trim();
+                        if r.is_empty() {
+                            return Err(format!("Column {} holds a blank reference: name a unit of the source", c + 1));
+                        }
+                        if !seen.insert(r.to_string()) {
+                            return Err(format!("The reference {r} is listed more than once in columns (column {})", c + 1));
+                        }
+                    }
+                    ColumnEntry::Gap { gap_mm } => {
+                        let n = *gap_mm;
+                        if !(MIN_SPACER_MM..=MAX_SPACER_MM).contains(&n) {
+                            return Err(format!("{place}: gap_mm must be 2.5 to 200 mm, got {n}"));
+                        }
+                        if ((n / GRID_MM) - (n / GRID_MM).round()).abs() > 1e-9 {
+                            return Err(format!("{place}: gap_mm must be a multiple of 2.5 mm (2.5 to 200), got {n}"));
+                        }
+                        if !column[i + 1..].iter().any(|e| e.unit().is_some()) {
+                            return Err(format!("{place}: a spacer at the end of the column has no unit to push down; remove it"));
+                        }
+                    }
                 }
             }
         }
@@ -581,7 +679,7 @@ pub(crate) fn build_model(source: &Project, open: &Project, req: &DraftRequest) 
 
     // 列の中の参照記号が元の図にあるか
     for column in &req.columns {
-        for r in column {
+        for r in column.iter().filter_map(ColumnEntry::unit) {
             if !src.instances.contains_key(r.trim()) {
                 return Err(format!("The reference {} does not exist in the source", r.trim()));
             }
@@ -589,7 +687,7 @@ pub(crate) fn build_model(source: &Project, open: &Project, req: &DraftRequest) 
     }
     // ライブラリのシンボルの機器は、元の図で1つのシンボルのときだけ置ける (リレーのコイルと接点のように
     // 何個かのシンボルで描いた機器は、1つのシンボルとして置き直せない)
-    for r in req.columns.iter().flatten() {
+    for r in req.columns.iter().flatten().filter_map(ColumnEntry::unit) {
         let list = &src.instances[r.trim()];
         if list.len() >= 2 && list.iter().any(|s| s.symbol_id != BLOCK_SYMBOL_ID) {
             return Err(format!(
@@ -599,7 +697,7 @@ pub(crate) fn build_model(source: &Project, open: &Project, req: &DraftRequest) 
             ));
         }
     }
-    let listed: BTreeSet<&str> = req.columns.iter().flatten().map(|r| r.trim()).collect();
+    let listed: BTreeSet<&str> = req.columns.iter().flatten().filter_map(ColumnEntry::unit).map(|r| r.trim()).collect();
     for r in req.pins.keys() {
         if !listed.contains(r.trim()) {
             return Err(format!("pins names the reference {r}, which is not in columns"));
@@ -642,12 +740,22 @@ pub(crate) fn build_model(source: &Project, open: &Project, req: &DraftRequest) 
     struct Carried {
         reference: String,
         column: usize,
+        /// この機器の前に並ぶ隙間の和 (mm)。
+        gap_before: f64,
         pins: Vec<(String, String, usize)>,
     }
     let mut carried: Vec<Carried> = Vec::new();
     let mut skipped: Vec<(String, String, String)> = Vec::new();
-    for (column, refs) in req.columns.iter().enumerate() {
-        for r in refs {
+    for (column, entries) in req.columns.iter().enumerate() {
+        let mut gap_before = 0.0;
+        for entry in entries {
+            let r = match entry {
+                ColumnEntry::Gap { gap_mm } => {
+                    gap_before += gap_mm;
+                    continue;
+                }
+                ColumnEntry::Unit(r) => r,
+            };
             let reference = r.trim().to_string();
             let wanted: Option<BTreeSet<&str>> = req.pins.get(&reference).map(|l| l.iter().map(|k| k.trim()).collect());
             let (in_use, skips) = unit_pin_nets(&src, &reference, wanted.as_ref(), &power, &ground)?;
@@ -667,7 +775,7 @@ pub(crate) fn build_model(source: &Project, open: &Project, req: &DraftRequest) 
                 }
                 pins.push((key, name, net));
             }
-            carried.push(Carried { reference, column, pins });
+            carried.push(Carried { reference, column, gap_before: std::mem::take(&mut gap_before), pins });
         }
     }
     if carried.iter().all(|c| c.pins.is_empty()) {
@@ -715,7 +823,14 @@ pub(crate) fn build_model(source: &Project, open: &Project, req: &DraftRequest) 
     let mut model_index: BTreeMap<usize, usize> = BTreeMap::new();
     let mut units: Vec<DraftUnit> = Vec::new();
     let mut rows: BTreeMap<usize, usize> = BTreeMap::new();
-    for c in carried.iter().filter(|c| !c.pins.is_empty()) {
+    // ピンを持たず外した機器の前の隙間は、その列の次の機器へ持ち越す
+    let mut carry_gap: BTreeMap<usize, f64> = BTreeMap::new();
+    for c in &carried {
+        *carry_gap.entry(c.column).or_insert(0.0) += c.gap_before;
+        if c.pins.is_empty() {
+            continue;
+        }
+        let gap_before_mm = carry_gap.remove(&c.column).unwrap_or(0.0);
         let mut pins = Vec::new();
         for (key, name, net) in &c.pins {
             let idx = *model_index.entry(*net).or_insert_with(|| {
@@ -748,6 +863,7 @@ pub(crate) fn build_model(source: &Project, open: &Project, req: &DraftRequest) 
             is_block: source_inst.symbol_id == BLOCK_SYMBOL_ID,
             source: source_inst,
             pins,
+            gap_before_mm,
         });
         *row += 1;
     }
@@ -957,7 +1073,7 @@ mod model_tests {
     fn request(columns: &[&[&str]]) -> DraftRequest {
         DraftRequest {
             name: "2 Control".into(),
-            columns: columns.iter().map(|c| c.iter().map(|r| r.to_string()).collect()).collect(),
+            columns: columns.iter().map(|c| c.iter().map(|r| r.to_string().into()).collect()).collect(),
             pins: BTreeMap::new(),
             power_nets: vec![],
             ground_nets: None,
@@ -1259,6 +1375,7 @@ mod model_tests {
                 DraftPin { key: "A".into(), name: "X".into(), net: 0 },
                 DraftPin { key: "A".into(), name: "Y".into(), net: 1 },
             ],
+            gap_before_mm: 0.0,
         };
         let msg = view_spec(&unit, &[Row::Pin(0), Row::Pin(1)], &[], 5.0).expect_err("a repeated key is refused");
         assert!(msg.contains("U9") && msg.contains("A"), "{msg}");
@@ -1577,6 +1694,9 @@ const CAPTION_MM: f64 = 7.5;
 /// 列の中で機器と機器のあいだにあける最小のすき間 (ピン間隔の何倍か)。
 const GAP_PITCHES: f64 = 4.0;
 const GRID_MM: f64 = 2.5;
+/// 列の隙間 `{"gap_mm": n}` の下限と上限 (mm)。
+const MIN_SPACER_MM: f64 = 2.5;
+const MAX_SPACER_MM: f64 = 200.0;
 /// 電源の印のシンボル。
 const POWER_SYMBOL: &str = "power_rail";
 /// 印の値 (ネット名) の文字高さ (mm)。幅の見積りに使う。
@@ -2614,6 +2734,7 @@ pub(crate) fn lay_out_excluding(
     let mut mids = vec![0.0; units.len()];
     for (u, unit) in units.iter().enumerate() {
         let c = cursor.entry(unit.column).or_insert(0.0);
+        *c += unit.gap_before_mm;
         tops[u] = *c + CAPTION_MM;
         mids[u] = tops[u] + heights[u] / 2.0;
         *c = tops[u] + heights[u] + gap;
@@ -2676,6 +2797,7 @@ pub(crate) fn lay_out_excluding(
         for &c in &columns {
             let mut cursor = area_y0;
             for u in members(c) {
+                cursor += units[u].gap_before_mm;
                 let (top, bottom) = (grid_up(-extent[u].min.y), grid_up(extent[u].max.y));
                 y[u] = cursor + top;
                 cursor += top + bottom + gap;
@@ -2735,6 +2857,7 @@ pub(crate) fn lay_out_excluding(
         let cx = column_x[k] + left_of[k];
         let mut cursor = area_y0;
         for u in members(c) {
+            cursor += units[u].gap_before_mm;
             let top = grid_up(-extent[u].min.y);
             let bottom = grid_up(extent[u].max.y);
             positions[u] = Point::new(cx, y_of[u]);
@@ -2823,7 +2946,7 @@ mod layout_tests {
     fn request(columns: &[&[&str]]) -> DraftRequest {
         DraftRequest {
             name: "Function".into(),
-            columns: columns.iter().map(|c| c.iter().map(|r| r.to_string()).collect()).collect(),
+            columns: columns.iter().map(|c| c.iter().map(|r| r.to_string().into()).collect()).collect(),
             pins: BTreeMap::new(),
             power_nets: Vec::new(),
             ground_nets: None,
@@ -3972,6 +4095,7 @@ fn route_wires_try(
         for (i, r) in frame_blocks.iter().enumerate() {
             named.push((if i == 4 { "title block" } else { "frame" }.to_string(), *r));
         }
+        named.extend(layout.keep_out.iter().map(|r| ("a keep-out area".to_string(), *r)));
         let pin_net: Vec<(Point, String)> = pin_points(&sheet, &defs)
             .into_iter()
             .filter_map(|p| {
@@ -4490,7 +4614,7 @@ mod wire_tests {
         let object = |name: &str, units: &[&str], pins: &[(&str, &[&str])]| {
             let mut r = request();
             r.name = name.into();
-            r.columns = units.iter().map(|u| vec![u.to_string()]).collect();
+            r.columns = units.iter().map(|u| vec![u.to_string().into()]).collect();
             r.pins = pins.iter().map(|(u, k)| (u.to_string(), k.iter().map(|x| x.to_string()).collect())).collect();
             r.power_nets = Vec::new();
             r
@@ -4506,7 +4630,7 @@ mod wire_tests {
                 .map(|r| {
                     PlannedSheet::Detailed(PlannedSheetDetail {
                         name: r.name.clone(),
-                        units: r.columns.iter().flatten().cloned().collect(),
+                        units: r.columns.iter().flatten().filter_map(ColumnEntry::unit).map(str::to_string).collect(),
                         pins: r.pins.clone(),
                     })
                 })
@@ -4570,7 +4694,7 @@ mod wire_tests {
         let object = |name: &str, columns: &[&[&str]], pins: &[(&str, &[&str])]| {
             let mut r = request();
             r.name = name.into();
-            r.columns = columns.iter().map(|c| c.iter().map(|u| u.to_string()).collect()).collect();
+            r.columns = columns.iter().map(|c| c.iter().map(|u| u.to_string().into()).collect()).collect();
             r.pins = pins.iter().map(|(u, k)| (u.to_string(), k.iter().map(|x| x.to_string()).collect())).collect();
             r.power_nets = Vec::new();
             r
@@ -4578,7 +4702,7 @@ mod wire_tests {
         let detail = |r: &DraftRequest| {
             PlannedSheet::Detailed(PlannedSheetDetail {
                 name: r.name.clone(),
-                units: r.columns.iter().flatten().cloned().collect(),
+                units: r.columns.iter().flatten().filter_map(ColumnEntry::unit).map(str::to_string).collect(),
                 pins: r.pins.clone(),
             })
         };
@@ -4671,8 +4795,9 @@ mod wire_tests {
                     let own = (0..2).any(|k| {
                         let (end, other) = (seg[k], seg[1 - k]);
                         end.distance_to(&l.at) < 1e-6
-                            && (other.y - end.y).abs() < 1e-9
-                            && (other.x - end.x) * (tag.text_at.x - end.x) < 0.0
+                            && (((other.y - end.y).abs() < 1e-9 && (other.x - end.x) * (tag.text_at.x - end.x) < 0.0)
+                                // the trunk a tag sits on: it ends at the tag point, along the flag's flat edge
+                                || (other.x - end.x).abs() < 1e-9)
                     });
                     let d = seg_rect_distance(seg[0], seg[1], &r);
                     if !own && d < gap - 1e-6 {

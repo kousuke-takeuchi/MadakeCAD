@@ -255,7 +255,7 @@ mod tests {
     fn request(name: &str, columns: &[&[&str]], power: &[&str]) -> DraftRequest {
         DraftRequest {
             name: name.into(),
-            columns: columns.iter().map(|c| c.iter().map(|r| r.to_string()).collect()).collect(),
+            columns: columns.iter().map(|c| c.iter().map(|r| r.to_string().into()).collect()).collect(),
             pins: BTreeMap::new(),
             power_nets: power.iter().map(|s| s.to_string()).collect(),
             ground_nets: None,

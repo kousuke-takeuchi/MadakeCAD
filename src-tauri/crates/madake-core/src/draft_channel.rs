@@ -19,8 +19,11 @@ pub(crate) const SPAN_MARGIN_MM: f64 = 5.0;
 /// 端の短い線に触れる区間を検査から外す長さ (mm): 枝は端から出るので、端で触れるのは当たり前。
 const TERMINAL_SKIP_MM: f64 = 1.25;
 const EPS: f64 = 1e-6;
-/// 札を幹の端につけるとき、幹を最も上(下)の端から伸ばす長さの上限 (mm)。5mm、だめなら10mm。
-pub(crate) const TAG_EXTENSION_MM: f64 = 10.0;
+/// 札を幹の端につけるとき、幹を最も上(下)の端から伸ばす長さの刻みと上限 (mm): 5, 10, 15 ... 40。
+pub(crate) const TAG_EXTENSION_STEP_MM: f64 = 5.0;
+pub(crate) const TAG_MAX_EXTENSION_MM: f64 = 40.0;
+/// 同じトラックを分け合うかの判定で、札のある幹に足す伸びの長さ (mm)。これより長く伸ばす位置は、他のネットとぶつかれば外れる。
+pub(crate) const TAG_SPAN_MM: f64 = 10.0;
 
 /// 通り道で見た端1つ: 高さと、通り道の左側 (列kの右辺) にあるか。
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -152,8 +155,8 @@ pub(crate) fn assign_tracks_with(nets: &[ChanNet], fixed_h: &[f64]) -> Assignmen
     for net in order {
         let straight = !net.tagged && is_straight(&net.terms);
         let span = span_of(&net.terms);
-        // 札を幹の端につけるネットは、幹が上下へ最大 TAG_EXTENSION_MM 伸びるので、相乗りの判定にその分を足す
-        let span = if net.tagged { (span.0 - TAG_EXTENSION_MM, span.1 + TAG_EXTENSION_MM) } else { span };
+        // 札を幹の端につけるネットは、幹が上下へTAG_SPAN_MM ほど伸びるので、相乗りの判定にその分を足す
+        let span = if net.tagged { (span.0 - TAG_SPAN_MM, span.1 + TAG_SPAN_MM) } else { span };
         // 抽象的な位置は整数の並び: i番目のトラックは 2i+1、i番目のトラックの左に開く新しいトラックは 2i。
         // 新しいトラックを開くたびに付け直すので、何本開いても位置が近づきすぎない (半分ずつにすると丸めで重なる)
         let mut segs_of_done: Vec<Vec<(Point, Point)>> = done
@@ -530,12 +533,11 @@ pub(crate) fn assign_all(cands: &[Candidate], chosen: &BTreeMap<usize, usize>, c
 
 /// 旗 (の外形) が使えるか: 通れない場所 (箱・文字・図枠・表題欄・立入禁止) と、動かない線・接点・札の枝・すでに使うと決めた
 /// 配線・動かした他の札に、すき間 `gap` 以内で近づかず、自分の枝にも触れず、通り道の中 (`lane`) に収まる。
-struct FlagCheck<'a> {
-    grid: &'a RouteGrid,
-    gap: f64,
-    lane: (f64, f64),
+pub(crate) struct FlagCheck<'a> {
+    pub grid: &'a RouteGrid,
+    pub gap: f64,
     /// 動かした札の旗と、そのネットの名前。
-    others: &'a RefCell<Vec<(Rect, String)>>,
+    pub others: &'a RefCell<Vec<(Rect, String)>>,
 }
 
 /// 配線が当たったものの名前を付けるための、シートの中身: 箱・文字・札の旗・印・図枠・表題欄の矩形 (名前つき。この順に調べる) と、
@@ -617,10 +619,7 @@ fn near_rect(r: &Rect, a: Point, b: Point, gap: f64) -> bool {
 }
 
 /// 旗が使えないなら、最初に当たったものの名前 (使えるなら `None`)。
-fn flag_block(flag: &Rect, route: &ChanRoute, obs: &Obstacles, accepted: &[(&str, &ChanRoute)], check: &FlagCheck, scene: &Scene) -> Option<String> {
-    if flag.min.x < check.lane.0 - EPS || flag.max.x > check.lane.1 + EPS {
-        return Some("column extent".to_string());
-    }
+pub(crate) fn flag_block(flag: &Rect, route: &ChanRoute, obs: &Obstacles, accepted: &[(&str, &ChanRoute)], check: &FlagCheck, scene: &Scene) -> Option<String> {
     if !check.grid.rect_free(flag) {
         return Some(scene.name_rect(flag, check.gap));
     }
@@ -721,7 +720,8 @@ pub(crate) fn route_channels(
             accepted.push((c.net, route));
         }
     }
-    // 札を幹の端へ: 上に5mm 右・左、下に5mm 右・左、次に10mm で同じ順。最初に全てが通る位置。他のネットの配線は先に決めてあるので、
+    // 札を幹の端へ: 伸ばす長さ 5, 10, 15 ... 40mm の順に、各長さで上の右・上の左・下の右・下の左。最初に全てが通る位置。
+    // 旗は箱・文字・配線・印・札・図枠・表題欄などの本物の障害物だけで調べる (隣の列の帯が空いていれば、その上にかかってよい)。他のネットの配線は先に決めてあるので、
     // 札は他のネットの配線を押しのけない。置き場所が無ければ、そのネットは通り道に置かない (札はピンの枝のまま、格子の経路探索が引く)
     for (k, c) in pending {
         let ch = &layout.channels[k];
@@ -735,11 +735,11 @@ pub(crate) fn route_channels(
         let named: Vec<(&str, &ChanRoute)> = names.iter().copied().zip(refs.iter().copied()).collect();
         let others = others_of(c.net);
         let obstacles = Obstacles { fixed_lines, fixed_spots, branches: &others, free: &free };
-        let check = FlagCheck { grid, gap, lane: (ch.left, ch.right), others: &moved };
+        let check = FlagCheck { grid, gap, others: &moved };
         let dest = model.nets[c.net].dest.as_ref();
         let mut log = TagLog::default();
         let mut found: Option<ChanRoute> = None;
-        'positions: for ext in [5.0, TAG_EXTENSION_MM] {
+        'positions: for ext in (1..=(TAG_MAX_EXTENSION_MM / TAG_EXTENSION_STEP_MM) as usize).map(|k| k as f64 * TAG_EXTENSION_STEP_MM) {
             for top in [true, false] {
                 for right in [true, false] {
                     let position = position_name(top, ext, right);

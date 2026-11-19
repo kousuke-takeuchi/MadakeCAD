@@ -119,7 +119,7 @@ fn write_the_bars_fixture() {
 pub(super) fn request(columns: &[&[&str]]) -> DraftRequest {
     DraftRequest {
         name: "Look".into(),
-        columns: columns.iter().map(|c| c.iter().map(|r| r.to_string()).collect()).collect(),
+        columns: columns.iter().map(|c| c.iter().map(|r| r.to_string().into()).collect()).collect(),
         pins: BTreeMap::new(),
         power_nets: vec!["P24X".into()],
         ground_nets: Some(vec!["GND".into()]),
@@ -906,7 +906,7 @@ fn no_wire_crosses_or_touches_a_tag_flag() {
             }
             for cols in [vec![vec!["U1".to_string(), "M1".into()], vec!["U2".into()], vec!["TB1".into(), "R1".into()]], vec![vec!["U1".into()], vec!["U2".into()]]] {
                 let mut r = request(&[]);
-                r.columns = cols.clone();
+                r.columns = cols.iter().map(|c| c.iter().map(|u| u.clone().into()).collect()).collect();
                 r.ground_nets = None;
                 r.pitch_mm = pitch;
                 let p = plan_with_options(&fixture_source(), &open(), &r, &opts).expect("fits");

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**4019仕様項目**。
+全6領域・**4038仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -561,7 +561,7 @@
 - 1つのネットの5ピンが3つの機器にあるとき (2つの機器は2ピンずつで棒になる)、幹1本と枝3本で描かれる。 <sub>`bars_count_as_one_terminal_each`</sub>
 - 両側の同じ高さにある2つの端は、短い線の先から先まで1本の横線になる。幹も接点も無い。 <sub>`terminals_at_one_height_are_one_straight_wire`</sub>
 - 2つ先の列まで届くネットは、通り道の中で同じ高さを別のネットの枝が使っていると置ける位置が無い。格子の経路探索が引き、つながりは変わらない。 <sub>`a_net_reaching_two_columns_over_whose_row_is_taken_goes_to_the_grid_router`</sub>
-- 旗(他のシートの名前の分の余白を含む)が通り道に収まらない、組が2つの出ていくネットは、札をピンの枝に残し、格子の経路探索が引く。シートに組が1つだけの出ていくネットは配線そのものが無い。 <sub>`a_tag_that_does_not_fit_the_channel_stays_on_its_branch`</sub>
+- 組が2つの出ていくネットは、他のシートの名前の既定の余白があっても20mmの通り道で札を幹につける(旗は隣の列の空いた所にかかってよい)。シートに組が1つだけの出ていくネットは配線が無く、札は短い線の先に残る。 <sub>`a_tag_in_a_narrow_channel_moves_to_the_trunk_and_a_single_group_keeps_its_stub_tag`</sub>
 - 通り道の幅は10mm + トラック1本につき2.5mmで、20mm以上。トラックは必ず収まる。 <sub>`the_channel_width_follows_the_track_count`</sub>
 - 同じ依頼を2回計画すると、ランダムなidを除けば、全く同じ配線になる。 <sub>`planning_twice_gives_the_same_channel_wires`</sub>
 - 通り道の配線がふさがれたネット (ここでは幹の上に立入禁止の領域を置く) は格子の経路探索に渡され、それでもつながり、つながりは変わらない。 <sub>`a_blocked_channel_net_is_taken_by_the_grid_router`</sub>
@@ -647,12 +647,27 @@
 - 通り道のトラックの割り当てでは、その通り道を通り抜ける枝は動かない線として数える。幹の端がその枝の高さになる位置は選べない。 <sub>`a_through_drop_is_a_fixed_line_in_the_track_assignment`</sub>
 - 同じ依頼を2回計画すると配線は全く同じで、決まった配置も同じになる。 <sub>`the_bus_sheet_is_the_same_every_time`</sub>
 - 出ていくネットが隣り合う列の2つの機器を結ぶとき、幹の端に札を付けて引く。ピンに札の枝は無く、旗は何にも触れず、シートのネットリストは両方のピンと札の名前をつなぐ。 <sub>`a_tagged_net_between_two_units_has_its_tag_at_the_end_of_the_trunk`</sub>
-- 札の位置は決まった順に試す(上5mmの右・左、下の右・左、次に10mmで同じ順)。他のネットの配線がじゃまな位置は飛ばす。いちばん上のネットでは上の位置だけが空いていて、順にふさぐと札は次の位置へ動き、全部ふさぐとピンの枝に残る。 <sub>`the_tag_positions_of_a_top_net_are_tried_in_order_and_the_branch_is_the_last_resort`</sub>
-- いちばん下のネットでは、下の位置が空いている。5mmの右・左、次に10mmの右・左の順で、全部ふさぐと札は枝に残る。 <sub>`the_tag_positions_of_a_bottom_net_are_tried_in_order`</sub>
+- 札の位置は決まった順に試す。長さは5・10・15…40mm、各長さで上の右・上の左・下の右・下の左。札が取った位置をふさぐと、より後ろの位置へだけ動き、10mmより長い位置も使われ、全部ふさぐと札は枝に残る。 <sub>`the_tag_positions_are_tried_in_a_fixed_order_over_lengths_up_to_forty_millimetres`</sub>
+- 組のいちばん下のネットでは、空いているのは下の位置なので、最初に取る位置は下の位置で、順は前へだけ進む。 <sub>`the_tag_of_a_bottom_net_takes_a_bottom_position_first`</sub>
 - 幹へ動かした札を、あとのネットは避ける。同じ2つの機器のあいだに、札付きのネット3本と普通のネット2本があっても、他のネットの配線は旗の0.5mm以内に近づかず、つながりは変わらない。 <sub>`later_nets_avoid_a_flag_that_moved_to_a_trunk`</sub>
 - 3枚の計画に完全な planned_sheets を付けてどの順に下書きしても、開いたプロジェクトの旗は全て図枠の中にあり、検算は「はみ出す札なし」で、元の図と同じつながりを返す。 <sub>`three_planned_sheets_drafted_in_every_order_keep_every_flag_inside`</sub>
 - 配線の記録は、ネットを邪魔したものを名前で挙げる。2列目の箱に枝が当たるバスは、候補の通り道が「どの高さで、どの箱に」と理由つきで外され、格子の経路探索が引いたと記録される。 <sub>`the_routing_log_names_the_box_that_blocked_a_drop`</sub>
-- 配線の記録は、試した札の位置を理由つきで並べる。確保した幅の旗が通り道より広いときは、8つの位置が順に理由つきで並び、札は枝に残る。幅を正確に確保したときは、最初の位置が使われる。 <sub>`the_routing_log_lists_the_tag_positions_that_were_tried`</sub>
+- 配線の記録は、試した札の位置を並べる。幅を正確に確保したときは、最初の位置が使われ、記録にそう残る。 <sub>`the_routing_log_lists_the_tag_positions_that_were_tried`</sub>
+- 通常の20mmの通り道で、他のシートの名前の既定の余白があっても、札付きのネットの札は、隣の列が空いている幹の端に付く。旗は隣の列の帯の上にかかっても、箱・文字・配線・印のどれにも触れず、つながりは変わらない。 <sub>`a_tag_in_a_narrow_channel_goes_where_the_next_column_is_empty`</sub>
+- 図枠の上の縁がふさぐ位置は飛ばされ、記録は「図枠」と名前を挙げる。札は下の位置へ行く。 <sub>`a_position_cut_by_the_frame_is_skipped_and_named`</sub>
+- 表題欄がふさぐ位置は飛ばされ、記録は「表題欄」と名前を挙げる。 <sub>`a_position_in_the_title_block_is_skipped_and_named`</sub>
+- すでに動かした札の旗の上に重なる位置は飛ばされ、記録はその札のネットの名前を挙げる。 <sub>`a_position_on_another_moved_flag_is_named_by_its_net`</sub>
+- 32の位置が全て立入禁止の領域でふさがれると、全て試し、どれも「何が邪魔か」の名前つきで外れ(「列の帯」という理由はもう無い)、札は従来どおり枝に残る。 <sub>`a_tag_with_no_free_position_lists_all_32_with_their_obstacles_and_stays_on_the_branch`</sub>
+- 既定の余白でも、幹へ動かした旗から、あとのネット(格子の経路探索が引くものも)は0.5mm以上離れる(込み入った見本で)。 <sub>`with_the_default_room_later_nets_keep_clear_of_a_moved_flag`</sub>
+- 完全な planned_sheets のある3枚の計画をどの順に下書きしても、旗は全て図枠の中で確保した幅に収まり、検算は「はみ出す札なし」で、つながりは元の図と同じ。 <sub>`planned_three_sheets_keep_every_flag_inside_the_frame_and_its_reserve`</sub>
+- 列の先頭の隙間は、その列の最初の機器をちょうどその mm だけ下げる。他の列は動かず、全てが2.5mmの格子の上に残る。 <sub>`a_spacer_at_the_start_of_a_column_moves_the_first_unit_down_by_that_many_millimetres`</sub>
+- 2つの機器のあいだの隙間は、普通のすき間に足される。後ろの機器だけが下がり、前の機器は動かない。 <sub>`a_spacer_between_two_units_moves_only_the_second_down`</sub>
+- 続く隙間は足し合わされる。10と15は、25と同じだけ機器を下げる。 <sub>`consecutive_spacers_add_up`</sub>
+- 列の末尾の隙間、2.5mmの格子に乗らない値、2.5〜200の外の値は、列の番号と項目の番号を挙げて断る。何も下書きされない。 <sub>`bad_spacers_are_refused_with_the_column_and_the_entry`</sub>
+- 参照記号でも {"gap_mm": 数} でもない項目は、依頼を読むときに、columns[c][i] と列・項目の番号を挙げて断る。 <sub>`a_malformed_column_entry_is_refused_naming_its_place`</sub>
+- 高さの断りは隙間も数える。収まる列も、隙間で描画範囲を越えれば断られる。 <sub>`the_height_refusal_counts_the_spacers`</sub>
+- 隙間の無い依頼は従来どおりに読まれ、列は参照記号だけで、計画も従来の依頼と同じになる。 <sub>`a_request_without_spacers_plans_as_before`</sub>
+- 2列目の箱が枝をふさいでいたバスは、隙間でその箱を高さからはずすと、幹1本とまっすぐな枝で引かれ、配線の記録にもそう出る。 <sub>`a_spacer_moves_the_blocking_box_out_of_the_row_and_the_bus_gets_its_trunk`</sub>
 
 ### DXF連携 (AutoCAD Electrical / EPLAN)
 
@@ -2164,6 +2179,9 @@
 - MCPの引数の型は title_block を読み、知らない欄を書けばその欄名と title_block を挙げて断る。 <sub>`the_mcp_params_read_title_block_and_refuse_unknown_fields`</sub>
 - Link API経由で、title_block は既定の品名を置き換え、知らない欄はその欄名と title_block を挙げて400で断られ、何も変わらない。 <sub>`the_link_api_reads_title_block`</sub>
 - MCPのツール経由でも、title_block の知らない欄はその欄名と title_block を挙げて断られ、何も変わらない。 <sub>`the_mcp_tool_refuses_an_unknown_title_block_field`</sub>
+- MCPの引数の型は、列の中の隙間の項目を読み、形の違う項目は列と項目の番号を挙げて断る。 <sub>`spacers_round_trip_through_the_mcp_params`</sub>
+- 下書きツールの説明は、列に {"gap_mm": n} の隙間を書けることを伝えている。 <sub>`the_draft_tool_description_mentions_spacers`</sub>
+- MCPツールでもLink APIでも、隙間は機器をちょうどその mm だけ下げる。列の末尾の隙間は、列と項目を挙げた400で断られ、何も変わらない。 <sub>`spacers_reach_the_planner_through_the_mcp_tool_and_the_link_api`</sub>
 
 ### drawing_tools
 
@@ -2769,6 +2787,7 @@
 - madake reroute --json は返事をそのまま出し、通常の出力は引き直さなかったネットを理由つきで並べる。 <sub>`reroute_prints_json_or_a_human_summary`</sub>
 - madake arrangeは、シートと通り道の幅を指定されたときだけ送る。 <sub>`arrange_sends_only_what_was_given`</sub>
 - madake draftは依頼のJSONを読み、相対の元の図の場所を依頼のファイルの隣からの絶対パスにして送り、要約か生の返り値を出す。 <sub>`draft_sends_the_request_with_an_absolute_source_path`</sub>
+- madake draftは、依頼のファイルの列にある隙間の項目をそのままアプリへ送る。 <sub>`draft_sends_the_column_spacers_on`</sub>
 - madake draftは、依頼のファイルにある title_block をそのままアプリへ送る。 <sub>`draft_sends_the_title_block_on`</sub>
 - madake draftは、依頼のファイルが無い・JSONでない・元の図の場所が無いときは、アプリを呼ばずに断る。 <sub>`draft_refuses_a_bad_request_file`</sub>
 - madake draft-checkは絶対パスと繰り返した--ignoreの参照記号を送り、合っていれば成功で終わる。 <sub>`draft_check_sends_the_path_and_the_ignored_references`</sub>
