@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**4017仕様項目**。
+全6領域・**4019仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -651,6 +651,8 @@
 - いちばん下のネットでは、下の位置が空いている。5mmの右・左、次に10mmの右・左の順で、全部ふさぐと札は枝に残る。 <sub>`the_tag_positions_of_a_bottom_net_are_tried_in_order`</sub>
 - 幹へ動かした札を、あとのネットは避ける。同じ2つの機器のあいだに、札付きのネット3本と普通のネット2本があっても、他のネットの配線は旗の0.5mm以内に近づかず、つながりは変わらない。 <sub>`later_nets_avoid_a_flag_that_moved_to_a_trunk`</sub>
 - 3枚の計画に完全な planned_sheets を付けてどの順に下書きしても、開いたプロジェクトの旗は全て図枠の中にあり、検算は「はみ出す札なし」で、元の図と同じつながりを返す。 <sub>`three_planned_sheets_drafted_in_every_order_keep_every_flag_inside`</sub>
+- 配線の記録は、ネットを邪魔したものを名前で挙げる。2列目の箱に枝が当たるバスは、候補の通り道が「どの高さで、どの箱に」と理由つきで外され、格子の経路探索が引いたと記録される。 <sub>`the_routing_log_names_the_box_that_blocked_a_drop`</sub>
+- 配線の記録は、試した札の位置を理由つきで並べる。確保した幅の旗が通り道より広いときは、8つの位置が順に理由つきで並び、札は枝に残る。幅を正確に確保したときは、最初の位置が使われる。 <sub>`the_routing_log_lists_the_tag_positions_that_were_tried`</sub>
 
 ### DXF連携 (AutoCAD Electrical / EPLAN)
 

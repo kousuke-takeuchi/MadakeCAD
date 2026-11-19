@@ -1215,7 +1215,7 @@ fn draft_requests_from_a_file_for_looking() {
             Err(message) => summary.push(serde_json::json!({"name": request.name, "refused": message})),
             Ok(plan) => {
                 project.sheets.push(plan.sheet.clone());
-                summary.push(serde_json::json!({"name": request.name, "plan": plan}));
+                summary.push(serde_json::json!({"name": request.name, "plan": plan, "route_log": plan.route_log}));
             }
         }
     }

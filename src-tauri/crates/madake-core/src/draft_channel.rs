@@ -331,36 +331,57 @@ fn without_terminal_ends(s: (Point, Point), terms: &[ChanTermAt]) -> (Point, Poi
     (a, b)
 }
 
-/// ネットの配線が使えないなら、その理由 (使えるなら `None`)。
-pub(crate) fn invalid_reason(route: &ChanRoute, terms: &[ChanTermAt], obs: &Obstacles, accepted: &[&ChanRoute]) -> Option<String> {
+/// 配線が使えない理由: 最初に当たったもの。
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Block {
+    /// 通れない場所 (箱・文字・札の旗・印・図枠・表題欄・ピン) を通る線分。
+    Free(Point, Point),
+    /// 札の枝に触れる線分。
+    Branch(Point, Point),
+    /// 動かない線 (`Obstacles::fixed_lines` の添字) の端や頂点に触れる線分。
+    Line(Point, Point, usize),
+    /// 動かない接点を通る線分。
+    Spot(Point, Point),
+    /// すでに使うと決めた配線 (`accepted` の添字) に触れる・重なる線分。重なりなら `true`。
+    Accepted(Point, Point, usize, bool),
+}
+
+/// ネットの配線が使えないなら、最初に当たったもの (使えるなら `None`)。
+pub(crate) fn first_block(route: &ChanRoute, terms: &[ChanTermAt], obs: &Obstacles, accepted: &[&ChanRoute]) -> Option<Block> {
     for seg in route.segments() {
         if !(obs.free)(seg.0, seg.1) {
-            return Some(format!("blocked {seg:?}"));
+            return Some(Block::Free(seg.0, seg.1));
         }
         let probe = without_terminal_ends(seg, terms);
         if obs.branches.iter().any(|b| seg_rel(seg, *b) != Rel::Apart) {
-            return Some(format!("tag branch {seg:?}"));
+            return Some(Block::Branch(seg.0, seg.1));
         }
-        for line in obs.fixed_lines {
+        for (i, line) in obs.fixed_lines.iter().enumerate() {
             if line.windows(2).any(|f| seg_rel(probe, (f[0], f[1])) == Rel::Short) {
-                return Some(format!("fixed line {seg:?} vs {line:?}"));
+                return Some(Block::Line(seg.0, seg.1, i));
             }
         }
         if obs.fixed_spots.iter().any(|&p| point_on(p, probe)) {
-            return Some(format!("fixed spot {seg:?}"));
+            return Some(Block::Spot(seg.0, seg.1));
         }
-        for other in accepted {
-            if other.segments().iter().any(|o| seg_rel(seg, *o) == Rel::Short) {
-                return Some(format!("short with an accepted net {seg:?}"));
+        for (i, other) in accepted.iter().enumerate() {
+            if let Some(o) = other.segments().iter().find(|o| seg_rel(seg, **o) == Rel::Short) {
+                let parallel = ((seg.0.y - seg.1.y).abs() < EPS) == ((o.0.y - o.1.y).abs() < EPS);
+                return Some(Block::Accepted(seg.0, seg.1, i, parallel));
             }
         }
     }
     None
 }
 
+/// ネットの配線が使えないなら、その理由 (使えるなら `None`)。
+pub(crate) fn invalid_reason(route: &ChanRoute, terms: &[ChanTermAt], obs: &Obstacles, accepted: &[&ChanRoute]) -> Option<String> {
+    first_block(route, terms, obs, accepted).map(|b| format!("{b:?}"))
+}
+
 /// ネットの配線が使えるか: 避けるものに触れず、すでに使うと決めた別のネットの配線と短絡しない。
 pub(crate) fn net_is_valid(route: &ChanRoute, terms: &[ChanTermAt], obs: &Obstacles, accepted: &[&ChanRoute]) -> bool {
-    invalid_reason(route, terms, obs, accepted).is_none()
+    first_block(route, terms, obs, accepted).is_none()
 }
 
 /// 1つの通り道の、レイアウトが決めたもの。
@@ -513,35 +534,120 @@ struct FlagCheck<'a> {
     grid: &'a RouteGrid,
     gap: f64,
     lane: (f64, f64),
-    others: &'a RefCell<Vec<Rect>>,
+    /// 動かした札の旗と、そのネットの名前。
+    others: &'a RefCell<Vec<(Rect, String)>>,
+}
+
+/// 配線が当たったものの名前を付けるための、シートの中身: 箱・文字・札の旗・印・図枠・表題欄の矩形 (名前つき。この順に調べる) と、
+/// 動かない線の持ち主の名前。
+pub(crate) struct Scene<'a> {
+    pub named: &'a [(String, Rect)],
+    pub line_owner: &'a dyn Fn(&[Point]) -> String,
+}
+
+impl Scene<'_> {
+    /// 矩形 `r` (すき間 `gap` を空けて) に重なる最初のものの名前。
+    pub(crate) fn name_rect(&self, r: &Rect, gap: f64) -> String {
+        self.named
+            .iter()
+            .find(|(_, n)| n.min.x < r.max.x + gap && r.min.x < n.max.x + gap && n.min.y < r.max.y + gap && r.min.y < n.max.y + gap)
+            .map_or_else(|| "a blocked grid point".to_string(), |(name, _)| name.clone())
+    }
+}
+
+/// 札の位置1つを試した結果。
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct TagTry {
+    pub position: String,
+    /// 使えなかった理由 (何が邪魔か)。使えたら `None`。
+    pub rejected: Option<String>,
+}
+
+/// 札を幹の端へ動かす試みの記録: 置いた位置 (`None` なら置けなかった) と、試した位置と理由。
+#[derive(Debug, Clone, Default)]
+pub(crate) struct TagLog {
+    pub placed: Option<String>,
+    pub tried: Vec<TagTry>,
+}
+
+/// 通り道の配線の結果。
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ChannelReport {
+    /// ネットの添字 → 配線。
+    pub routes: BTreeMap<usize, ChanRoute>,
+    /// 外す (ネットの添字, 通り道の添字) と、その理由。
+    pub retry: Vec<(usize, usize, String)>,
+    /// 札を幹へ動かそうとしたネットの記録。
+    pub tags: BTreeMap<usize, TagLog>,
+}
+
+/// 線分の呼び名: 横なら枝 (`drop at y=…`)、縦なら幹 (`trunk at x=…`)。
+fn seg_label(a: Point, b: Point) -> String {
+    if (a.y - b.y).abs() < EPS { format!("drop at y={:.1}", a.y) } else { format!("trunk at x={:.1}", a.x) }
+}
+
+/// 位置の呼び名: `top+5 right` など。
+fn position_name(top: bool, ext: f64, right: bool) -> String {
+    format!("{}+{} {}", if top { "top" } else { "bottom" }, ext, if right { "right" } else { "left" })
+}
+
+/// 使えない理由の短い文: 何が邪魔か。`names` は受け入れた配線のネット名 (`accepted` と同じ順)。
+fn block_text(block: &Block, scene: &Scene, obs: &Obstacles, names: &[&str], gap: f64) -> String {
+    match block {
+        Block::Free(a, b) => {
+            let r = Rect::from_corners(*a, *b);
+            format!("{} hits {}", seg_label(*a, *b), scene.name_rect(&r, gap))
+        }
+        Block::Branch(a, b) => format!("{} crosses the tag branch of another net", seg_label(*a, *b)),
+        Block::Line(a, b, i) => format!("{} meets {}", seg_label(*a, *b), (scene.line_owner)(&obs.fixed_lines[*i])),
+        Block::Spot(a, b) => format!("{} passes a junction", seg_label(*a, *b)),
+        Block::Accepted(a, b, i, parallel) => {
+            let n = names.get(*i).copied().unwrap_or("?");
+            if *parallel {
+                format!("{} is collinear with wire of net {n}", seg_label(*a, *b))
+            } else {
+                format!("{} touches wire of net {n}", seg_label(*a, *b))
+            }
+        }
+    }
 }
 
 fn near_rect(r: &Rect, a: Point, b: Point, gap: f64) -> bool {
     a.x.max(b.x) > r.min.x - gap && a.x.min(b.x) < r.max.x + gap && a.y.max(b.y) > r.min.y - gap && a.y.min(b.y) < r.max.y + gap
 }
 
-fn flag_is_valid(flag: &Rect, route: &ChanRoute, obs: &Obstacles, accepted: &[&ChanRoute], check: &FlagCheck) -> bool {
-    if flag.min.x < check.lane.0 - EPS || flag.max.x > check.lane.1 + EPS || !check.grid.rect_free(flag) {
-        return false;
+/// 旗が使えないなら、最初に当たったものの名前 (使えるなら `None`)。
+fn flag_block(flag: &Rect, route: &ChanRoute, obs: &Obstacles, accepted: &[(&str, &ChanRoute)], check: &FlagCheck, scene: &Scene) -> Option<String> {
+    if flag.min.x < check.lane.0 - EPS || flag.max.x > check.lane.1 + EPS {
+        return Some("column extent".to_string());
+    }
+    if !check.grid.rect_free(flag) {
+        return Some(scene.name_rect(flag, check.gap));
     }
     let g = check.gap - EPS;
     let touches = |a: Point, b: Point| near_rect(flag, a, b, g);
-    if obs.fixed_lines.iter().any(|l| l.windows(2).any(|s| touches(s[0], s[1]))) {
-        return false;
+    if let Some(l) = obs.fixed_lines.iter().find(|l| l.windows(2).any(|s| touches(s[0], s[1]))) {
+        return Some((scene.line_owner)(l));
     }
-    if obs.fixed_spots.iter().any(|&p| touches(p, p)) || obs.branches.iter().any(|b| touches(b.0, b.1)) {
-        return false;
+    if obs.fixed_spots.iter().any(|&p| touches(p, p)) {
+        return Some("a junction".to_string());
     }
-    if accepted.iter().any(|r| r.segments().iter().any(|s| touches(s.0, s.1))) {
-        return false;
+    if obs.branches.iter().any(|b| touches(b.0, b.1)) {
+        return Some("the tag branch of another net".to_string());
+    }
+    if let Some((n, _)) = accepted.iter().find(|(_, r)| r.segments().iter().any(|s| touches(s.0, s.1))) {
+        return Some(format!("wire of net {n}"));
     }
     // 自分の枝には触れない (幹は、旗の平らな辺で基準点につながるので除く)
     if route.wires.iter().skip(1).any(|w| w.windows(2).any(|s| touches(s[0], s[1]))) {
-        return false;
+        return Some("a drop of its own net".to_string());
     }
-    !check.others.borrow().iter().any(|o| {
-        o.min.x < flag.max.x + g && flag.min.x < o.max.x + g && o.min.y < flag.max.y + g && flag.min.y < o.max.y + g
-    })
+    check
+        .others
+        .borrow()
+        .iter()
+        .find(|(o, _)| o.min.x < flag.max.x + g && flag.min.x < o.max.x + g && o.min.y < flag.max.y + g && flag.min.y < o.max.y + g)
+        .map(|(_, n)| format!("flag of net {n}"))
 }
 
 /// 札のネットラベル: 旗は幹の端から右 (`right`) か左へ伸び、先端は幹から遠い側を向く (`tag_flow` = `out`)。
@@ -556,7 +662,7 @@ pub(crate) fn trunk_tag(name: &str, at: Point, right: bool, dest: Option<&String
 }
 
 /// 割り当てに従って全ての通り道のネットを引き、使える配線だけを返す (ネットの添字 → 配線)。
-/// 避けるものに触れる・短絡するネット、札の置き場所が無いネットは含めない。返り値の2番目にその (ネット, 通り道) を入れる
+/// 避けるものに触れる・短絡するネット、札の置き場所が無いネットは含めない。`retry` にその (ネット, 通り道) と理由を入れる
 /// (次の配置では別の通り道を選ぶ。他に通り道が無ければ、そのネットは通り道に置かず、格子の経路探索が引く)。
 /// 通り道をまたぐ枝があるので、受け入れた配線は全ての通り道で共有して短絡を調べる。
 pub(crate) fn route_channels(
@@ -565,38 +671,48 @@ pub(crate) fn route_channels(
     grid: &RouteGrid,
     fixed_lines: &[Vec<Point>],
     fixed_spots: &[Point],
-) -> (BTreeMap<usize, ChanRoute>, Vec<(usize, usize)>) {
+    scene: &Scene,
+) -> ChannelReport {
     let cands = candidates(model, &layout.terminals);
     let branches: Vec<(usize, Point, Point)> = layout.terminals.iter().filter_map(|t| t.tag_at.map(|tag| (t.net, t.at, tag))).collect();
-    let moved: RefCell<Vec<Rect>> = RefCell::new(Vec::new());
+    let moved: RefCell<Vec<(Rect, String)>> = RefCell::new(Vec::new());
     let gap = grid.opts.clearance_mm;
     let free = |a: Point, b: Point| {
-        grid.segment_free(a, b) && !moved.borrow().iter().any(|f| near_rect(f, a, b, gap - EPS))
+        grid.segment_free(a, b) && !moved.borrow().iter().any(|(f, _)| near_rect(f, a, b, gap - EPS))
     };
-    let mut out: BTreeMap<usize, ChanRoute> = BTreeMap::new();
-    let mut retry: Vec<(usize, usize)> = Vec::new();
+    let mut report = ChannelReport::default();
     // 受け入れた配線 (ネットの添字, 配線)。通り道をまたぐ枝があるので、全ての通り道で共有して短絡を調べる
     let mut accepted: Vec<(usize, ChanRoute)> = Vec::new();
     // 札を幹の端へ動かすネット: (通り道, 候補)。他の全てのネットの配線を受け入れたあとで、札の位置を決める
     let mut pending: Vec<(usize, &Candidate)> = Vec::new();
     let others_of = |net: usize| -> Vec<(Point, Point)> { branches.iter().filter(|b| b.0 != net).map(|b| (b.1, b.2)).collect() };
+    // 動かした旗が邪魔をしたときの名前も付ける
+    let describe = |block: &Block, obs: &Obstacles, names: &[&str]| -> String {
+        if let Block::Free(a, b) = block {
+            if let Some((_, n)) = moved.borrow().iter().find(|(f, _)| near_rect(f, *a, *b, gap - EPS)) {
+                return format!("{} hits flag of net {n}", seg_label(*a, *b));
+            }
+        }
+        block_text(block, scene, obs, names, gap)
+    };
     for (k, ch) in layout.channels.iter().enumerate() {
         // 置けなかったネットは、他の通り道の候補があるときだけ、その通り道を外す (他の線が外れれば、次の配置で置けるかもしれない)
         for &net in &ch.unplaced {
             if cands.iter().any(|c| c.net == net && c.channel != k && !layout.excluded.contains(&(net, c.channel))) {
-                retry.push((net, k));
+                report.retry.push((net, k, "no free track".to_string()));
             }
         }
         for placed in &ch.placed {
             let Some(c) = cands.iter().find(|c| c.channel == k && c.net == placed.key) else { continue };
             let x = placed.track.map(|i| ch.track_x(i));
             let refs: Vec<&ChanRoute> = accepted.iter().map(|(_, r)| r).collect();
+            let names: Vec<&str> = accepted.iter().map(|(n, _)| model.nets[*n].name.as_str()).collect();
             // 札の枝は、そのネット自身のものを除く (札を幹へ動かすなら枝は無くなる。動かせなければ格子の経路探索が引く)
             let others = others_of(c.net);
             let obstacles = Obstacles { fixed_lines, fixed_spots, branches: &others, free: &free };
             let route = route_geometry(&c.terms, x);
-            if invalid_reason(&route, &c.terms, &obstacles, &refs).is_some() {
-                retry.push((c.net, k));
+            if let Some(block) = first_block(&route, &c.terms, &obstacles, &refs) {
+                report.retry.push((c.net, k, describe(&block, &obstacles, &names)));
                 continue;
             }
             if c.tagged {
@@ -611,46 +727,59 @@ pub(crate) fn route_channels(
         let ch = &layout.channels[k];
         let Some(x) = ch.placed.iter().find(|p| p.key == c.net).and_then(|p| p.track).map(|i| ch.track_x(i)) else {
             accepted.retain(|(n, _)| *n != c.net);
-            retry.push((c.net, k));
+            report.retry.push((c.net, k, "no trunk for the tag".to_string()));
             continue;
         };
         let refs: Vec<&ChanRoute> = accepted.iter().filter(|(n, _)| *n != c.net).map(|(_, r)| r).collect();
+        let names: Vec<&str> = accepted.iter().filter(|(n, _)| *n != c.net).map(|(n, _)| model.nets[*n].name.as_str()).collect();
+        let named: Vec<(&str, &ChanRoute)> = names.iter().copied().zip(refs.iter().copied()).collect();
         let others = others_of(c.net);
         let obstacles = Obstacles { fixed_lines, fixed_spots, branches: &others, free: &free };
         let check = FlagCheck { grid, gap, lane: (ch.left, ch.right), others: &moved };
         let dest = model.nets[c.net].dest.as_ref();
+        let mut log = TagLog::default();
         let mut found: Option<ChanRoute> = None;
         'positions: for ext in [5.0, TAG_EXTENSION_MM] {
             for top in [true, false] {
                 for right in [true, false] {
+                    let position = position_name(top, ext, right);
                     let mut route = route_geometry_ext(&c.terms, Some(x), Some((top, ext)));
-                    if invalid_reason(&route, &c.terms, &obstacles, &refs).is_some() {
+                    if let Some(block) = first_block(&route, &c.terms, &obstacles, &refs) {
+                        log.tried.push(TagTry { position, rejected: Some(describe(&block, &obstacles, &names)) });
                         continue;
                     }
                     let at = if top { route.wires[0][0] } else { route.wires[0][1] };
                     let label = trunk_tag(&c.name, at, right, dest);
-                    let Some(flag) = flag_rect(&label, layout.label_font, layout.sheet.xref_style, layout.reserve.text(&label.name)) else { continue };
-                    if flag_is_valid(&flag, &route, &obstacles, &refs, &check) {
-                        route.tag = Some((label, flag));
-                        found = Some(route);
-                        break 'positions;
+                    let Some(flag) = flag_rect(&label, layout.label_font, layout.sheet.xref_style, layout.reserve.text(&label.name)) else {
+                        log.tried.push(TagTry { position, rejected: Some("no flag shape".to_string()) });
+                        continue;
+                    };
+                    if let Some(why) = flag_block(&flag, &route, &obstacles, &named, &check, scene) {
+                        log.tried.push(TagTry { position, rejected: Some(why) });
+                        continue;
                     }
+                    log.tried.push(TagTry { position: position.clone(), rejected: None });
+                    log.placed = Some(position);
+                    route.tag = Some((label, flag));
+                    found = Some(route);
+                    break 'positions;
                 }
             }
         }
+        report.tags.insert(c.net, log);
         accepted.retain(|(n, _)| *n != c.net);
         match found {
             Some(route) => {
                 if let Some((_, flag)) = &route.tag {
-                    moved.borrow_mut().push(*flag);
+                    moved.borrow_mut().push((*flag, c.name.clone()));
                 }
                 accepted.push((c.net, route));
             }
-            None => retry.push((c.net, k)),
+            None => report.retry.push((c.net, k, "no tag position is free".to_string())),
         }
     }
     for (net, route) in accepted {
-        out.insert(net, route);
+        report.routes.insert(net, route);
     }
-    (out, retry)
+    report
 }

@@ -448,3 +448,54 @@ fn three_planned_sheets_drafted_in_every_order_keep_every_flag_inside() {
     let _ = sheets_with_moved_tags;
 }
 
+
+// ---- the routing log
+
+/// The routing log names what blocked a net: for the bus whose drop runs into a box of column 2, the candidate channel is rejected with the row and the box, and the net is drawn by the grid router.
+/// 配線の記録は、ネットを邪魔したものを名前で挙げる。2列目の箱に枝が当たるバスは、候補の通り道が「どの高さで、どの箱に」と理由つきで外され、格子の経路探索が引いたと記録される。
+#[test]
+fn the_routing_log_names_the_box_that_blocked_a_drop() {
+    let (_, _, _, _, p) = bus_layout(true);
+    let bus = p.route_log.iter().find(|e| e.net == "BUS").expect("the bus is logged");
+    assert_eq!(bus.router, "grid");
+    assert_eq!(bus.channel, None);
+    assert_eq!(bus.candidates.len(), 1, "{bus:?}");
+    assert_eq!(bus.candidates[0].channel, 0);
+    assert!(bus.candidates[0].drop_length_mm > 0.0);
+    let why = bus.candidates[0].rejected.as_deref().expect("the channel was rejected");
+    assert!(why.starts_with("drop at y=") && why.contains("box S1"), "{why}");
+    let (_, _, _, _, ok) = bus_layout(false);
+    let bus = ok.route_log.iter().find(|e| e.net == "BUS").expect("the bus is logged");
+    assert_eq!((bus.router.as_str(), bus.channel), ("channel", Some(0)));
+    assert_eq!(bus.candidates[0].rejected, None);
+    assert!(bus.tag.is_none());
+    assert!(ok.route_log.iter().all(|e| e.net != "P24X"), "a power net has no wire to log");
+}
+
+/// The routing log lists the tag positions that were tried: when the flag with its reserve is wider than the channel, all eight positions are listed in order with the reason and the tag stays on its branch; with room kept exactly, the first position is taken.
+/// 配線の記録は、試した札の位置を理由つきで並べる。確保した幅の旗が通り道より広いときは、8つの位置が順に理由つきで並び、札は枝に残る。幅を正確に確保したときは、最初の位置が使われる。
+#[test]
+fn the_routing_log_lists_the_tag_positions_that_were_tried() {
+    let mut req = tagged_request();
+    req.planned_sheets = Vec::new();
+    let p = plan_function_sheet(&tagged_source(), &open(), &req).expect("plan");
+    let t = p.route_log.iter().find(|e| e.net == "T").expect("T is logged");
+    let tag = t.tag.as_ref().expect("T has a tag");
+    assert_eq!(tag.placed, "branch");
+    let names: Vec<&str> = tag.tried.iter().map(|x| x.position.as_str()).collect();
+    assert_eq!(names, ["top+5 right", "top+5 left", "bottom+5 right", "bottom+5 left", "top+10 right", "top+10 left", "bottom+10 right", "bottom+10 left"]);
+    assert!(tag.tried.iter().all(|x| x.rejected.is_some()), "{tag:?}");
+    assert!(tag.tried.iter().any(|x| x.rejected.as_deref() == Some("column extent")), "{tag:?}");
+    assert_eq!(t.router, "grid");
+    let p = plan_function_sheet(&tagged_source(), &open(), &tagged_request()).expect("plan");
+    let t = p.route_log.iter().find(|e| e.net == "T").expect("T is logged");
+    let tag = t.tag.as_ref().expect("T has a tag");
+    assert_eq!(tag.placed, "top+5 right");
+    assert_eq!(tag.tried.len(), 1);
+    assert_eq!(tag.tried[0].rejected, None);
+    assert_eq!((t.router.as_str(), t.channel), ("channel", Some(0)));
+    let json = serde_json::to_value(&p.route_log).expect("the log is JSON");
+    assert_eq!(json[0]["router"], serde_json::json!(p.route_log[0].router));
+    assert!(serde_json::to_value(&p).expect("the plan is JSON").get("route_log").is_none(), "the public reply does not carry the log");
+}
+

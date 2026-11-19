@@ -161,6 +161,8 @@ One edit: add sheet, add entities. Returned JSON:
 
 `metrics` is the same object as `get_tidy_metrics` for the new sheet.
 
+The plan in core also carries a routing log `route_log` that is not part of any public reply (`#[serde(skip)]`; MCP, Link API and CLI are unchanged): one record per net with two or more pin groups on the sheet, `{net, router: channel | grid | fallback_tags, channel, candidates: [{channel, drop_length_mm, rejected}], tag: null | {placed: branch | "top+5 right" ..., tried: [{position, rejected}]}}`. `rejected` is a short reason built from the first obstacle the validation met (for example `drop at y=47.5 hits box S1`, `trunk at x=77.5 touches wire of net Z`, `no free track`, `column extent`, `flag of net X`). The ignored test `draft_requests_from_a_file_for_looking` writes it under each request of `summary.json` as `route_log`.
+
 ### Refusals
 
 Each refusal changes nothing and states the cause: source file missing or unreadable; a reference in `columns` that the source does not have; a reference listed twice; a pin key in `pins` that the unit does not have; a net named in `power_nets` / `ground_nets` / `destinations` that the source does not have; a net in both `power_nets` and `ground_nets`; a sheet name already in use; a pin already shown by a view on another sheet of the open project; no carried pin at all; the size refusals above; the open project changed between planning and applying (same version check as arrange).

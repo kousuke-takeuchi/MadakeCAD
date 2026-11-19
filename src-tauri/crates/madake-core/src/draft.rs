@@ -3591,6 +3591,39 @@ pub struct DraftSkipped {
     pub reason: String,
 }
 
+pub use self::channel::TagTry;
+
+/// 配線の記録: 候補の通り道1つ。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct RouteLogCandidate {
+    pub channel: usize,
+    /// 枝の長さの合計 (mm): 端から、その通り道の中ほどまでの横の距離の和。
+    pub drop_length_mm: f64,
+    /// 使えなかった理由 (何が邪魔か)。使えた・試さなかったなら `None`。
+    pub rejected: Option<String>,
+}
+
+/// 配線の記録: 札の置き場所。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct RouteLogTag {
+    /// 置いた所: `branch` (ピンの枝) か `top+5 right` などの幹の端の位置。
+    pub placed: String,
+    /// 幹の端で試した位置と、使えなかった理由。
+    pub tried: Vec<TagTry>,
+}
+
+/// 配線の記録: 組が2つ以上あるネット1本ぶん。計画の `route_log` (返事には出さない。見て確かめるための記録)。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct RouteLogEntry {
+    pub net: String,
+    /// `channel` (通り道の幹)・`grid` (格子の経路探索)・`fallback_tags` (引けずに札でつないだ)。
+    pub router: String,
+    /// 幹を引いた通り道の添字 (`channel` のときだけ)。
+    pub channel: Option<usize>,
+    pub candidates: Vec<RouteLogCandidate>,
+    pub tag: Option<RouteLogTag>,
+}
+
 /// 下書きの計画。図面は書き換えない。`sheet` が新しいシートの中身 (適用は呼び出し側)。
 #[derive(Debug, Clone, Serialize)]
 pub struct DraftPlan {
@@ -3607,6 +3640,9 @@ pub struct DraftPlan {
     /// 配線を引けず、ネットラベルでつないだネット名 (自然順)。
     pub labelled: Vec<String>,
     pub skipped_pins: Vec<DraftSkipped>,
+    /// 配線の判断の記録 (ネット名の自然順)。公開の返事には出さない。
+    #[serde(skip)]
+    pub route_log: Vec<RouteLogEntry>,
 }
 
 /// 小数3桁までの整数にした位置 (端子を並べるときの鍵)。
@@ -3637,15 +3673,24 @@ pub(crate) fn plan_in(
     let model = build_model(source, open, req)?;
     // 通り道の検査に通らず、別の通り道の候補があるネットは、その通り道を外して配置からやり直す (外す組は増える一方なので終わる)
     let mut excluded: BTreeSet<(usize, usize)> = BTreeSet::new();
-    let (layout, mut sheet, wired, labelled) = loop {
+    let mut rejections: BTreeMap<(usize, usize), String> = BTreeMap::new();
+    let mut tag_history: BTreeMap<usize, Vec<TagTry>> = BTreeMap::new();
+    let (layout, mut sheet, wired, labelled, partial) = loop {
         let layout = lay_out_excluding(&model, open, req, template, &excluded)?;
-        let (sheet, wired, labelled, retry) = route_wires_try(&model, &layout, opts);
+        let (sheet, wired, labelled, retry, partial, tag_tries) = route_wires_try(&model, &layout, opts);
+        for (net, tries) in tag_tries {
+            tag_history.entry(net).or_insert(tries);
+        }
         let before = excluded.len();
-        excluded.extend(retry);
+        for (net, channel, why) in retry {
+            rejections.entry((net, channel)).or_insert(why);
+            excluded.insert((net, channel));
+        }
         if excluded.len() == before {
-            break (layout, sheet, wired, labelled);
+            break (layout, sheet, wired, labelled, partial);
         }
     };
+    let route_log = build_route_log(&model, &layout, &rejections, &tag_history, partial);
     sheet.title_block = req.new_title_block();
     Ok(DraftPlan {
         sheet,
@@ -3660,7 +3705,51 @@ pub(crate) fn plan_in(
             .iter()
             .map(|(reference, pin, reason)| DraftSkipped { reference: reference.clone(), pin: pin.clone(), reason: reason.clone() })
             .collect(),
+        route_log,
     })
+}
+
+/// 配線の記録の、ネットごとに決まる部分 (どの配線か・札)。
+struct PartialLog {
+    net: usize,
+    router: &'static str,
+    channel: Option<usize>,
+    tag: Option<RouteLogTag>,
+}
+
+/// 配線の記録を作る: 候補の通り道ごとの枝の長さ (最後の配置で測る) と、外した理由を足す。
+fn build_route_log(
+    model: &DraftModel,
+    layout: &DraftLayout,
+    rejections: &BTreeMap<(usize, usize), String>,
+    tag_history: &BTreeMap<usize, Vec<TagTry>>,
+    partial: Vec<PartialLog>,
+) -> Vec<RouteLogEntry> {
+    let cands = channel::candidates(model, &layout.terminals);
+    let mut out: Vec<RouteLogEntry> = partial
+        .into_iter()
+        .map(|p| {
+            let candidates = cands
+                .iter()
+                .filter(|c| c.net == p.net)
+                .map(|c| {
+                    let ch = &layout.channels[c.channel];
+                    let mid = (ch.left + ch.right) / 2.0;
+                    let len: f64 = c.terms.iter().map(|t| (t.at.x - mid).abs()).sum();
+                    RouteLogCandidate { channel: c.channel, drop_length_mm: (len * 10.0).round() / 10.0, rejected: rejections.get(&(p.net, c.channel)).cloned() }
+                })
+                .collect();
+            let mut tag = p.tag;
+            if let Some(t) = tag.as_mut() {
+                if t.tried.is_empty() {
+                    t.tried = tag_history.get(&p.net).cloned().unwrap_or_default();
+                }
+            }
+            RouteLogEntry { net: model.nets[p.net].name.clone(), router: p.router.to_string(), channel: p.channel, candidates, tag }
+        })
+        .collect();
+    out.sort_by(|a, b| natural_cmp(&a.net, &b.net));
+    out
 }
 
 /// 単位ごとの配線の端1つ。
@@ -3726,13 +3815,17 @@ fn touches_a_flag(emitted: &[Entity], flags: &[(Rect, Point, String)], net: &str
 
 /// 配線を引き、引けないネットは、各端に札 (行き先なし) を付けてつなぐ。返り値は完成したシートと、配線したネット名・札でつないだネット名 (どちらも自然順)。
 fn route_wires(model: &DraftModel, layout: &DraftLayout, opts: &RouteOptions) -> (Sheet, Vec<String>, Vec<String>) {
-    let (sheet, wired, labelled, _) = route_wires_try(model, layout, opts);
+    let (sheet, wired, labelled, ..) = route_wires_try(model, layout, opts);
     (sheet, wired, labelled)
 }
 
-/// [`route_wires`] の、通り道の検査に通らず、別の通り道の候補があるネット (ネットの添字, 通り道の添字) も返す版。
+/// [`route_wires`] の、通り道の検査に通らなかった (ネットの添字, 通り道の添字, 理由) と、ネットごとの配線の記録も返す版。
 /// 配置をやり直すときに、その通り道を選ばないようにするために使う。
-fn route_wires_try(model: &DraftModel, layout: &DraftLayout, opts: &RouteOptions) -> (Sheet, Vec<String>, Vec<String>, Vec<(usize, usize)>) {
+fn route_wires_try(
+    model: &DraftModel,
+    layout: &DraftLayout,
+    opts: &RouteOptions,
+) -> (Sheet, Vec<String>, Vec<String>, Vec<(usize, usize, String)>, Vec<PartialLog>, BTreeMap<usize, Vec<TagTry>>) {
     let mut sheet = layout.sheet.clone();
     let defs = sheet_symbol_defs(&sheet);
     let key_of = |l: &Vec<Point>| l.iter().map(|&p| quantised(p)).collect::<Vec<_>>();
@@ -3838,7 +3931,7 @@ fn route_wires_try(model: &DraftModel, layout: &DraftLayout, opts: &RouteOptions
 
     // 通り道のトラックで引けるネットを先に引く (格子の経路探索より前)。使える配線は動かない線・接点として渡す。
     // 札を幹へ動かすネットが居るので、枝の先の旗は通り道の検査では立入禁止にしない
-    let (mut chan, retry): (BTreeMap<usize, channel::ChanRoute>, Vec<(usize, usize)>) = {
+    let report = {
         let skip: Vec<Rect> = branch_tag.values().map(|(_, r)| *r).collect();
         let blocks: Vec<Rect> = layout
             .keep_out
@@ -3851,9 +3944,62 @@ fn route_wires_try(model: &DraftModel, layout: &DraftLayout, opts: &RouteOptions
         let mut no_tags = sheet.clone();
         no_tags.entities.retain(|_, e| !matches!(e, Entity::NetLabel(l) if branch_tag.values().any(|(at, _)| at.distance_to(&l.at) < 1e-6)));
         let grid = build_grid(&no_tags, &blocks);
-        let (routes, retry) = channel::route_channels(model, layout, &grid, &fixed_lines, &fixed_spots);
-        (order.iter().enumerate().filter_map(|(i, n)| routes.get(n).map(|r| (i, r.clone()))).collect(), retry)
+        // 当たったものに名前を付けるための、シートの中身 (箱・文字・札の旗・印・図枠・表題欄の順)
+        let index = DefIndex::new(&defs);
+        let mut named: Vec<(String, Rect)> = Vec::new();
+        for e in sheet.entities.values() {
+            if let Entity::Symbol(sym) = e {
+                if !sym.reference.is_empty() {
+                    if let Some(r) = index.get(sym).and_then(|d| symbol_bounds(sym, &d)) {
+                        named.push((format!("box {}", sym.reference), r));
+                    }
+                }
+            }
+        }
+        for t in crate::tidy::text_boxes(&sheet, &defs).into_iter().filter(|t| t.kind != crate::tidy::TextKind::WireNumber) {
+            named.push((format!("text {}", t.text), t.rect));
+        }
+        named.extend(flags.iter().map(|(r, _, n)| (format!("flag of net {n}"), *r)));
+        for e in sheet.entities.values() {
+            if let Entity::Symbol(sym) = e {
+                if sym.reference.is_empty() {
+                    if let Some(r) = item_rect(e, &defs, &sheet, layout.label_font, &layout.reserve) {
+                        named.push((format!("mark {}", sym.value), r));
+                    }
+                }
+            }
+        }
+        for (i, r) in frame_blocks.iter().enumerate() {
+            named.push((if i == 4 { "title block" } else { "frame" }.to_string(), *r));
+        }
+        let pin_net: Vec<(Point, String)> = pin_points(&sheet, &defs)
+            .into_iter()
+            .filter_map(|p| {
+                let Some(Entity::Symbol(sym)) = sheet.entities.get(&p.entity) else { return None };
+                let unit = model.units.iter().find(|u| u.reference == sym.reference)?;
+                let pin = unit.pins.iter().find(|q| q.key == p.number)?;
+                Some((p.pos, model.nets[pin.net].name.clone()))
+            })
+            .collect();
+        let owner = |line: &[Point]| -> String {
+            for q in [line[0], line[line.len() - 1]] {
+                if let Some((_, n)) = pin_net.iter().find(|(pp, _)| pp.distance_to(&q) < 1e-6) {
+                    return format!("stub of net {n}");
+                }
+            }
+            for t in &layout.terminals {
+                if line.windows(2).any(|s| crate::netlist::segment_distance(&t.at, &s[0], &s[1]) < 1e-6) {
+                    return format!("bar of net {}", model.nets[t.net].name);
+                }
+            }
+            "a stub or mark lead".to_string()
+        };
+        let scene = channel::Scene { named: &named, line_owner: &owner };
+        channel::route_channels(model, layout, &grid, &fixed_lines, &fixed_spots, &scene)
     };
+    let retry = report.retry.clone();
+    let tag_logs = report.tags.clone();
+    let mut chan: BTreeMap<usize, channel::ChanRoute> = order.iter().enumerate().filter_map(|(i, n)| report.routes.get(n).map(|r| (i, r.clone()))).collect();
     // 札を幹へ動かせなかったネットの、枝の先の旗は元の場所に残る。通り道の配線がそれに近いなら、そのネットは格子の経路探索に回す
     loop {
         let moved = moved_nets(&chan);
@@ -3988,7 +4134,31 @@ fn route_wires_try(model: &DraftModel, layout: &DraftLayout, opts: &RouteOptions
     add_junctions(&mut sheet);
     wired.sort_by(|a, b| natural_cmp(a, b));
     labelled.sort_by(|a, b| natural_cmp(a, b));
-    (sheet, wired, labelled, retry)
+    // 配線の記録: どの配線で引いたか、札はどこか
+    let partial: Vec<PartialLog> = order
+        .iter()
+        .enumerate()
+        .map(|(i, &net)| {
+            let (router, channel) = if chan.contains_key(&i) {
+                (
+                    "channel",
+                    layout.channels.iter().position(|c| c.placed.iter().any(|p| p.key == net)),
+                )
+            } else if outcome[i].is_some() {
+                ("grid", None)
+            } else {
+                ("fallback_tags", None)
+            };
+            let tag = branch_tag.contains_key(&net).then(|| {
+                let tried = tag_logs.get(&net).map(|l| l.tried.clone()).unwrap_or_default();
+                let placed = chan.get(&i).and_then(|r| r.tag.as_ref()).and_then(|_| tag_logs.get(&net)).and_then(|l| l.placed.clone());
+                RouteLogTag { placed: placed.unwrap_or_else(|| "branch".to_string()), tried }
+            });
+            PartialLog { net, router, channel, tag }
+        })
+        .collect();
+    let tag_tries: BTreeMap<usize, Vec<TagTry>> = tag_logs.iter().map(|(n, l)| (*n, l.tried.clone())).collect();
+    (sheet, wired, labelled, retry, partial, tag_tries)
 }
 
 #[cfg(test)]

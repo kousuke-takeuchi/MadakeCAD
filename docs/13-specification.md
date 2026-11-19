@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**4017 specification clauses** across 6 areas.
+**4019 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -651,6 +651,8 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - For the lowest net the bottom positions are the free ones: right then left at 5 mm, then at 10 mm; with all blocked the tag stays on its branch. <sub>`the_tag_positions_of_a_bottom_net_are_tried_in_order`</sub>
 - Later nets keep clear of a tag that was moved to a trunk: with three tagged nets and two plain ones between the same two units, no wire of another net comes within 0.5 mm of any flag, and the connections stay the same. <sub>`later_nets_avoid_a_flag_that_moved_to_a_trunk`</sub>
 - With complete planned_sheets on a three-sheet plan drafted in every order, every flag of the open project is inside the frame, and the check lists no tag outside and finds the same connections as the source. <sub>`three_planned_sheets_drafted_in_every_order_keep_every_flag_inside`</sub>
+- The routing log names what blocked a net: for the bus whose drop runs into a box of column 2, the candidate channel is rejected with the row and the box, and the net is drawn by the grid router. <sub>`the_routing_log_names_the_box_that_blocked_a_drop`</sub>
+- The routing log lists the tag positions that were tried: when the flag with its reserve is wider than the channel, all eight positions are listed in order with the reason and the tag stays on its branch; with room kept exactly, the first position is taken. <sub>`the_routing_log_lists_the_tag_positions_that_were_tried`</sub>
 
 ### DXF interop (AutoCAD Electrical / EPLAN)
 

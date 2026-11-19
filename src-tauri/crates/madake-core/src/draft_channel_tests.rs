@@ -25,9 +25,9 @@ pub(super) fn settled(m: &DraftModel, req: &DraftRequest) -> DraftLayout {
     let mut excluded: BTreeSet<(usize, usize)> = BTreeSet::new();
     loop {
         let l = lay_out_excluding(m, &open(), req, &template, &excluded).expect("the layout fits");
-        let (_, _, _, retry) = route_wires_try(m, &l, &RouteOptions::default());
+        let (_, _, _, retry, _, _) = route_wires_try(m, &l, &RouteOptions::default());
         let before = excluded.len();
-        excluded.extend(retry);
+        excluded.extend(retry.into_iter().map(|(n, k, _)| (n, k)));
         if excluded.len() == before {
             return l;
         }
