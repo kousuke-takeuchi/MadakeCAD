@@ -636,8 +636,8 @@ fn the_draft_tool_description_mentions_spacers() {
     assert!(description.contains("gap_mm"), "{description}");
 }
 
-/// Through the MCP tool and the Link API, a spacer moves the unit down by exactly that many millimetres, and a spacer at the end of a column is refused (400) with the column and entry, changing nothing.
-/// MCPツールでもLink APIでも、隙間は機器をちょうどその mm だけ下げる。列の末尾の隙間は、列と項目を挙げた400で断られ、何も変わらない。
+/// Through the MCP tool and the Link API, a spacer moves the unit down by exactly that many millimetres, neither reply carries the internal routing log, and a spacer at the end of a column is refused (400) with the column and entry, changing nothing.
+/// MCPツールでもLink APIでも、隙間は機器をちょうどその mm だけ下げ、どちらの返事にも内部の配線の記録は出ない。列の末尾の隙間は、列と項目を挙げた400で断られ、何も変わらない。
 #[tokio::test]
 async fn spacers_reach_the_planner_through_the_mcp_tool_and_the_link_api() {
     let unit_y = |doc: &SharedDoc, sheet: usize, reference: &str| -> f64 {
@@ -651,25 +651,27 @@ async fn spacers_reach_the_planner_through_the_mcp_tool_and_the_link_api() {
     let sheets = sheet_count(&plain_doc);
     let plain_y = unit_y(&plain_doc, sheets - 1, "U2");
 
-    let (doc, bridge, router) = fixture();
+    let (doc, bridge, _) = fixture();
     let mut spaced = first_request();
     spaced["columns"] = json!([["U1", "M1"], [{"gap_mm": 12.5}, "U2"]]);
-    call(&bridge, "draft_function_sheet", spaced.clone()).await;
+    let outcome = call(&bridge, "draft_function_sheet", spaced.clone()).await;
+    assert!(outcome.get("route_log").is_none() && !outcome.to_string().contains("route_log"), "the routing log stays inside: {outcome}");
     assert!((unit_y(&doc, sheet_count(&doc) - 1, "U2") - plain_y - 12.5).abs() < 1e-9);
 
     let (doc, _, router2) = fixture();
     let (status, reply) = post(&router2, "/api/v1/draft/function-sheet", spaced).await;
     assert_eq!(status, StatusCode::OK, "{reply}");
+    assert!(reply.get("route_log").is_none() && !reply.to_string().contains("route_log"), "{reply}");
     assert!((unit_y(&doc, sheet_count(&doc) - 1, "U2") - plain_y - 12.5).abs() < 1e-9);
 
     let before = project_json(&doc);
     let mut bad = second_request();
     bad["columns"] = json!([["U2", {"gap_mm": 10}], ["TB1", "R1"]]);
-    let (status, text) = post_text(&router, "/api/v1/draft/function-sheet", bad.clone()).await;
+    let (status, text) = post_text(&router2, "/api/v1/draft/function-sheet", bad.clone()).await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{text}");
     assert!(text.contains("column 1, entry 2"), "{text}");
     bad["columns"] = json!([["U2", 5], ["TB1", "R1"]]);
-    let (status, text) = post_text(&router, "/api/v1/draft/function-sheet", bad).await;
+    let (status, text) = post_text(&router2, "/api/v1/draft/function-sheet", bad).await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{text}");
     assert!(text.contains("columns[0][1]"), "{text}");
     assert_eq!(project_json(&doc), before);

@@ -10,7 +10,7 @@
 ここに載っている挙動は、テスト実行のたびに証明される。
 
 
-全6領域・**4038仕様項目**。
+全6領域・**4045仕様項目**。
 
 
 ## コアドメイン (madake-core)
@@ -668,6 +668,13 @@
 - 高さの断りは隙間も数える。収まる列も、隙間で描画範囲を越えれば断られる。 <sub>`the_height_refusal_counts_the_spacers`</sub>
 - 隙間の無い依頼は従来どおりに読まれ、列は参照記号だけで、計画も従来の依頼と同じになる。 <sub>`a_request_without_spacers_plans_as_before`</sub>
 - 2列目の箱が枝をふさいでいたバスは、隙間でその箱を高さからはずすと、幹1本とまっすぐな枝で引かれ、配線の記録にもそう出る。 <sub>`a_spacer_moves_the_blocking_box_out_of_the_row_and_the_bus_gets_its_trunk`</sub>
+- 8列・40個の機器・120本のネット (幹へ動く札と、3つの列をまたぐ枝を含む) のシートは、ゆとりのある時間のうちに計画でき、元の図と同じつながりで、どの旗にも配線が触れず、2回計画しても同じになる。 <sub>`a_sheet_of_eight_columns_forty_units_and_120_nets_plans_quickly_and_soundly`</sub>
+- 外した通り道のあとで作り直した配置が幅に収まらない (ネットが別の通り道を広げる) ときは、収まるシートを断らずに、1つ前の配置を使う。そこではそのネットは格子の経路探索が引いている。 <sub>`a_layout_made_again_that_does_not_fit_keeps_the_one_before_it`</sub>
+- やり直しは必ず終わる。作り物のでたらめなシートで、配置を作る回数は (ネット, 通り道) の候補の数 + 1 を越えず、どのシートもつながりを保ち、旗に配線が触れず、2回計画しても同じになる。 <sub>`the_retry_loop_ends_within_its_bound_and_random_sheets_stay_sound`</sub>
+- 外される機器 (描くピンが無い) の前の隙間は、その列の次の機器へ持ち越される。列の最後の外される機器の前の隙間は、何も下げない。 <sub>`a_spacer_before_a_dropped_unit_moves_on_to_the_next_unit`</sub>
+- planned_sheets の項目の units に隙間のオブジェクトを書くと、その項目を挙げて断る。計画のシートは参照記号だけの並びのまま。 <sub>`a_spacer_in_planned_sheets_units_is_refused`</sub>
+- 矩形が空いているかの検査は、矩形を外側の格子の線まで広げて調べるので、経路探索のすき間が周り全部で保たれる。旗の右の辺から0.3mm先にある箱は、その辺に最も近い格子の線が旗の内側にあっても、旗を「空いていない」にする。 <sub>`a_rectangle_is_not_free_when_a_box_is_within_the_clearance_of_its_edge`</sub>
+- 札のために伸ばした幹は、いちばん上の端の高さを通り抜けるので、そこに接点が付く (枝と、上下の幹の3本が会う)。伸ばした先の札の位置には付かない。 <sub>`an_extended_trunk_gets_a_junction_where_it_passes_its_end_row`</sub>
 
 ### DXF連携 (AutoCAD Electrical / EPLAN)
 
@@ -2181,7 +2188,7 @@
 - MCPのツール経由でも、title_block の知らない欄はその欄名と title_block を挙げて断られ、何も変わらない。 <sub>`the_mcp_tool_refuses_an_unknown_title_block_field`</sub>
 - MCPの引数の型は、列の中の隙間の項目を読み、形の違う項目は列と項目の番号を挙げて断る。 <sub>`spacers_round_trip_through_the_mcp_params`</sub>
 - 下書きツールの説明は、列に {"gap_mm": n} の隙間を書けることを伝えている。 <sub>`the_draft_tool_description_mentions_spacers`</sub>
-- MCPツールでもLink APIでも、隙間は機器をちょうどその mm だけ下げる。列の末尾の隙間は、列と項目を挙げた400で断られ、何も変わらない。 <sub>`spacers_reach_the_planner_through_the_mcp_tool_and_the_link_api`</sub>
+- MCPツールでもLink APIでも、隙間は機器をちょうどその mm だけ下げ、どちらの返事にも内部の配線の記録は出ない。列の末尾の隙間は、列と項目を挙げた400で断られ、何も変わらない。 <sub>`spacers_reach_the_planner_through_the_mcp_tool_and_the_link_api`</sub>
 
 ### drawing_tools
 

@@ -10,7 +10,7 @@ This document is the living, always-verified specification of MadakeCAD:
 if a behavior is listed here, a test proves it on every run of the suite.
 
 
-**4038 specification clauses** across 6 areas.
+**4045 specification clauses** across 6 areas.
 
 
 ## Core domain (madake-core)
@@ -668,6 +668,13 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - The height refusal counts the spacers: a column that fits is refused once spacers push it past the drawing area. <sub>`the_height_refusal_counts_the_spacers`</sub>
 - Requests without spacers read as before: the columns hold plain references and the plan is the one the plain request gives. <sub>`a_request_without_spacers_plans_as_before`</sub>
 - The bus whose drop a box of column 2 blocked becomes one trunk with straight drops once a spacer moves that box out of the row, and the routing log shows the change. <sub>`a_spacer_moves_the_blocking_box_out_of_the_row_and_the_bus_gets_its_trunk`</sub>
+- A sheet of 8 columns, 40 units and 120 nets (with tags that move to trunks and drops over three columns) plans within a generous time, keeps the connections of the source, keeps every flag clear, and plans the same twice. <sub>`a_sheet_of_eight_columns_forty_units_and_120_nets_plans_quickly_and_soundly`</sub>
+- When the layout made again after a rejected channel would not fit the width (the net widens another channel), the plan keeps the layout before it, where that net is drawn by the grid router, instead of refusing a sheet that fits. <sub>`a_layout_made_again_that_does_not_fit_keeps_the_one_before_it`</sub>
+- The retry loop ends: on invented random sheets, the layout is made at most once more than the number of (net, channel) candidates, and every sheet keeps its connections, keeps its flags clear and plans the same twice. <sub>`the_retry_loop_ends_within_its_bound_and_random_sheets_stay_sound`</sub>
+- A spacer before a unit that is dropped (it has no pin to draw) moves on to the next unit of the column; one before a dropped unit at the end of the column pushes nothing. <sub>`a_spacer_before_a_dropped_unit_moves_on_to_the_next_unit`</sub>
+- A spacer object in the units of a planned_sheets entry is refused naming the entry: planned sheets keep plain lists of references. <sub>`a_spacer_in_planned_sheets_units_is_refused`</sub>
+- The free-area test of a rectangle widens it to the grid lines outside it, so the router's clearance is kept all round: a box 0.3 mm beyond the right edge of a flag makes the flag not free, even when the nearest grid line to that edge lies inside the flag. <sub>`a_rectangle_is_not_free_when_a_box_is_within_the_clearance_of_its_edge`</sub>
+- A trunk extended for a tag passes through its topmost terminal row, so that row gets a junction (three wire ends meet: the drop and the trunk on both sides); the far end of the extension, the tag point, has none. <sub>`an_extended_trunk_gets_a_junction_where_it_passes_its_end_row`</sub>
 
 ### DXF interop (AutoCAD Electrical / EPLAN)
 
@@ -2181,7 +2188,7 @@ if a behavior is listed here, a test proves it on every run of the suite.
 - Through the MCP tool, an unknown title_block field is refused with a message that names the field and title_block, and nothing changes. <sub>`the_mcp_tool_refuses_an_unknown_title_block_field`</sub>
 - The MCP parameter type reads spacer objects in a column, and a malformed entry is refused naming its column and entry. <sub>`spacers_round_trip_through_the_mcp_params`</sub>
 - The draft tool description tells the caller that a column may hold {"gap_mm": n} spacers. <sub>`the_draft_tool_description_mentions_spacers`</sub>
-- Through the MCP tool and the Link API, a spacer moves the unit down by exactly that many millimetres, and a spacer at the end of a column is refused (400) with the column and entry, changing nothing. <sub>`spacers_reach_the_planner_through_the_mcp_tool_and_the_link_api`</sub>
+- Through the MCP tool and the Link API, a spacer moves the unit down by exactly that many millimetres, neither reply carries the internal routing log, and a spacer at the end of a column is refused (400) with the column and entry, changing nothing. <sub>`spacers_reach_the_planner_through_the_mcp_tool_and_the_link_api`</sub>
 
 ### drawing_tools
 
