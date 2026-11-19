@@ -67,7 +67,7 @@ pub(crate) fn tagged_request() -> DraftRequest {
 #[ignore]
 fn write_the_span_sheets_as_svg() {
     let Ok(dir) = std::env::var("MADAKE_DRAFT_SVG_DIR") else { return };
-    let mut write = |name: &str, src: &Project, open: &Project, req: &DraftRequest| {
+    let write = |name: &str, src: &Project, open: &Project, req: &DraftRequest| {
         let p = plan_function_sheet(src, open, req).expect("fits");
         let project = with_sheet(open, &p.sheet);
         let svg = crate::svg::project_sheet_to_svg(&project, p.sheet.id, &crate::symbol::builtin_symbols()).unwrap();
@@ -93,13 +93,15 @@ fn write_the_span_sheets_as_svg() {
     .expect("a request with a spacer");
     write("bus-spacer", &bus_fixture(true), &open(), &spaced);
     write("bus-blocked", &bus_fixture(true), &open(), &bus_request());
+    let (large, columns) = large_source();
+    write("large", &large, &open(), &request_of(&columns, 2.5));
 }
 
 
 // ---- helpers
 
 use super::channel::{flag_block, FlagCheck, Obstacles, Scene};
-use super::channel_tests::{drafted, settled, trunks};
+use super::channel_tests::{settled, trunks};
 use crate::model::{Orientation, PaperSize};
 use crate::route::RouteGrid;
 use crate::route::RouteOptions;
@@ -449,7 +451,6 @@ fn three_planned_sheets_drafted_in_every_order_keep_every_flag_inside() {
     let sheets: [(&str, Vec<&[&str]>); 3] = [("One", vec![&["SA", "SB"][..]]), ("Two", vec![&["SC", "SD"][..]]), ("Three", vec![&["SX"][..], &["SY"][..]])];
     let plan_entries = planned(&[("One", &["SA", "SB"]), ("Two", &["SC", "SD"]), ("Three", &["SX", "SY"])]);
     let src = stacked_source();
-    let mut sheets_with_moved_tags = 0;
     for order in [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]] {
         let mut project = open();
         for &i in &order {
@@ -458,18 +459,12 @@ fn three_planned_sheets_drafted_in_every_order_keep_every_flag_inside() {
             req.name = (*name).into();
             req.planned_sheets = plan_entries.clone();
             let p = plan_function_sheet(&src, &project, &req).expect("the sheet fits");
-            let pin_sides: Vec<Point> = labels_of(&p.sheet).iter().map(|l| l.at).collect();
-            let columns_right = p.sheet.entities.values().filter_map(|e| if let Entity::Symbol(s) = e { Some(s.at.x) } else { None }).fold(0.0, f64::max);
-            if pin_sides.iter().any(|a| a.x > columns_right + 1e-6 && false) {
-                sheets_with_moved_tags += 1;
-            }
             project.sheets.push(p.sheet);
         }
         let check = crate::draft_check::check_function_sheets(&src, &project, &[]);
         assert!(check.tags_outside.is_empty() && check.layout_ok, "{order:?}: {:?}", check.tags_outside);
         assert!(check.ok, "{order:?}: {check:?}");
     }
-    let _ = sheets_with_moved_tags;
 }
 
 
@@ -622,7 +617,8 @@ fn a_tag_with_no_free_position_lists_all_32_with_their_obstacles_and_stays_on_th
     assert!(tries[&t].iter().any(|x| x.rejected.as_deref().is_some_and(|r| r.contains("keep-out"))), "{:?}", tries[&t]);
     // the keep-out bands also stop the grid router, so the net is joined by tags; the point here is the log
     assert!(wired.contains(&"T".to_string()) || labelled.contains(&"T".to_string()), "{wired:?} {labelled:?}");
-    let _ = sheet;
+    assert!(wires_touching_flags(&with_sheet(&open(), &sheet), &sheet).is_empty());
+    assert_eq!(device_groups(&sheet, &["A", "B"]), device_groups(&src.sheets[0], &["A", "B"]));
 }
 
 /// With the default room, later nets (those the grid router draws too) keep 0.5 mm clear of a flag that moved to a trunk, on the busy fixture.
@@ -691,10 +687,15 @@ fn busy_source() -> Project {
 
 /// Every flag of the plan keeps `clearance` mm from every wire that is not its own net's (a wire that has an end at the tag point is its own).
 fn assert_flags_clear(p: &DraftPlan, clearance: f64) {
+    assert_flags_clear_of(p, clearance, |_| true)
+}
+
+/// Like [`assert_flags_clear`], for the flags of the nets `which` accepts only.
+fn assert_flags_clear_of(p: &DraftPlan, clearance: f64, which: impl Fn(&str) -> bool) {
     let project = with_sheet(&open(), &p.sheet);
     let xrefs = crate::xref::sheet_xrefs(&project, p.sheet.id);
     let font = crate::svg::LABEL_FONT * p.sheet.annotation_scale();
-    for l in labels_of(&p.sheet) {
+    for l in labels_of(&p.sheet).into_iter().filter(|l| which(&l.name)) {
         let Some(tag) = crate::net_tag::net_tag_with(&l, font, p.sheet.xref_style, xrefs.get(&l.id).map(String::as_str)) else { continue };
         let r = rect_of(&tag.points);
         let inflated = Rect::from_corners(Point::new(r.min.x - clearance, r.min.y - clearance), Point::new(r.max.x + clearance, r.max.y + clearance));
@@ -844,3 +845,247 @@ fn a_spacer_moves_the_blocking_box_out_of_the_row_and_the_bus_gets_its_trunk() {
     assert_eq!(device_groups(&after.sheet, &BUS_REFS), device_groups(&src.sheets[0], &BUS_REFS));
     blocked.planned_sheets = Vec::new();
 }
+
+// ---- review: retry loop, large sheets, invariants
+
+/// A small deterministic random number generator for the invented fixtures (no outside crate, same numbers on every machine).
+struct Lcg(u64);
+
+impl Lcg {
+    fn below(&mut self, n: usize) -> usize {
+        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        ((self.0 >> 33) % n as u64) as usize
+    }
+}
+
+/// An invented source of `cols` columns of `rows` units with `pins` pins each (U1, U2, ... column by column), and `nets` nets of two to four pins
+/// on random units; `leave_pct` percent of the nets also have a pin on an undrafted unit (X1 to X6), so they leave the sheet. Returns the source and the columns.
+fn random_source(seed: u64, cols: usize, rows: usize, pins: usize, nets: usize, leave_pct: usize) -> (Project, Vec<Vec<String>>) {
+    let mut rng = Lcg(seed);
+    let mut free: Vec<(String, String)> = (1..=cols * rows).flat_map(|i| (1..=pins).map(move |k| (format!("U{i}"), k.to_string()))).collect();
+    let mut xfree: Vec<(String, String)> = (1..=6).flat_map(|i| (1..=40).map(move |k| (format!("X{i}"), k.to_string()))).collect();
+    let mut list: Vec<(String, Vec<(String, String)>)> = Vec::new();
+    for n in 0..nets {
+        let r = rng.below(10);
+        let k = if r < 6 { 2 } else if r < 9 { 3 } else { 4 };
+        if free.len() < k {
+            break;
+        }
+        let mut members: Vec<(String, String)> = (0..k).map(|_| free.swap_remove(rng.below(free.len()))).collect();
+        if rng.below(100) < leave_pct {
+            members.push(xfree.swap_remove(rng.below(xfree.len())));
+        }
+        list.push((format!("N{n}"), members));
+    }
+    let mut units: Vec<(String, usize)> = (1..=cols * rows).map(|i| (format!("U{i}"), pins)).collect();
+    units.extend((1..=6).map(|i| (format!("X{i}"), 40)));
+    let u: Vec<(&str, usize)> = units.iter().map(|(r, n)| (r.as_str(), *n)).collect();
+    let m: Vec<(&str, Vec<(&str, &str)>)> = list.iter().map(|(n, m)| (n.as_str(), m.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect())).collect();
+    let nets: Vec<(&str, &[(&str, &str)])> = m.iter().map(|(n, m)| (*n, m.as_slice())).collect();
+    let columns = (0..cols).map(|c| (0..rows).map(|r| format!("U{}", c * rows + r + 1)).collect()).collect();
+    (source_of("draft-random", &u, &nets), columns)
+}
+
+/// An invented sheet of 8 columns of 5 units (8 pins each, U1 to U40) and 120 nets: in each pair of columns (1-2, 3-4, 5-6, 7-8) the units of a row are
+/// joined pin to pin (a third of these nets also leave the sheet to X1 to X3, so they carry tags), neighbours in the left column of a pair are joined,
+/// and 24 nets run from a left column of a pair to the right column of the next pair, over three columns.
+fn large_source() -> (Project, Vec<Vec<String>>) {
+    let name = |c: usize, r: usize| format!("U{}", c * 5 + r + 1);
+    let mut list: Vec<(String, Vec<(String, String)>)> = Vec::new();
+    let mut x = 0usize;
+    for p in 0..4 {
+        for r in 0..5 {
+            for k in 1..=4 {
+                let mut m = vec![(name(2 * p, r), k.to_string()), (name(2 * p + 1, r), k.to_string())];
+                if (p + r + k) % 3 == 0 {
+                    x += 1;
+                    m.push((format!("X{}", 1 + x / 30), (1 + x % 30).to_string()));
+                }
+                list.push((format!("H{p}_{r}_{k}"), m));
+            }
+        }
+        for r in 0..4 {
+            list.push((format!("V{p}_{r}"), vec![(name(2 * p, r), "5".into()), (name(2 * p, r + 1), "6".into())]));
+        }
+    }
+    for i in 0..24 {
+        let (p, r, k) = (i % 3, (i / 3) % 5, 7 + i / 15);
+        list.push((format!("B{i}"), vec![(name(2 * p, r), k.to_string()), (name(2 * p + 3, (r + 1) % 5), k.to_string())]));
+    }
+    let mut seen = BTreeSet::new();
+    list.retain(|(_, m)| m.iter().all(|p| seen.insert(p.clone())));
+    assert_eq!(list.len(), 120);
+    let mut units: Vec<(String, usize)> = (0..8).flat_map(|c| (0..5).map(move |r| (name(c, r), 8))).collect();
+    units.extend((1..=3).map(|i| (format!("X{i}"), 30)));
+    let u: Vec<(&str, usize)> = units.iter().map(|(r, n)| (r.as_str(), *n)).collect();
+    let m: Vec<(&str, Vec<(&str, &str)>)> = list.iter().map(|(n, m)| (n.as_str(), m.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect())).collect();
+    let nets: Vec<(&str, &[(&str, &str)])> = m.iter().map(|(n, m)| (*n, m.as_slice())).collect();
+    let columns = (0..8).map(|c| (0..5).map(|r| name(c, r)).collect()).collect();
+    (source_of("draft-large", &u, &nets), columns)
+}
+
+fn request_of(columns: &[Vec<String>], pitch: f64) -> DraftRequest {
+    let refs: Vec<Vec<&str>> = columns.iter().map(|c| c.iter().map(String::as_str).collect()).collect();
+    let slices: Vec<&[&str]> = refs.iter().map(|c| c.as_slice()).collect();
+    let mut req = stacked_request(&slices, pitch);
+    req.planned_sheets = vec!["Look".into()];
+    req
+}
+
+/// The units of `columns` that are on the drafted sheet (a unit with no pin to draw is dropped).
+fn drawn_refs<'a>(p: &DraftPlan, columns: &'a [Vec<String>]) -> Vec<&'a str> {
+    columns.iter().flatten().map(String::as_str).filter(|r| p.sheet.entities.values().any(|e| matches!(e, Entity::Symbol(s) if s.reference == *r))).collect()
+}
+
+/// What every drafted sheet must keep: the same pin groups as the source, no wire on a flag (or within 0.5 mm of one, other than the tag's own wire),
+/// no flag on a box, and no two flags on each other.
+fn assert_sound(src: &Project, p: &DraftPlan, refs: &[&str], what: &str) {
+    assert_eq!(device_groups(&p.sheet, refs), device_groups(&src.sheets[0], refs), "{what}: the connections differ");
+    assert!(wires_touching_flags(&with_sheet(&open(), &p.sheet), &p.sheet).is_empty(), "{what}");
+    // a flag moved to a trunk keeps the router's clearance from every other wire
+    let moved: BTreeSet<&str> = p.route_log.iter().filter(|e| e.tag.as_ref().is_some_and(|t| t.placed != "branch")).map(|e| e.net.as_str()).collect();
+    assert_flags_clear_of(p, 0.5, |n| moved.contains(n));
+    let project = with_sheet(&open(), &p.sheet);
+    let xrefs = crate::xref::sheet_xrefs(&project, p.sheet.id);
+    let flags: Vec<(String, Rect)> = labels_of(&p.sheet).iter().filter_map(|l| flag_of(&p.sheet, l, xrefs.get(&l.id).map(String::as_str)).map(|r| (l.name.clone(), r))).collect();
+    for (n, f) in &flags {
+        for r in refs {
+            let b = bounds_of(&p.sheet, r);
+            let inner = Rect::from_corners(Point::new(b.min.x + 0.01, b.min.y + 0.01), Point::new(b.max.x - 0.01, b.max.y - 0.01));
+            assert!(!f.overlaps(&inner), "{what}: the flag of {n} {f:?} is on the box {r}");
+        }
+    }
+    for (i, (n, a)) in flags.iter().enumerate() {
+        for (m, b) in &flags[i + 1..] {
+            let apart = a.max.x <= b.min.x + 0.01 || b.max.x <= a.min.x + 0.01 || a.max.y <= b.min.y + 0.01 || b.max.y <= a.min.y + 0.01;
+            assert!(apart, "{what}: the flags of {n} {a:?} and {m} {b:?} lie on each other");
+        }
+    }
+}
+
+/// A sheet of 8 columns, 40 units and 120 nets (with tags that move to trunks and drops over three columns) plans within a generous time, keeps the connections of the source, keeps every flag clear, and plans the same twice.
+/// 8列・40個の機器・120本のネット (幹へ動く札と、3つの列をまたぐ枝を含む) のシートは、ゆとりのある時間のうちに計画でき、元の図と同じつながりで、どの旗にも配線が触れず、2回計画しても同じになる。
+#[test]
+fn a_sheet_of_eight_columns_forty_units_and_120_nets_plans_quickly_and_soundly() {
+    let (src, columns) = large_source();
+    let req = request_of(&columns, 2.5);
+    let start = std::time::Instant::now();
+    let p = plan_function_sheet(&src, &open(), &req).expect("the large sheet fits");
+    let took = start.elapsed();
+    eprintln!("the large sheet planned in {:.2} s", took.as_secs_f64());
+    assert!(took.as_secs_f64() < 60.0, "{took:?}");
+    assert_eq!(p.units, 40);
+    let refs = drawn_refs(&p, &columns);
+    assert_sound(&src, &p, &refs, "large");
+    assert!(p.route_log.iter().filter(|e| e.router == "channel").count() >= 60, "most nets run on trunks");
+    assert!(p.route_log.iter().any(|e| e.tag.as_ref().is_some_and(|t| t.placed != "branch")), "some tags moved to trunks");
+    let again = plan_function_sheet(&src, &open(), &req).expect("again");
+    assert_eq!(wire_key(&p), wire_key(&again));
+    assert_eq!(format!("{:?}", p.route_log), format!("{:?}", again.route_log), "the routing log is the same too");
+}
+
+/// When the layout made again after a rejected channel would not fit the width (the net widens another channel), the plan keeps the layout before it, where that net is drawn by the grid router, instead of refusing a sheet that fits.
+/// 外した通り道のあとで作り直した配置が幅に収まらない (ネットが別の通り道を広げる) ときは、収まるシートを断らずに、1つ前の配置を使う。そこではそのネットは格子の経路探索が引いている。
+#[test]
+fn a_layout_made_again_that_does_not_fit_keeps_the_one_before_it() {
+    let (src, columns) = large_source();
+    let req = request_of(&columns, 2.5);
+    let m = build_model(&src, &open(), &req).expect("valid");
+    let template = crate::frame_template::for_project(&open());
+    let s = settle(&m, &open(), &req, &template, &RouteOptions::default()).expect("the sheet fits");
+    assert!(s.rounds >= 2, "a channel was ruled out at least once");
+    // every (net, channel) the log rules out, given to the layout at once, no longer fits: the plan used the layout before the last rule-out
+    let p = plan_function_sheet(&src, &open(), &req).expect("the sheet fits");
+    let ruled_out: BTreeSet<(usize, usize)> = p
+        .route_log
+        .iter()
+        .flat_map(|e| e.candidates.iter().filter(|c| c.rejected.is_some()).map(|c| (net_key(&m, &e.net), c.channel)).collect::<Vec<_>>())
+        .collect();
+    let refused = lay_out_excluding(&m, &open(), &req, &template, &ruled_out).expect_err("the last rule-out does not fit");
+    assert!(refused.contains("does not fit the width"), "{refused}");
+    assert!(p.route_log.iter().all(|e| e.router != "channel" || e.candidates.iter().any(|c| Some(c.channel) == e.channel && c.rejected.is_none())));
+}
+
+/// The retry loop ends: on invented random sheets, the layout is made at most once more than the number of (net, channel) candidates, and every sheet keeps its connections, keeps its flags clear and plans the same twice.
+/// やり直しは必ず終わる。作り物のでたらめなシートで、配置を作る回数は (ネット, 通り道) の候補の数 + 1 を越えず、どのシートもつながりを保ち、旗に配線が触れず、2回計画しても同じになる。
+#[test]
+fn the_retry_loop_ends_within_its_bound_and_random_sheets_stay_sound() {
+    let template = crate::frame_template::for_project(&open());
+    let mut planned = 0;
+    for (seed, cfg) in (0..6u64).zip([(4, 4, 6, 30, 50), (3, 3, 6, 14, 40), (4, 3, 6, 24, 60)].iter().cycle()) {
+        let (cols, rows, pins, nets, leave) = *cfg;
+        let (src, columns) = random_source(seed, cols, rows, pins, nets, leave);
+        let req = request_of(&columns, 2.5);
+        let m = build_model(&src, &open(), &req).expect("valid");
+        let Ok(first) = lay_out(&m, &open(), &req) else { continue };
+        let candidates = channel::candidates(&m, &first.terminals).len();
+        let s = settle(&m, &open(), &req, &template, &RouteOptions::default()).expect("a sheet whose first layout fits is planned");
+        assert!(s.rounds <= candidates + 1, "seed {seed}: {} rounds for {candidates} candidates", s.rounds);
+        let p = plan_function_sheet(&src, &open(), &req).expect("plan");
+        let refs = drawn_refs(&p, &columns);
+        assert_sound(&src, &p, &refs, &format!("seed {seed}"));
+        if seed < 2 {
+            assert_eq!(wire_key(&p), wire_key(&plan_function_sheet(&src, &open(), &req).expect("again")), "seed {seed}");
+        }
+        planned += 1;
+    }
+    assert!(planned >= 5, "{planned}");
+}
+
+/// A spacer before a unit that is dropped (it has no pin to draw) moves on to the next unit of the column; one before a dropped unit at the end of the column pushes nothing.
+/// 外される機器 (描くピンが無い) の前の隙間は、その列の次の機器へ持ち越される。列の最後の外される機器の前の隙間は、何も下げない。
+#[test]
+fn a_spacer_before_a_dropped_unit_moves_on_to_the_next_unit() {
+    let src = source_of("draft-dropped", &[("A", 2), ("Z", 2), ("B", 2)], &[("K", &[("A", "1"), ("B", "1")]), ("M", &[("A", "2"), ("B", "2")])]);
+    let plan = |columns: serde_json::Value| {
+        let req: DraftRequest = serde_json::from_value(serde_json::json!({"name": "Look", "columns": columns, "power_nets": [], "ground_nets": [], "pitch_mm": 5.0})).expect("a request");
+        plan_function_sheet(&src, &open(), &req).expect("plan")
+    };
+    let plain = plan(serde_json::json!([["A", "B"]]));
+    let carried = plan(serde_json::json!([["A", {"gap_mm": 20}, "Z", "B"]]));
+    assert!(carried.sheet.entities.values().all(|e| !matches!(e, Entity::Symbol(s) if s.reference == "Z")), "Z has no pin to draw");
+    assert!((y_of(&carried, "B") - y_of(&plain, "B") - 20.0).abs() < 1e-9);
+    let at_end = plan(serde_json::json!([["A", "B", {"gap_mm": 20}, "Z"]]));
+    assert_eq!(wire_key(&at_end), wire_key(&plain));
+}
+
+/// A spacer object in the units of a planned_sheets entry is refused naming the entry: planned sheets keep plain lists of references.
+/// planned_sheets の項目の units に隙間のオブジェクトを書くと、その項目を挙げて断る。計画のシートは参照記号だけの並びのまま。
+#[test]
+fn a_spacer_in_planned_sheets_units_is_refused() {
+    let e = serde_json::from_value::<DraftRequest>(serde_json::json!({
+        "name": "Look", "columns": [["SA"]],
+        "planned_sheets": ["Look", {"name": "Two", "units": ["SB", {"gap_mm": 10}]}]
+    }))
+    .expect_err("a spacer is not a unit");
+    assert!(e.to_string().contains("planned_sheets[1] (entry 2)"), "{e}");
+}
+
+/// The free-area test of a rectangle widens it to the grid lines outside it, so the router's clearance is kept all round: a box 0.3 mm beyond the right edge of a flag makes the flag not free, even when the nearest grid line to that edge lies inside the flag.
+/// 矩形が空いているかの検査は、矩形を外側の格子の線まで広げて調べるので、経路探索のすき間が周り全部で保たれる。旗の右の辺から0.3mm先にある箱は、その辺に最も近い格子の線が旗の内側にあっても、旗を「空いていない」にする。
+#[test]
+fn a_rectangle_is_not_free_when_a_box_is_within_the_clearance_of_its_edge() {
+    let sheet = Sheet::new("t", PaperSize::A3, Orientation::Landscape);
+    let opts = RouteOptions::default();
+    let mut grid = RouteGrid::build(&sheet, &[], &opts);
+    let flag = Rect::from_corners(Point::new(100.0, 100.0), Point::new(110.6, 103.6));
+    assert!(grid.rect_free(&flag));
+    // the nearest grid line to 110.6 is 110.0, inside the flag; the box starts 0.3 mm to the right of the flag, closer than the 0.6 mm clearance
+    grid.block_area(&Rect::from_corners(Point::new(110.9, 98.0), Point::new(120.0, 106.0)));
+    assert!(!grid.rect_free(&flag));
+    assert!(grid.rect_free(&Rect::from_corners(Point::new(100.0, 100.0), Point::new(108.0, 103.6))), "a rectangle clear of it is free");
+}
+
+/// A trunk extended for a tag passes through its topmost terminal row, so that row gets a junction (three wire ends meet: the drop and the trunk on both sides); the far end of the extension, the tag point, has none.
+/// 札のために伸ばした幹は、いちばん上の端の高さを通り抜けるので、そこに接点が付く (枝と、上下の幹の3本が会う)。伸ばした先の札の位置には付かない。
+#[test]
+fn an_extended_trunk_gets_a_junction_where_it_passes_its_end_row() {
+    let terms = [ChanTermAt { at: Point::new(50.0, 20.0), left: true }, ChanTermAt { at: Point::new(90.0, 30.0), left: false }];
+    let up = route_geometry_ext(&terms, Some(70.0), Some((true, 10.0)));
+    assert_eq!(up.wires[0], vec![Point::new(70.0, 10.0), Point::new(70.0, 30.0)]);
+    assert_eq!(up.junctions, vec![Point::new(70.0, 20.0)]);
+    let down = route_geometry_ext(&terms, Some(70.0), Some((false, 5.0)));
+    assert_eq!(down.junctions, vec![Point::new(70.0, 30.0)]);
+    assert!(route_geometry(&terms, Some(70.0)).junctions.is_empty(), "without the extension both rows are trunk ends");
+}
+

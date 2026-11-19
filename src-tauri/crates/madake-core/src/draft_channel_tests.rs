@@ -22,16 +22,7 @@ pub(super) fn drafted(units: &[(&str, usize)], nets: Pairs, columns: &[&[&str]],
 /// The layout the plan ends with: nets whose channel route fails go to another channel they could use, and the layout is made again (as `plan_in` does).
 pub(super) fn settled(m: &DraftModel, req: &DraftRequest) -> DraftLayout {
     let template = crate::frame_template::for_project(&open());
-    let mut excluded: BTreeSet<(usize, usize)> = BTreeSet::new();
-    loop {
-        let l = lay_out_excluding(m, &open(), req, &template, &excluded).expect("the layout fits");
-        let (_, _, _, retry, _, _) = route_wires_try(m, &l, &RouteOptions::default());
-        let before = excluded.len();
-        excluded.extend(retry.into_iter().map(|(n, k, _)| (n, k)));
-        if excluded.len() == before {
-            return l;
-        }
-    }
+    settle(m, &open(), req, &template, &RouteOptions::default()).expect("the layout fits").layout
 }
 
 /// The vertical wire segments that lie strictly inside channel k (between column k and column k+1): (x, top y, bottom y).

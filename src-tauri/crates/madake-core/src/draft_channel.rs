@@ -377,11 +377,6 @@ pub(crate) fn first_block(route: &ChanRoute, terms: &[ChanTermAt], obs: &Obstacl
     None
 }
 
-/// ネットの配線が使えないなら、その理由 (使えるなら `None`)。
-pub(crate) fn invalid_reason(route: &ChanRoute, terms: &[ChanTermAt], obs: &Obstacles, accepted: &[&ChanRoute]) -> Option<String> {
-    first_block(route, terms, obs, accepted).map(|b| format!("{b:?}"))
-}
-
 /// ネットの配線が使えるか: 避けるものに触れず、すでに使うと決めた別のネットの配線と短絡しない。
 pub(crate) fn net_is_valid(route: &ChanRoute, terms: &[ChanTermAt], obs: &Obstacles, accepted: &[&ChanRoute]) -> bool {
     first_block(route, terms, obs, accepted).is_none()
@@ -555,6 +550,18 @@ impl Scene<'_> {
             .find(|(_, n)| n.min.x < r.max.x + gap && r.min.x < n.max.x + gap && n.min.y < r.max.y + gap && r.min.y < n.max.y + gap)
             .map_or_else(|| "a blocked grid point".to_string(), |(name, _)| name.clone())
     }
+
+    /// 線分 `a`-`b` (すき間 `gap` を空けて) に重なるもののうち、`a` にいちばん近いものの名前 (枝なら端から見て最初に当たるもの)。
+    /// 同じ近さなら [`Scene::named`] の順。
+    pub(crate) fn name_along(&self, a: Point, b: Point, gap: f64) -> String {
+        let r = Rect::from_corners(a, b);
+        let dist = |n: &Rect| (n.min.x - a.x).max(a.x - n.max.x).max(0.0).hypot((n.min.y - a.y).max(a.y - n.max.y).max(0.0));
+        self.named
+            .iter()
+            .filter(|(_, n)| n.min.x < r.max.x + gap && r.min.x < n.max.x + gap && n.min.y < r.max.y + gap && r.min.y < n.max.y + gap)
+            .min_by(|x, y| dist(&x.1).total_cmp(&dist(&y.1)))
+            .map_or_else(|| "a blocked grid point".to_string(), |(name, _)| name.clone())
+    }
 }
 
 /// 札の位置1つを試した結果。
@@ -596,10 +603,7 @@ fn position_name(top: bool, ext: f64, right: bool) -> String {
 /// 使えない理由の短い文: 何が邪魔か。`names` は受け入れた配線のネット名 (`accepted` と同じ順)。
 fn block_text(block: &Block, scene: &Scene, obs: &Obstacles, names: &[&str], gap: f64) -> String {
     match block {
-        Block::Free(a, b) => {
-            let r = Rect::from_corners(*a, *b);
-            format!("{} hits {}", seg_label(*a, *b), scene.name_rect(&r, gap))
-        }
+        Block::Free(a, b) => format!("{} hits {}", seg_label(*a, *b), scene.name_along(*a, *b, gap)),
         Block::Branch(a, b) => format!("{} crosses the tag branch of another net", seg_label(*a, *b)),
         Block::Line(a, b, i) => format!("{} meets {}", seg_label(*a, *b), (scene.line_owner)(&obs.fixed_lines[*i])),
         Block::Spot(a, b) => format!("{} passes a junction", seg_label(*a, *b)),

@@ -571,12 +571,14 @@ impl RouteGrid {
         }
     }
 
-    /// 矩形 `r` (辺は最も近い格子の線へ丸めたもの) が、通れない場所 (箱・文字・図枠・表題欄・立入禁止の領域・ピンやラベルの点) に
-    /// 触れないか。矩形の中の格子の横線と縦線を全て `segment_free` で調べる。紙の外にはみ出すなら通れない。
+    /// 矩形 `r` (辺は外側の格子の線へ広げたもの。格子に乗る辺はそのまま) が、通れない場所 (箱・文字・図枠・表題欄・立入禁止の領域・
+    /// ピンやラベルの点) に触れないか。矩形の中の格子の横線と縦線を全て `segment_free` で調べる。紙の外にはみ出すなら通れない。
+    /// 内側へ丸めると、格子の線のあいだにある文字に重なる矩形を見逃すので、外側へ広げる。
     pub(crate) fn rect_free(&self, r: &Rect) -> bool {
         let g = self.opts.grid_mm;
-        let (x0, x1) = ((r.min.x / g).round() * g, (r.max.x / g).round() * g);
-        let (y0, y1) = ((r.min.y / g).round() * g, (r.max.y / g).round() * g);
+        let tol = 1e-6;
+        let (x0, x1) = ((r.min.x / g + tol).floor() * g, (r.max.x / g - tol).ceil() * g);
+        let (y0, y1) = ((r.min.y / g + tol).floor() * g, (r.max.y / g - tol).ceil() * g);
         let rows = ((y1 - y0) / g).round() as i64;
         let cols = ((x1 - x0) / g).round() as i64;
         (0..=rows).all(|i| self.segment_free(Point::new(x0, y0 + i as f64 * g), Point::new(x1, y0 + i as f64 * g)))

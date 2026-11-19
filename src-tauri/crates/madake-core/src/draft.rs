@@ -3794,25 +3794,7 @@ pub(crate) fn plan_in(
 ) -> Result<DraftPlan, String> {
     opts.validate()?;
     let model = build_model(source, open, req)?;
-    // 通り道の検査に通らず、別の通り道の候補があるネットは、その通り道を外して配置からやり直す (外す組は増える一方なので終わる)
-    let mut excluded: BTreeSet<(usize, usize)> = BTreeSet::new();
-    let mut rejections: BTreeMap<(usize, usize), String> = BTreeMap::new();
-    let mut tag_history: BTreeMap<usize, Vec<TagTry>> = BTreeMap::new();
-    let (layout, mut sheet, wired, labelled, partial) = loop {
-        let layout = lay_out_excluding(&model, open, req, template, &excluded)?;
-        let (sheet, wired, labelled, retry, partial, tag_tries) = route_wires_try(&model, &layout, opts);
-        for (net, tries) in tag_tries {
-            tag_history.entry(net).or_insert(tries);
-        }
-        let before = excluded.len();
-        for (net, channel, why) in retry {
-            rejections.entry((net, channel)).or_insert(why);
-            excluded.insert((net, channel));
-        }
-        if excluded.len() == before {
-            break (layout, sheet, wired, labelled, partial);
-        }
-    };
+    let Settled { layout, mut sheet, wired, labelled, partial, rejections, tag_history, .. } = settle(&model, open, req, template, opts)?;
     let route_log = build_route_log(&model, &layout, &rejections, &tag_history, partial);
     sheet.title_block = req.new_title_block();
     Ok(DraftPlan {
@@ -3830,6 +3812,61 @@ pub(crate) fn plan_in(
             .collect(),
         route_log,
     })
+}
+
+/// 配置と配線を、通り道の検査に通らなかった (ネット, 通り道) を外しながらやり直した結果。
+pub(crate) struct Settled {
+    pub layout: DraftLayout,
+    pub sheet: Sheet,
+    pub wired: Vec<String>,
+    pub labelled: Vec<String>,
+    partial: Vec<PartialLog>,
+    rejections: BTreeMap<(usize, usize), String>,
+    tag_history: BTreeMap<usize, Vec<TagTry>>,
+    /// 配置を作った回数 (1 = やり直しなし)。
+    pub rounds: usize,
+}
+
+/// 通り道の検査に通らず、別の通り道の候補があるネットは、その通り道を外して配置からやり直す。外す (ネット, 通り道) の組は
+/// 増える一方で、候補の組の数を越えないので、配置は多くとも候補の組の数 + 1 回で終わる。やり直した配置が用紙に収まらない
+/// (外したネットが別の通り道を広げた) ときは、1つ前の配置と配線をそのまま使う (そこでは外したネットは格子の経路探索が引いている)。
+pub(crate) fn settle(
+    model: &DraftModel,
+    open: &Project,
+    req: &DraftRequest,
+    template: &crate::frame_template::FrameTemplate,
+    opts: &RouteOptions,
+) -> Result<Settled, String> {
+    let mut excluded: BTreeSet<(usize, usize)> = BTreeSet::new();
+    let mut rejections: BTreeMap<(usize, usize), String> = BTreeMap::new();
+    let mut tag_history: BTreeMap<usize, Vec<TagTry>> = BTreeMap::new();
+    let mut last: Option<Settled> = None;
+    let mut rounds = 0;
+    loop {
+        let layout = match lay_out_excluding(model, open, req, template, &excluded) {
+            Ok(l) => l,
+            Err(e) => match last {
+                Some(prev) => return Ok(prev),
+                None => return Err(e),
+            },
+        };
+        rounds += 1;
+        let (sheet, wired, labelled, retry, partial, tag_tries) = route_wires_try(model, &layout, opts);
+        for (net, tries) in tag_tries {
+            tag_history.entry(net).or_insert(tries);
+        }
+        let before = excluded.len();
+        for (net, channel, why) in retry {
+            rejections.entry((net, channel)).or_insert(why);
+            excluded.insert((net, channel));
+        }
+        let done = excluded.len() == before;
+        let now = Settled { layout, sheet, wired, labelled, partial, rejections: rejections.clone(), tag_history: tag_history.clone(), rounds };
+        if done {
+            return Ok(now);
+        }
+        last = Some(now);
+    }
 }
 
 /// 配線の記録の、ネットごとに決まる部分 (どの配線か・札)。
@@ -4092,6 +4129,11 @@ fn route_wires_try(
                 }
             }
         }
+        // 箱・文字・旗・印の順は保ったまま、同じ種類の中は名前と位置で並べる (シートの中身の順は id で決まり、毎回違う)
+        let kind = |n: &str| ["box ", "text ", "flag of net ", "mark "].iter().position(|k| n.starts_with(k)).unwrap_or(4);
+        named.sort_by(|a, b| {
+            (kind(&a.0), &a.0).cmp(&(kind(&b.0), &b.0)).then(a.1.min.x.total_cmp(&b.1.min.x)).then(a.1.min.y.total_cmp(&b.1.min.y))
+        });
         for (i, r) in frame_blocks.iter().enumerate() {
             named.push((if i == 4 { "title block" } else { "frame" }.to_string(), *r));
         }
@@ -4124,9 +4166,10 @@ fn route_wires_try(
     let retry = report.retry.clone();
     let tag_logs = report.tags.clone();
     let mut chan: BTreeMap<usize, channel::ChanRoute> = order.iter().enumerate().filter_map(|(i, n)| report.routes.get(n).map(|r| (i, r.clone()))).collect();
-    // 札を幹へ動かせなかったネットの、枝の先の旗は元の場所に残る。通り道の配線がそれに近いなら、そのネットは格子の経路探索に回す
-    loop {
-        let moved = moved_nets(&chan);
+    // 札を幹へ動かせなかったネットの、枝の先の旗は元の場所に残る。通り道の配線がそれに近いなら、そのネットは格子の経路探索に回す。
+    // 札を動かしたネットを回すと、その枝の先の旗が戻るので、近づく配線が無くなるまで繰り返す (経路探索の回の途中でも使う)
+    let demote_near_branch_flags = |chan: &mut BTreeMap<usize, channel::ChanRoute>| loop {
+        let moved = moved_nets(chan);
         let live: Vec<Rect> = branch_tag.iter().filter(|(n, _)| !moved.contains(n)).map(|(_, (_, r))| *r).collect();
         let demoted: Vec<usize> = chan.iter().filter(|(_, r)| live.iter().any(|f| route_near(r, f))).map(|(&i, _)| i).collect();
         if demoted.is_empty() {
@@ -4135,7 +4178,8 @@ fn route_wires_try(
         for i in demoted {
             chan.remove(&i);
         }
-    }
+    };
+    demote_near_branch_flags(&mut chan);
 
     // 回ごとに、引けていないネット以外を全て引く。引けないネット (旗に触れる経路も引けないものとする) は札でつなぎ、
     // その札の旗を次の回から通れない場所に足し、札の点と端は動かない点にする。新しく引けないネットが出なくなったら終わる
@@ -4204,7 +4248,10 @@ fn route_wires_try(
         for i in &demoted {
             chan.remove(i);
         }
-        if had_failures == 0 && demoted.is_empty() {
+        // 回したネットが札を動かしていたなら、その枝の先の旗が戻る。それに近づく通り道の配線も回す
+        let before = chan.len();
+        demote_near_branch_flags(&mut chan);
+        if had_failures == 0 && demoted.is_empty() && chan.len() == before {
             break;
         }
     }
